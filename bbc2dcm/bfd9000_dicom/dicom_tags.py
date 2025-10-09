@@ -6,7 +6,7 @@ https://dicomiseasy.blogspot.com/2013/06/getting-oriented-using-image-plane.html
 from typing import Optional
 import pydicom
 from pydicom import Dataset, FileMetaDataset
-from pydicom.uid import ExplicitVRLittleEndian, SecondaryCaptureImageStorage, JPEG2000Lossless
+from pydicom.uid import ExplicitVRLittleEndian, SecondaryCaptureImageStorage, JPEG2000Lossless, generate_uid
 import numpy as np
 from PIL import Image
 from bfd9000_dicom.jpeg2000 import get_encapsulated_jpeg2k_pixel_data
@@ -55,8 +55,8 @@ def build_file_meta() -> FileMetaDataset:
     """ File Meta for Secondary Capture SC IOD. """
     file_meta = FileMetaDataset()
     file_meta.MediaStorageSOPClassUID = SecondaryCaptureImageStorage
-    file_meta.MediaStorageSOPInstanceUID = pydicom.uid.generate_uid()
-    file_meta.ImplementationClassUID = pydicom.uid.generate_uid()
+    file_meta.MediaStorageSOPInstanceUID = generate_uid()
+    file_meta.ImplementationClassUID = generate_uid()
     return file_meta
 
 def add_common_bolton_brush_tags(ds:Dataset) -> Optional[Dataset]:
