@@ -3,6 +3,7 @@
 A good explanation for ImageOrientationPatient
 https://dicomiseasy.blogspot.com/2013/06/getting-oriented-using-image-plane.html
 """
+from typing import Optional
 import pydicom
 from pydicom import Dataset, FileMetaDataset
 from pydicom.uid import ExplicitVRLittleEndian, SecondaryCaptureImageStorage, JPEG2000Lossless
@@ -58,9 +59,11 @@ def build_file_meta() -> FileMetaDataset:
     file_meta.ImplementationClassUID = pydicom.uid.generate_uid()
     return file_meta
 
-def add_common_bolton_brush_tags(ds) -> Dataset:
+def add_common_bolton_brush_tags(ds:Dataset) -> Optional[Dataset]:
     """ Add tags which are common to all scanned bolton brush radiographs.
     """
+    if ds is None:
+        return None
     ds.PatientName = f'{ds.PatientID}^Bolton Study Subject'
     ds.ReferringPhysicianName = 'Broadbent^Birdsall^Holly^Dr.^Sr.'[:64]
 

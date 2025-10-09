@@ -3,9 +3,7 @@ import json
 import pydicom
 import argparse
 from pydicom.dataset import Dataset
-from pydicom.uid import SecondaryCaptureImageStorage
-from PIL import Image
-import numpy as np
+from pydicom.uid import SecondaryCaptureImageStorage, generate_uid
 from bfd9000_dicom import logger
 from bfd9000_dicom.dicom_tags import build_file_meta, add_common_bolton_brush_tags, add_image_module
 
@@ -44,6 +42,8 @@ def convert_tiff_to_dicom(tiff_path, dicom_path, dicom_json=None, with_compressi
 
     ds = add_image_module(ds, tiff_path,with_compression)
 
+    if ds is None:
+        raise ValueError("DICOM dataset (ds) is None before calling add_common_bolton_brush_tags.")
     add_common_bolton_brush_tags(ds)
 
     # Save the DICOM file
@@ -66,9 +66,9 @@ def build_dicom_without_image(file_path) -> Dataset:
     ds.file_meta = build_file_meta()
     ds.PatientID, image_type, ds.PatientSex, ds.PatientAge = extract_and_convert_data(
         file_path)
-    ds.StudyInstanceUID = pydicom.uid.generate_uid()
-    ds.SeriesInstanceUID = pydicom.uid.generate_uid()
-    ds.SOPInstanceUID = pydicom.uid.generate_uid()
+    ds.StudyInstanceUID = generate_uid()
+    ds.SeriesInstanceUID = generate_uid()
+    ds.SOPInstanceUID = generate_uid()
     ds.SOPClassUID = SecondaryCaptureImageStorage
 
     ds.StudyID = '1'

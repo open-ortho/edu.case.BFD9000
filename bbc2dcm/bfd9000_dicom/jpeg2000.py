@@ -2,11 +2,12 @@ import imagecodecs
 from pydicom.encaps import encapsulate
 from bfd9000_dicom import InvalidJPEG2000CodestreamError
 
+
 def get_encapsulated_jpeg2k_pixel_data(img_array):
     jp2 = imagecodecs.jpeg2k_encode(img_array, level=0)
     codestream = get_codestream(jp2)
     if not is_valid_jpeg2000_codestream(codestream):
-        raise InvalidJPEG2000CodestreamError()
+        raise InvalidJPEG2000CodestreamError(path="unknown")
 
     return encapsulate([codestream])
 
@@ -44,22 +45,24 @@ def get_codestream(encoded):
     """
     # JP2 codestream starts with the signature: 0xFF4F
     codestream_start_signature = b'\xFF\x4F'
-    
+
     # We will scan the encoded bytes to find the start of the codestream
     codestream_start = encoded.find(codestream_start_signature)
-    
+
     if codestream_start == -1:
-        raise ValueError("Codestream start signature not found in the encoded data.")
-    
+        raise ValueError(
+            "Codestream start signature not found in the encoded data.")
+
     # Now find the end of the codestream, which usually ends with 0xFFD9 (EOI marker)
     codestream_end_signature = b'\xFF\xD9'
     codestream_end = encoded.find(codestream_end_signature, codestream_start)
-    
+
     if codestream_end == -1:
-        raise ValueError("Codestream end signature not found in the encoded data.")
-    
+        raise ValueError(
+            "Codestream end signature not found in the encoded data.")
+
     # Include the codestream end marker in the result
     codestream_end += len(codestream_end_signature)
-    
+
     # Extract and return the codestream
     return encoded[codestream_start:codestream_end]
