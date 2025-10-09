@@ -1,3 +1,0 @@
-# bbc_scan: Tools to aid in the scanning of the Bolton-Brush Collection
-
-The Bolton-Brush Collection consists of paper charts, x-ray films and orthodontic cast models. The process of digitizing these objects has been carried over by many different individuals. The tools here have the goal to provide the researcher a simple user interface that will automatically store the digitized media in the proper standardized format and location.
