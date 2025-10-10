@@ -8,20 +8,48 @@ Originally developed for the Bolton-Brush Growth Study Collection (BBGSC), this 
 
 The package uses a **Data Transfer Object (DTO)** pattern with Django-like models for maximum flexibility and ease of use:
 
-### Core Modules:
-- **`models.py`**: Django-style DTOs for DICOM metadata (NEW!)
+### Package Structure:
+
+```
+bfd9000_dicom/
+├── converters/          # Specialized converters for different modalities
+│   ├── radiograph.py    # TIFF/PNG radiograph conversion
+│   ├── surface.py       # STL 3D model conversion (planned)
+│   ├── document.py      # PDF document conversion (planned)
+│   └── photograph.py    # JPEG/PNG photograph conversion (planned)
+├── core/                # Core utilities
+│   ├── dicom_builder.py # DICOM dataset building utilities
+│   └── compression.py   # JPEG2000 compression utilities
+├── models.py            # Django-style DTOs for DICOM metadata
+├── examples/            # Usage examples
+│   └── basic_usage.py   # Example code demonstrating the API
+└── tests/               # Unit tests
+    ├── test_converters.py
+    ├── test_compression.py
+    └── test_dicom_tags.py
+```
+
+### Core Components:
+
+- **`models.py`**: Django-style DTOs for DICOM metadata
   - `BaseDICOMMetadata`: Common DICOM attributes
   - `RadiographMetadata`: Radiograph-specific metadata
   - `SurfaceMetadata`: 3D model metadata
   - `DocumentMetadata`: PDF document metadata
   - `PhotographMetadata`: Photograph metadata
   
-- **`tiff2dcm.py`**: Command-line interface (legacy)
-- **`dicom_tags.py`**: DICOM tag building utilities
-- **`jpeg2000.py`**: JPEG2000 compression utilities
-- **`__init__.py`**: Package initialization and exception classes
+- **`converters/`**: Specialized converters for each modality
+  - `RadiographConverter`: Convert TIFF/PNG radiographs to DICOM
+  - `SurfaceConverter`: Convert STL 3D models (planned)
+  - `DocumentConverter`: Convert PDF documents (planned)
+  - `PhotographConverter`: Convert photographs (planned)
+
+- **`core/`**: Core building blocks
+  - `dicom_builder.py`: DICOM tag building utilities
+  - `compression.py`: JPEG2000 compression utilities
 
 ### Design Philosophy:
+
 The package is designed with Django integration in mind. Metadata classes work like Django models with methods such as `.to_dataset()` that convert metadata into pydicom Dataset objects.
 
 ## Requirements
@@ -73,56 +101,56 @@ ds.save_as("output.dcm")
 
 See `examples/basic_usage.py` for more detailed examples.
 
-## Usage
+## Quick Start - Using Converters
 
-### Command Line Interface
-
-The main conversion tool can be used from the command line:
-
-```bash
-python -m bfd9000_dicom.tiff2dcm input.tif output.dcm [options]
-```
-
-#### Basic Usage
-
-Convert a TIFF file to DICOM without compression:
-```bash
-python -m bfd9000_dicom.tiff2dcm B0013LM18y01m.tif B0013LM18y01m.dcm
-```
-
-Convert with JPEG2000 lossless compression:
-```bash
-python -m bfd9000_dicom.tiff2dcm B0013LM18y01m.tif B0013LM18y01m.dcm --compress
-```
-
-Use custom DICOM metadata from JSON file:
-```bash
-python -m bfd9000_dicom.tiff2dcm input.tif output.dcm --dicom_json metadata.json
-```
-
-#### Command Line Options
-
-- `input_tiff`: Input TIFF file path (required)
-- `output_dcm`: Output DICOM file path (required)
-- `--dicom_json`: Path to JSON file containing custom DICOM tags (optional)
-- `-c, --compress`: Enable JPEG2000 lossless compression (optional)
-
-### Programmatic Usage
-
-You can also use the package programmatically in Python:
+For simple conversions, use the converter classes:
 
 ```python
-from bfd9000_dicom.tiff2dcm import convert_tiff_to_dicom
+from bfd9000_dicom import RadiographConverter
+
+# Convert a TIFF radiograph to DICOM with compression
+RadiographConverter.convert(
+    tiff_path="B0013LM18y01m.tif",
+    dicom_path="B0013LM18y01m.dcm",
+    with_compression=True
+)
+
+# Extract metadata from filename
+patient_id, image_type, sex, age = RadiographConverter.extract_metadata_from_filename(
+    "B0013LM18y01m.tif"
+)
+```
+
+## Usage
+
+### Programmatic Usage (Recommended)
+
+Use the converter classes directly:
+
+```python
+from bfd9000_dicom.converters import RadiographConverter
 
 # Basic conversion
-convert_tiff_to_dicom('input.tif', 'output.dcm')
+RadiographConverter.convert('input.tif', 'output.dcm')
 
 # With compression
-convert_tiff_to_dicom('input.tif', 'output.dcm', with_compression=True)
+RadiographConverter.convert('input.tif', 'output.dcm', with_compression=True)
 
-# With custom DICOM metadata
-convert_tiff_to_dicom('input.tif', 'output.dcm', dicom_json='metadata.json')
+# With custom DICOM metadata from JSON
+RadiographConverter.convert('input.tif', 'output.dcm', dicom_json='metadata.json')
 ```
+
+### Legacy Command Line Interface
+
+**Note**: The CLI entry point has been removed in favor of using the examples module.
+
+To use the conversion functionality from the command line, run:
+
+```bash
+python -m bfd9000_dicom.examples.basic_usage
+```
+
+Or create your own script using the converters.
 
 ## File Naming Convention
 
@@ -193,36 +221,73 @@ The package includes custom exception classes:
 Run the test suite:
 
 ```bash
+cd bfd9000_dicom
 python -m pytest tests/
 ```
 
-Or run individual test files:
+Run individual test modules:
 ```bash
-python -m unittest tests.test_tiff2dcm
-python -m unittest tests.test_dicom_tags
+python -m pytest tests/test_converters.py
+python -m pytest tests/test_compression.py
+python -m pytest tests/test_dicom_tags.py
 ```
+
+Run with coverage:
+```bash
+python -m pytest tests/ --cov=bfd9000_dicom --cov-report=html
+```
+
+See `tests/README.md` for more details on the test structure.
 
 ## Examples
 
 ### Example 1: Batch Conversion
-```bash
+```python
+import os
+from bfd9000_dicom import RadiographConverter
+
 # Convert multiple files with compression
-for file in *.tif; do
-    python -m bfd9000_dicom.tiff2dcm "$file" "${file%.tif}.dcm" --compress
-done
+for filename in os.listdir('.'):
+    if filename.endswith('.tif'):
+        output = filename.replace('.tif', '.dcm')
+        RadiographConverter.convert(filename, output, with_compression=True)
+        print(f"Converted {filename} -> {output}")
 ```
 
 ### Example 2: Custom Metadata
 ```python
-from bfd9000_dicom.tiff2dcm import convert_tiff_to_dicom
+from bfd9000_dicom import RadiographConverter
 
-# Convert with custom study information
-convert_tiff_to_dicom(
-    'B0013LM18y01m.tif',
-    'B0013LM18y01m.dcm',
+# Convert with custom study information from JSON
+RadiographConverter.convert(
+    tiff_path='B0013LM18y01m.tif',
+    dicom_path='B0013LM18y01m.dcm',
     dicom_json='custom_study_tags.json',
     with_compression=True
 )
+```
+
+### Example 3: Using DTOs
+```python
+from bfd9000_dicom import RadiographMetadata, PatientSex, ConversionType, BurnedInAnnotation
+
+# Create detailed metadata
+metadata = RadiographMetadata(
+    patient_id="B0013",
+    patient_sex=PatientSex.M,
+    patient_age="217M",
+    conversion_type=ConversionType.DF,
+    burned_in_annotation=BurnedInAnnotation.YES,
+    secondary_capture_device_manufacturer="Vidar",
+    secondary_capture_device_manufacturer_model_name="DosimetryPRO Advantage",
+)
+
+# Convert to DICOM dataset
+ds = metadata.to_dataset()
+
+# Add pixel data from image file and save
+# ... (add pixel data processing) ...
+# ds.save_as("output.dcm")
 ```
 
 ## Output

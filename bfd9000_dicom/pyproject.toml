@@ -39,9 +39,6 @@ dev = [
     "pytest-cov",
 ]
 
-[project.scripts]
-tiff2dcm = "bfd9000_dicom.tiff2dcm:main"
-
 [project.urls]
 Homepage = "https://github.com/open-ortho/BFD9000"
 Repository = "https://github.com/open-ortho/BFD9000"

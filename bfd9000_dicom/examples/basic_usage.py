@@ -1,8 +1,9 @@
 """
-Example usage of bfd9000_dicom models.
+Example usage of bfd9000_dicom models and converters.
 
 This demonstrates how a Django application would use the DTOs
-to convert images to DICOM format.
+to convert images to DICOM format, and how to use the converters
+for various image types.
 """
 
 from bfd9000_dicom import (
@@ -10,7 +11,8 @@ from bfd9000_dicom import (
     PatientSex,
     ModalityType,
     ConversionType,
-    BurnedInAnnotation
+    BurnedInAnnotation,
+    RadiographConverter,
 )
 
 
@@ -158,6 +160,32 @@ def example_filename_parsing():
     return ds
 
 
+def example_radiograph_converter():
+    """
+    Example: Use RadiographConverter to convert a TIFF file.
+    
+    This shows the simplest way to convert a radiograph TIFF to DICOM.
+    """
+    # Method 1: Using the converter directly (simplest approach)
+    # RadiographConverter.convert(
+    #     tiff_path="path/to/B0013LM18y01m.tif",
+    #     dicom_path="path/to/output.dcm",
+    #     with_compression=True
+    # )
+    
+    # Method 2: Using metadata from filename
+    filename = "B0013LM18y01m.tif"
+    patient_id, image_type, sex, age = RadiographConverter.extract_metadata_from_filename(filename)
+    
+    print(f"\nRadiograph Converter Example:")
+    print(f"  Extracted from {filename}:")
+    print(f"    Patient ID: {patient_id}")
+    print(f"    Image Type: {image_type}")
+    print(f"    Sex: {sex}")
+    print(f"    Age: {age}")
+    print(f"  Ready to convert to DICOM!")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("BFD9000 DICOM Models - Usage Examples")
@@ -174,6 +202,10 @@ if __name__ == "__main__":
     print("\n3. Filename Parsing Example")
     print("-" * 60)
     example_filename_parsing()
+
+    print("\n4. Radiograph Converter Example")
+    print("-" * 60)
+    example_radiograph_converter()
 
     print("\n" + "=" * 60)
     print("All examples completed successfully!")
