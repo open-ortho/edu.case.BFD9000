@@ -2,7 +2,7 @@
     "python.testing.unittestArgs": [
         "-v",
         "-s",
-        "./bbc2dcm/tests/",
+        "./bfd9000_dicom/tests/",
         "-p",
         "test_*.py"
     ],

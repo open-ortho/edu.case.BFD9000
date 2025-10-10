@@ -1,6 +1,5 @@
 import os
 import json
-import pydicom
 import argparse
 from pydicom.dataset import Dataset
 from pydicom.uid import SecondaryCaptureImageStorage, generate_uid
