@@ -4,9 +4,23 @@ The module is purposely divided into modules with division of concerns, so that 
 """
 import logging
 
+# Import models for easy access
+from .models import (
+    BaseDICOMMetadata,
+    RadiographMetadata,
+    SurfaceMetadata,
+    DocumentMetadata,
+    PhotographMetadata,
+    PatientSex,
+    ModalityType,
+    ConversionType,
+    BurnedInAnnotation,
+)
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+# Exception classes
 class TIFF2DICOMError(Exception):
     """Base class for exceptions in this module."""
     pass
@@ -31,3 +45,25 @@ class InvalidJPEG2000CodestreamError(TIFF2DICOMError):
         self.path = path
         self.message = f"Invalid JPEG 2000 codestream for {path}."
         super().__init__(self.message)
+
+# Public API
+__all__ = [
+    # Models
+    'BaseDICOMMetadata',
+    'RadiographMetadata',
+    'SurfaceMetadata',
+    'DocumentMetadata',
+    'PhotographMetadata',
+    # Enums
+    'PatientSex',
+    'ModalityType',
+    'ConversionType',
+    'BurnedInAnnotation',
+    # Exceptions
+    'TIFF2DICOMError',
+    'UnsupportedImageModeError',
+    'UnsupportedBitDepthError',
+    'InvalidJPEG2000CodestreamError',
+    # Utilities
+    'logger',
+]

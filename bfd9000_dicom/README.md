@@ -1,27 +1,30 @@
-# bbc2dcm: convert scanned images from the Bolton-Brush Collection to DICOM
+# bfd9000_dicom: DICOM Conversion Package for Medical Imaging
 
-The scanning devices used to acquire and digitize the BBC were not DICOM compatible and produced TIFF, PDF and STL files. the tools in this directory aid the conversion to DICOM.
+Convert various medical imaging formats (TIFF, PNG, STL, PDF) to DICOM standard format.
 
-PoC package to convert BBGSC TIFFs into JPEG2000 encapsulated DICOMs.
-
-The module is purposely divided into modules with division of concerns, so that it may facilitate re-use and inclusion in the BFD9000 API.
+Originally developed for the Bolton-Brush Growth Study Collection (BBGSC), this package provides a Django-idiomatic interface for converting scanned radiographs, 3D models, documents, and photographs into DICOM format.
 
 ## Architecture
 
-The package consists of several modules with specific responsibilities:
+The package uses a **Data Transfer Object (DTO)** pattern with Django-like models for maximum flexibility and ease of use:
 
-- **`tiff2dcm.py`**: Main conversion module and command-line interface
-- **`dicom_tags.py`**: DICOM metadata handling and image module creation
+### Core Modules:
+- **`models.py`**: Django-style DTOs for DICOM metadata (NEW!)
+  - `BaseDICOMMetadata`: Common DICOM attributes
+  - `RadiographMetadata`: Radiograph-specific metadata
+  - `SurfaceMetadata`: 3D model metadata
+  - `DocumentMetadata`: PDF document metadata
+  - `PhotographMetadata`: Photograph metadata
+  
+- **`tiff2dcm.py`**: Command-line interface (legacy)
+- **`dicom_tags.py`**: DICOM tag building utilities
 - **`jpeg2000.py`**: JPEG2000 compression utilities
-- **`__init__.py`**: Package initialization and custom exception classes
+- **`__init__.py`**: Package initialization and exception classes
+
+### Design Philosophy:
+The package is designed with Django integration in mind. Metadata classes work like Django models with methods such as `.to_dataset()` that convert metadata into pydicom Dataset objects.
 
 ## Requirements
-
-Install the required dependencies:
-
-```bash
-pip install -r requirements.txt
-```
 
 Required packages:
 - `imagecodecs` - JPEG2000 encoding/decoding
@@ -31,15 +34,44 @@ Required packages:
 
 ## Installation
 
-1. Clone or download the BFD9000 repository
-2. Navigate to the bbc2dcm directory:
-   ```bash
-   cd BFD9000/bbc2dcm
-   ```
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+Install the package in development mode:
+
+```bash
+pip install -e .
+```
+
+Or install from source:
+
+```bash
+pip install git+https://github.com/open-ortho/BFD9000.git#subdirectory=bfd9000_dicom
+```
+
+## Quick Start - Django Integration (Recommended)
+
+The new DTO-based approach is designed for easy Django integration:
+
+```python
+from bfd9000_dicom import RadiographMetadata, PatientSex
+
+# Create metadata from Django models
+metadata = RadiographMetadata(
+    patient_id=scan.patient.study_id,
+    patient_sex=PatientSex.M,
+    patient_age=f"{scan.patient.age_months}M",
+    study_instance_uid=scan.study.dicom_uid,
+    secondary_capture_device_manufacturer="Vidar",
+    secondary_capture_device_manufacturer_model_name="DosimetryPRO Advantage",
+)
+
+# Convert to DICOM dataset (like Django's .save())
+ds = metadata.to_dataset()
+
+# Add pixel data and save
+# ... add image data ...
+ds.save_as("output.dcm")
+```
+
+See `examples/basic_usage.py` for more detailed examples.
 
 ## Usage
 
