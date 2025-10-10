@@ -22,7 +22,8 @@ from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.uid import (
     ExplicitVRLittleEndian,
     SecondaryCaptureImageStorage,
-    generate_uid
+    generate_uid,
+    UID
 )
 
 
@@ -109,8 +110,8 @@ class BaseDICOMMetadata:
     modality: ModalityType = ModalityType.OT
 
     # Instance Information Module
-    sop_instance_uid: Optional[str] = None
-    sop_class_uid: str = SecondaryCaptureImageStorage
+    sop_instance_uid: Optional[UID] = None
+    sop_class_uid: UID = SecondaryCaptureImageStorage
     instance_number: str = "1"
 
     # Secondary Capture Device Module
@@ -148,8 +149,8 @@ class BaseDICOMMetadata:
             FileMetaDataset with appropriate Transfer Syntax and SOP Class
         """
         file_meta = FileMetaDataset()
-        file_meta.MediaStorageSOPClassUID = self.sop_class_uid
-        file_meta.MediaStorageSOPInstanceUID = self.sop_instance_uid
+        file_meta.MediaStorageSOPClassUID = UID(self.sop_class_uid)
+        file_meta.MediaStorageSOPInstanceUID = UID(self.sop_instance_uid)
         file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
         file_meta.ImplementationClassUID = generate_uid()
         return file_meta
