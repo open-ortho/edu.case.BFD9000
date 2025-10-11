@@ -25,12 +25,21 @@ from .models import (
     BurnedInAnnotation,
 )
 
-# Import converters
+# Import converters (new router-based API)
 from .converters import (
-    RadiographConverter,
-    SurfaceConverter,
-    DocumentConverter,
-    PhotographConverter,
+    convert_to_dicom,
+    get_converter_for_file,
+    TIFFConverter,
+    PNGConverter,
+    JPEGConverter,
+    PDFConverter,
+    STLConverter,
+)
+
+# Import converter exceptions
+from .converters.base import (
+    UnsupportedFileTypeError,
+    ConversionError,
 )
 
 logger = logging.getLogger(__name__)
@@ -79,16 +88,21 @@ __all__ = [
     'ModalityType',
     'ConversionType',
     'BurnedInAnnotation',
-    # Converters
-    'RadiographConverter',
-    'SurfaceConverter',
-    'DocumentConverter',
-    'PhotographConverter',
+    # Converter API (new router-based)
+    'convert_to_dicom',
+    'get_converter_for_file',
+    'TIFFConverter',
+    'PNGConverter',
+    'JPEGConverter',
+    'PDFConverter',
+    'STLConverter',
     # Exceptions
     'TIFF2DICOMError',
     'UnsupportedImageModeError',
     'UnsupportedBitDepthError',
     'InvalidJPEG2000CodestreamError',
+    'UnsupportedFileTypeError',
+    'ConversionError',
     # Utilities
     'logger',
 ]
