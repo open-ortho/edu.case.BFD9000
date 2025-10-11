@@ -11,7 +11,7 @@ from pydicom.dataset import Dataset
 from pydicom.uid import ExplicitVRLittleEndian, JPEG2000Lossless
 
 from bfd9000_dicom.models import BaseDICOMMetadata
-from bfd9000_dicom.converters.compression import get_encapsulated_jpeg2k_pixel_data
+from .compression import get_encapsulated_jpeg2k_pixel_data
 from .base import BaseConverter, ConversionError
 
 logger = logging.getLogger(__name__)

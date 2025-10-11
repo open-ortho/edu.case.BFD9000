@@ -36,10 +36,6 @@ from .converters import (
     STLConverter,
     extract_bolton_brush_data_from_filename,
     load_radiograph_metadata_from_json,
-)
-
-# Import converter exceptions
-from .converters.base import (
     UnsupportedFileTypeError,
     ConversionError,
 )
