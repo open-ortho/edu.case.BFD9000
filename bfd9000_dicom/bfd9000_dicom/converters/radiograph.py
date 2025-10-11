@@ -4,12 +4,12 @@ Radiograph converter for TIFF/PNG scanned X-ray images to DICOM.
 This module handles conversion of scanned radiographic images (e.g., from film scanners)
 into DICOM Secondary Capture format with appropriate metadata.
 """
-import os
 import json
 import logging
 from pydicom.dataset import Dataset
 from pydicom.uid import SecondaryCaptureImageStorage, generate_uid
 from bfd9000_dicom.core.dicom_builder import build_file_meta, add_common_bolton_brush_tags, add_image_module
+from bfd9000_dicom.core.utils import extract_metadata_from_filename
 
 logger = logging.getLogger(__name__)
 
@@ -22,44 +22,6 @@ class RadiographConverter:
     those from the Bolton Brush Growth Study collection.
     """
     
-    @staticmethod
-    def extract_metadata_from_filename(file_path):
-        """
-        Extract metadata from Bolton Brush filename format.
-        
-        Bolton Brush filenames follow pattern: B0013LM18y01m.tif
-        - B0013: Patient ID
-        - L: Image type
-        - M: Sex
-        - 18y01m: Age (18 years 1 month)
-        
-        Args:
-            file_path: Path to the TIFF file
-            
-        Returns:
-            tuple: (patient_id, image_type, patient_sex, formatted_age)
-        """
-        file_name = os.path.basename(file_path)
-        # Extract data from file name
-        patient_id = file_name[0:5]
-        image_type = file_name[5]
-        patient_sex = file_name[6]
-        patient_age = file_name[7:13]  # Assume format is 'AAyBBm'
-
-        # Parse age from format 'AAyBBm' (e.g., '23y02m') to total months 'nnnM'
-        years = int(patient_age[:2])
-        months = int(patient_age[3:5])
-        total_months = years * 12 + months
-
-        # Format total months as zero-padded string 'nnnM'
-        formatted_age = f"{total_months:03}M"  # Zero-padded to 3 digits
-        logger.debug(f"Patient Age: [{formatted_age}]")
-        logger.debug(f"PatientId: [{patient_id}]")
-        logger.debug(f"Image Type: [{image_type}]")
-        logger.debug(f"PatientSex: [{patient_sex}]")
-
-        return patient_id, image_type, patient_sex, formatted_age
-
     @staticmethod
     def build_dicom_without_image(file_path) -> Dataset:
         """
@@ -74,7 +36,7 @@ class RadiographConverter:
         # Create the DICOM Dataset
         ds = Dataset()
         ds.file_meta = build_file_meta()
-        ds.PatientID, image_type, ds.PatientSex, ds.PatientAge = RadiographConverter.extract_metadata_from_filename(
+        ds.PatientID, image_type, ds.PatientSex, ds.PatientAge = extract_metadata_from_filename(
             file_path)
         ds.StudyInstanceUID = generate_uid()
         ds.SeriesInstanceUID = generate_uid()
@@ -146,6 +108,5 @@ class RadiographConverter:
 
 # Backward compatibility alias
 convert_tiff_to_dicom = RadiographConverter.convert
-extract_and_convert_data = RadiographConverter.extract_metadata_from_filename
 build_dicom_without_image = RadiographConverter.build_dicom_without_image
 load_dataset_from_file = RadiographConverter.load_dataset_from_file

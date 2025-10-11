@@ -4,7 +4,7 @@ import argparse
 from pydicom.dataset import Dataset
 from pydicom.uid import SecondaryCaptureImageStorage, generate_uid
 from bfd9000_dicom import logger
-from bfd9000_dicom.dicom_tags import build_file_meta, add_common_bolton_brush_tags, add_image_module
+from bfd9000_dicom.old.dicom_tags import build_file_meta, add_common_bolton_brush_tags, add_image_module
 
 
 def extract_and_convert_data(file_path):

@@ -15,6 +15,7 @@ from bfd9000_dicom import (
     RadiographConverter,
 )
 
+from bfd9000_dicom.core.utils import extract_metadata_from_filename
 
 def example_basic_radiograph():
     """Basic example: Create DICOM metadata for a radiograph."""
@@ -130,22 +131,13 @@ def example_filename_parsing():
     """
     filename = "B0013LM18y01m.tif"
 
-    # Parse filename
-    patient_id = filename[0:5]  # "B0013"
-    image_type = filename[5]    # "L"
-    sex = filename[6]           # "M"
-    years = int(filename[7:9])  # 18
-    months = int(filename[10:12])  # 1
-
-    # Convert age to total months
-    total_months = years * 12 + months
-    age_string = f"{total_months:03}M"
+    patient_id, image_type, sex, age_months = extract_metadata_from_filename(filename)
 
     # Create metadata
     metadata = RadiographMetadata(
         patient_id=patient_id,
         patient_sex=PatientSex[sex],
-        patient_age=age_string,
+        patient_age=age_months, # This might not be the correct format for the DTO.
         secondary_capture_device_manufacturer="Vidar",
         secondary_capture_device_manufacturer_model_name="DosimetryPRO Advantage",
     )
@@ -155,7 +147,7 @@ def example_filename_parsing():
     print(f"\nParsed from filename: {filename}")
     print(f"  Patient ID: {patient_id}")
     print(f"  Sex: {sex}")
-    print(f"  Age: {age_string} ({years} years {months} months)")
+    print(f"  Age: {age_months} (months)")
 
     return ds
 
@@ -175,7 +167,7 @@ def example_radiograph_converter():
     
     # Method 2: Using metadata from filename
     filename = "B0013LM18y01m.tif"
-    patient_id, image_type, sex, age = RadiographConverter.extract_metadata_from_filename(filename)
+    patient_id, image_type, sex, age = extract_metadata_from_filename(filename)
     
     print(f"\nRadiograph Converter Example:")
     print(f"  Extracted from {filename}:")

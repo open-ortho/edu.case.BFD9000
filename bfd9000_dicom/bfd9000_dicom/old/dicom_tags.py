@@ -4,12 +4,11 @@ A good explanation for ImageOrientationPatient
 https://dicomiseasy.blogspot.com/2013/06/getting-oriented-using-image-plane.html
 """
 from typing import Optional
-import pydicom
 from pydicom import Dataset, FileMetaDataset
 from pydicom.uid import ExplicitVRLittleEndian, SecondaryCaptureImageStorage, JPEG2000Lossless, generate_uid
 import numpy as np
 from PIL import Image
-from bfd9000_dicom.jpeg2000 import get_encapsulated_jpeg2k_pixel_data
+from bfd9000_dicom.core.compression import get_encapsulated_jpeg2k_pixel_data
 from bfd9000_dicom import logger, UnsupportedBitDepthError, UnsupportedImageModeError
 
 def dicom_tags_LL(ds: Dataset):
