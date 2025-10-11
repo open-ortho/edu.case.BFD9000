@@ -4,20 +4,20 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-@staticmethod
+
 def extract_metadata_from_filename(file_path: str) -> tuple:
     """
     Extract metadata from Bolton Brush filename format.
-    
+
     Bolton Brush filenames follow pattern: B0013LM18y01m.tif
     - B0013: Patient ID
     - L: Image type
     - M: Sex
     - 18y01m: Age (18 years 1 month)
-    
+
     Args:
         file_path: Path to the TIFF file
-        
+
     Returns:
         tuple: (patient_id, image_type, patient_sex, formatted_age)
     """
@@ -41,4 +41,3 @@ def extract_metadata_from_filename(file_path: str) -> tuple:
     logger.debug(f"PatientSex: [{patient_sex}]")
 
     return patient_id, image_type, patient_sex, formatted_age
-

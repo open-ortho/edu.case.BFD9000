@@ -38,17 +38,23 @@ class PatientSex(Enum):
 class ModalityType(Enum):
     """DICOM Modality values (0008,0060)."""
     RG = "RG"  # Radiographic imaging (conventional film/screen)
+    M3D = "M3D"  # 3D Study Model
+    DOC = "DOC"  # Document
+    XC = "XC"  # External-camera Photography
+    CT = "CT"  # Computed Tomography
     DX = "DX"  # Digital Radiography
     CR = "CR"  # Computed Radiography
     OT = "OT"  # Other
-    DOC = "DOC"  # Document
-    XC = "XC"  # External-camera Photography
-
+    # Aliases
+    CEPHALOGRAM = RG  # Alias for cephalogram radiographs
+    STUDYMODEL = M3D
+    PHOTOGRAPH = XC
+    CBCT = CT
 
 class ConversionType(Enum):
     """DICOM Conversion Type values (0008,0064)."""
     DF = "DF"  # Digitized Film
-    DI = "DI"  # Digital Interface
+    SI = "SI"  # Digital Interface
     SYN = "SYN"  # Synthetic Image
 
 
