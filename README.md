@@ -1,4 +1,4 @@
-![BFD9000](./documentation/images/BFD9000_logo_white.png)
+<img src="./documentation/images/BFD9000_logo_white.png" alt="BFD9010" width="300">
 
 # BFD9000
 
