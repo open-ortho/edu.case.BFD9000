@@ -7,7 +7,6 @@ import numpy as np
 from bfd9000_dicom.converters import (
     TIFFConverter,
     extract_bolton_brush_data_from_filename,
-    load_radiograph_metadata_from_json,
 )
 from bfd9000_dicom.models import RadiographMetadata, PatientSex
 from bfd9000_dicom.converters.base import ConversionError
@@ -32,19 +31,21 @@ class TestTIFFConverter(unittest.TestCase):
         """Test metadata extraction from Bolton Brush filename format."""
         # Test the example from the old test
         file_path = "./Downloads/B0013LM18y01m.tif"
-        patient_id, patient_sex, patient_age = extract_bolton_brush_data_from_filename(file_path)
+        patient_id, patient_sex, patient_age, image_type = extract_bolton_brush_data_from_filename(file_path)
         
         self.assertEqual(patient_id, "B0013")
         self.assertEqual(patient_sex, "M")
         self.assertEqual(patient_age, "217M")
+        self.assertEqual(image_type, "L")
 
     def test_extract_bolton_brush_data_edge_cases(self):
         """Test filename parsing with different formats."""
         # Test female patient
-        patient_id, patient_sex, patient_age = extract_bolton_brush_data_from_filename("B00202F015y08m.jpg")
+        patient_id, patient_sex, patient_age, image_type = extract_bolton_brush_data_from_filename("B00202F015y08m.jpg")
         self.assertEqual(patient_id, "B0020")
         self.assertEqual(patient_sex, "F")
         self.assertEqual(patient_age, "188M")  # 15*12 + 8 = 188 months
+        self.assertEqual(image_type, "2")
 
     @patch('PIL.Image.open')
     @patch('bfd9000_dicom.converters.tiff.TIFFConverter._validate_input_file')
@@ -89,38 +90,3 @@ class TestTIFFConverter(unittest.TestCase):
                 output_path=None,
                 compression=False
             )
-
-    def test_load_radiograph_metadata_from_json(self):
-        """Test loading RadiographMetadata from JSON file."""
-        # Create proper DICOM JSON format
-        json_data = {
-            "00100020": {"vr": "LO", "Value": ["B0013"]},        # PatientID
-            "00100040": {"vr": "CS", "Value": ["M"]},           # PatientSex
-            "00101010": {"vr": "AS", "Value": ["217M"]},        # PatientAge
-            "00100010": {"vr": "PN", "Value": ["Test^Patient"]}, # PatientName
-            "0020000D": {"vr": "UI", "Value": ["1.2.3.4.5"]},   # StudyInstanceUID
-            "0020000E": {"vr": "UI", "Value": ["1.2.3.4.6"]},   # SeriesInstanceUID
-            "00200013": {"vr": "IS", "Value": ["1"]},           # InstanceNumber
-            "00200020": {"vr": "CS", "Value": ["PA"]},          # PatientOrientation
-            "00209161": {"vr": "CS", "Value": ["R"]}            # ImageLaterality
-        }
-        
-        # Mock file operations
-        with patch('builtins.open', create=True) as mock_open:
-            mock_file = MagicMock()
-            mock_file.__enter__.return_value = mock_file
-            mock_file.read.return_value = json.dumps(json_data)
-            mock_open.return_value = mock_file
-            
-            metadata = load_radiograph_metadata_from_json("test.json")
-            
-            self.assertEqual(metadata.patient_id, "B0013")
-            self.assertEqual(metadata.patient_sex, PatientSex.M)
-            self.assertEqual(metadata.patient_age, "217M")
-            self.assertEqual(metadata.patient_name, "Test^Patient")
-            self.assertEqual(metadata.patient_orientation, "PA")
-            self.assertEqual(metadata.image_laterality, "R")
-
-
-if __name__ == '__main__':
-    unittest.main()

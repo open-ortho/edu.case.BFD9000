@@ -11,37 +11,41 @@ class TestBoltonBrushUtilities(unittest.TestCase):
 
     def test_extract_bolton_brush_data_from_filename_basic(self):
         """Test basic Bolton Brush filename parsing."""
-        patient_id, patient_sex, patient_age = extract_bolton_brush_data_from_filename(
+        patient_id, patient_sex, patient_age, image_type = extract_bolton_brush_data_from_filename(
             "B00131M020y05m.tiff")
 
         self.assertEqual(patient_id, "B0013")
         self.assertEqual(patient_sex, "M")
         self.assertEqual(patient_age, "245M")  # 20*12 + 5 = 245 months
+        self.assertEqual(image_type, "1")
 
     def test_extract_bolton_brush_data_from_filename_female(self):
         """Test filename parsing for female patient."""
-        patient_id, patient_sex, patient_age = extract_bolton_brush_data_from_filename(
+        patient_id, patient_sex, patient_age, image_type = extract_bolton_brush_data_from_filename(
             "B00202F015y08m.jpg")
 
         self.assertEqual(patient_id, "B0020")
         self.assertEqual(patient_sex, "F")
         self.assertEqual(patient_age, "188M")  # 15*12 + 8 = 188 months
+        self.assertEqual(image_type, "2")
 
     def test_extract_bolton_brush_data_from_filename_edge_cases(self):
         """Test filename parsing edge cases."""
         # Minimum age (0 years, 1 month)
-        patient_id, patient_sex, patient_age = extract_bolton_brush_data_from_filename(
+        patient_id, patient_sex, patient_age, image_type = extract_bolton_brush_data_from_filename(
             "B00011M000y01m.png")
         self.assertEqual(patient_id, "B0001")
         self.assertEqual(patient_sex, "M")
         self.assertEqual(patient_age, "001M")  # 0*12 + 1 = 1 month
+        self.assertEqual(image_type, "1")
 
         # Maximum reasonable age
-        patient_id, patient_sex, patient_age = extract_bolton_brush_data_from_filename(
+        patient_id, patient_sex, patient_age, image_type = extract_bolton_brush_data_from_filename(
             "B99992F050y11m.pdf")
         self.assertEqual(patient_id, "B9999")
         self.assertEqual(patient_sex, "F")
         self.assertEqual(patient_age, "611M")  # 50*12 + 11 = 611 months
+        self.assertEqual(image_type, "2")
 
 
 class TestRadiographMetadataBoltonBrush(unittest.TestCase):

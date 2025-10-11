@@ -36,7 +36,7 @@ from .png import PNGConverter
 from .jpeg import JPEGConverter
 from .pdf import PDFConverter
 from .stl import STLConverter
-from .utils import extract_bolton_brush_data_from_filename, load_radiograph_metadata_from_json
+from .utils import extract_bolton_brush_data_from_filename
 from .base import UnsupportedFileTypeError, ConversionError
 
 __all__ = [
@@ -48,7 +48,6 @@ __all__ = [
     'PDFConverter',
     'STLConverter',
     'extract_bolton_brush_data_from_filename',
-    'load_radiograph_metadata_from_json',
     'UnsupportedFileTypeError',
     'ConversionError',
 ]
