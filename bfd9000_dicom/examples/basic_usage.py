@@ -9,13 +9,11 @@ for various image types.
 from bfd9000_dicom import (
     RadiographMetadata,
     PatientSex,
-    ModalityType,
     ConversionType,
     BurnedInAnnotation,
-    RadiographConverter,
 )
 
-from bfd9000_dicom.core.utils import extract_metadata_from_filename
+from bfd9000_dicom.converters.utils import extract_bolton_brush_data_from_filename
 
 def example_basic_radiograph():
     """Basic example: Create DICOM metadata for a radiograph."""
@@ -131,7 +129,7 @@ def example_filename_parsing():
     """
     filename = "B0013LM18y01m.tif"
 
-    patient_id, image_type, sex, age_months = extract_metadata_from_filename(filename)
+    patient_id, image_type, sex, age_months = extract_bolton_brush_data_from_filename(filename)
 
     # Create metadata
     metadata = RadiographMetadata(
@@ -167,7 +165,7 @@ def example_radiograph_converter():
     
     # Method 2: Using metadata from filename
     filename = "B0013LM18y01m.tif"
-    patient_id, image_type, sex, age = extract_metadata_from_filename(filename)
+    patient_id, image_type, sex, age = extract_bolton_brush_data_from_filename(filename)
     
     print(f"\nRadiograph Converter Example:")
     print(f"  Extracted from {filename}:")

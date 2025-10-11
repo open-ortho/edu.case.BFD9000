@@ -30,7 +30,7 @@ from bfd9000_dicom import (
     convert_to_dicom,
     UnsupportedFileTypeError,
 )
-from bfd9000_dicom.core.utils import extract_metadata_from_filename
+from bfd9000_dicom.converters.utils import extract_bolton_brush_data_from_filename
 
 
 MetadataBuilder = Callable[[str], BaseDICOMMetadata]
@@ -46,7 +46,7 @@ def _safe_patient_sex(raw_value: str) -> PatientSex:
 
 def _extract_basic_metadata(file_path: str) -> Tuple[str, str, PatientSex, str]:
     """Pull Bolton Brush data from filename and normalise the patient sex."""
-    patient_id, image_type, patient_sex, formatted_age = extract_metadata_from_filename(
+    patient_id, image_type, patient_sex, formatted_age = extract_bolton_brush_data_from_filename(
         file_path)
     return patient_id, image_type, _safe_patient_sex(patient_sex), formatted_age
 

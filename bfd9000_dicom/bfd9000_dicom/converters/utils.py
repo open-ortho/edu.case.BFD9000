@@ -21,7 +21,7 @@ def extract_bolton_brush_data_from_filename(file_path: str) -> Tuple[str, str, s
         D = delimiter 'y' - 1 char
         BB = zero padded number of months (01-12) - 2 chars
         M = delimiter 'm' - 1 char
-        AABBMM = patient age in format f'{number_of_years:02d}y{number_of_months:02d}m' - 6 chars
+        AADBMM = patient age in format f'{number_of_years:02d}y{number_of_months:02d}m' - 6 chars
 
     Args:
         file_path: Path to the file

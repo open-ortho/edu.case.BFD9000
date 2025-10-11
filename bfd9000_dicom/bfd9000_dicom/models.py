@@ -51,6 +51,7 @@ class ModalityType(Enum):
     PHOTOGRAPH = XC
     CBCT = CT
 
+
 class ConversionType(Enum):
     """DICOM Conversion Type values (0008,0064)."""
     DF = "DF"  # Digitized Film
@@ -94,12 +95,24 @@ class BaseDICOMMetadata:
     # Patient Information Module (required fields)
     patient_id: str
     patient_sex: PatientSex
-    patient_age: str  # Format: "nnnM" for months or "nnnY" for years
+
+    patient_age: str  # Use DICOM AS (Age String) Value Representation
+    """
+        Age String
+
+        A string of characters with one of the following formats -- nnnD, nnnW, nnnM, nnnY; where nnn shall contain the number of days for D, weeks for W, months for M, or years for Y.
+
+        Example: "018M" would represent an age of 18 months.
+
+        "0"-"9", "D", "W", "M", "Y" of Default Character Repertoire
+
+        4 bytes fixed
+    """
 
     # Patient Information Module (optional fields)
     patient_name: Optional[str] = None
     patient_birth_date: str = ""  # YYYYMMDD format, empty for deidentified
-    patient_identity_removed: str = "YES"
+    patient_identity_removed: bool = True
     deidentification_method: str = "Removed: Patient name, birthdate, study date/time."
 
     # Study Information Module
@@ -191,7 +204,7 @@ class BaseDICOMMetadata:
         ds.PatientSex = self.patient_sex.value
         ds.PatientAge = self.patient_age
         ds.PatientBirthDate = self.patient_birth_date
-        ds.PatientIdentityRemoved = self.patient_identity_removed
+        ds.PatientIdentityRemoved = "YES" if self.patient_identity_removed else "NO"
         ds.DeidentificationMethod = self.deidentification_method[:64]
 
     def _add_study_module(self, ds: Dataset):
@@ -270,7 +283,7 @@ class RadiographMetadata(BaseDICOMMetadata):
         # Default modality for radiographs
         if self.modality == ModalityType.OT:
             self.modality = ModalityType.RG
-            
+
         # Set Bolton Brush defaults if enabled
         if self.is_bolton_brush_study:
             self._set_bolton_brush_defaults()

@@ -143,7 +143,8 @@ class TestDICOMEnums(unittest.TestCase):
 
     def test_modality_type_enum(self):
         """Test ModalityType enum values."""
-        self.assertEqual(ModalityType.RG.value, "RG")
+        self.assertEqual(ModalityType.STUDYMODEL.value, "M3D")
+        self.assertEqual(ModalityType.CEPHALOGRAM.value, "RG")
         self.assertEqual(ModalityType.DX.value, "DX")
         self.assertEqual(ModalityType.CR.value, "CR")
         self.assertEqual(ModalityType.DOC.value, "DOC")
@@ -152,7 +153,7 @@ class TestDICOMEnums(unittest.TestCase):
     def test_conversion_type_enum(self):
         """Test ConversionType enum values."""
         self.assertEqual(ConversionType.DF.value, "DF")
-        self.assertEqual(ConversionType.DI.value, "DI")
+        self.assertEqual(ConversionType.SI.value, "SI")
         self.assertEqual(ConversionType.SYN.value, "SYN")
 
     def test_burned_in_annotation_enum(self):
