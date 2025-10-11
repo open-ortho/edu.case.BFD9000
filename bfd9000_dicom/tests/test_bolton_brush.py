@@ -35,8 +35,8 @@ class TestBoltonBrushUtilities(unittest.TestCase):
         self.assertEqual(result.image_type, "1")
 
         # Maximum reasonable age
-        result = extract_metadata_from_filename("B99992F050y11m.pdf")
-        self.assertEqual(result.patient_id, "B9999")
+        result = extract_metadata_from_filename("B39992F050y11m.pdf")
+        self.assertEqual(result.patient_id, "B3999")
         self.assertEqual(result.patient_sex, "F")
         self.assertEqual(result.patient_age, "611M")  # 50*12 + 11 = 611 months
         self.assertEqual(result.image_type, "2")
