@@ -38,7 +38,7 @@ bfd9000_dicom/
   - `DocumentMetadata`: PDF document metadata
   - `PhotographMetadata`: Photograph metadata
   
-- **`converters/`**: Specialized converters for each modality
+- **`converters/`**: Specialized image converters for each modality
   - `RadiographConverter`: Convert TIFF/PNG radiographs to DICOM
   - `SurfaceConverter`: Convert STL 3D models (planned)
   - `DocumentConverter`: Convert PDF documents (planned)
