@@ -23,7 +23,7 @@ class BoltonBrushLimits:
     """Validation boundaries for Bolton Brush filename components."""
 
     minimum_patient_number: int = 1
-    maximum_patient_number: int = 9999
+    maximum_patient_number: int = 5999
     allowed_image_types: tuple[str, ...] = ("L", "P", "1", "2")
     allowed_patient_sex: tuple[str, ...] = ("M", "F")
 
@@ -101,6 +101,8 @@ class BoltonBrushExtractor(FilenameMetadataExtractor):
     @staticmethod
     def _validate_age(years: int, months: int) -> None:
         if not (0 <= months < 12):
-            raise MetadataExtractionError("Months component must be between 00 and 11.")
+            raise MetadataExtractionError(
+                "Months component must be between 00 and 11.")
         if years < 0:
-            raise MetadataExtractionError("Years component must be non-negative.")
+            raise MetadataExtractionError(
+                "Years component must be non-negative.")
