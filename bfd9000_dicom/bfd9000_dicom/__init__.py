@@ -34,7 +34,6 @@ from .converters import (
     JPEGConverter,
     PDFConverter,
     STLConverter,
-    extract_bolton_brush_data_from_filename,
     UnsupportedFileTypeError,
     ConversionError,
 )
@@ -45,7 +44,6 @@ logger.setLevel(logging.DEBUG)
 # Exception classes
 class TIFF2DICOMError(Exception):
     """Base class for exceptions in this module."""
-    pass
 
 
 class UnsupportedImageModeError(TIFF2DICOMError):
@@ -93,8 +91,6 @@ __all__ = [
     'JPEGConverter',
     'PDFConverter',
     'STLConverter',
-    # Bolton Brush utilities
-    'extract_bolton_brush_data_from_filename',
     # Exceptions
     'TIFF2DICOMError',
     'UnsupportedImageModeError',

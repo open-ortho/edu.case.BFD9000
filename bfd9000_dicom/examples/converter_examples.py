@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Callable, Dict, Tuple
+from typing import Callable, Dict
 
 from pydicom.uid import generate_uid
 
@@ -30,7 +30,11 @@ from bfd9000_dicom import (
     convert_to_dicom,
     UnsupportedFileTypeError,
 )
-from bfd9000_dicom.converters.utils import extract_bolton_brush_data_from_filename
+from bfd9000_dicom.extractors import (
+    extract_metadata_from_filename,
+    MetadataExtractionError,
+    MetadataExtractionResult,
+)
 
 
 MetadataBuilder = Callable[[str], BaseDICOMMetadata]
@@ -44,43 +48,51 @@ def _safe_patient_sex(raw_value: str) -> PatientSex:
         return PatientSex.U
 
 
-def _extract_basic_metadata(file_path: str) -> Tuple[str, str, PatientSex, str]:
-    """Pull Bolton Brush data from filename and normalise the patient sex."""
-    patient_id, image_type, patient_sex, formatted_age = extract_bolton_brush_data_from_filename(
-        file_path)
-    return patient_id, image_type, _safe_patient_sex(patient_sex), formatted_age
+def _extract_basic_metadata(file_path: str) -> MetadataExtractionResult:
+    """Pull metadata from filename and normalise the patient sex field."""
+    result = extract_metadata_from_filename(file_path)
+    normalised_sex = _safe_patient_sex(result.patient_sex)
+    return MetadataExtractionResult(
+        patient_id=result.patient_id,
+        patient_sex=normalised_sex.value,
+        patient_age=result.patient_age,
+        image_type=result.image_type,
+        collection=result.collection,
+        source=result.source,
+    )
 
 
 def _build_radiograph_metadata(file_path: str) -> RadiographMetadata:
-    patient_id, image_type, patient_sex, formatted_age = _extract_basic_metadata(
-        file_path)
+    result = _extract_basic_metadata(file_path)
+    patient_sex = _safe_patient_sex(result.patient_sex)
     return RadiographMetadata(
-        patient_id=patient_id,
+        patient_id=result.patient_id,
         patient_sex=patient_sex,
-        patient_age=formatted_age,
-        image_laterality=image_type,
+        patient_age=result.patient_age,
+        image_laterality=result.image_type or "U",
         conversion_type=ConversionType.DF,
         burned_in_annotation=BurnedInAnnotation.YES,
+        is_bolton_brush_study=result.collection == 'bolton_brush',
     )
 
 
 def _build_photograph_metadata(file_path: str) -> PhotographMetadata:
-    patient_id, _image_type, patient_sex, formatted_age = _extract_basic_metadata(
-        file_path)
+    result = _extract_basic_metadata(file_path)
+    patient_sex = _safe_patient_sex(result.patient_sex)
     return PhotographMetadata(
-        patient_id=patient_id,
+        patient_id=result.patient_id,
         patient_sex=patient_sex,
-        patient_age=formatted_age,
+        patient_age=result.patient_age,
     )
 
 
 def _build_document_metadata(file_path: str) -> DocumentMetadata:
-    patient_id, _image_type, patient_sex, formatted_age = _extract_basic_metadata(
-        file_path)
+    result = _extract_basic_metadata(file_path)
+    patient_sex = _safe_patient_sex(result.patient_sex)
     return DocumentMetadata(
-        patient_id=patient_id,
+        patient_id=result.patient_id,
         patient_sex=patient_sex,
-        patient_age=formatted_age,
+        patient_age=result.patient_age,
         document_title=Path(file_path).stem.replace('_', ' ').title(),
     )
 
@@ -200,7 +212,7 @@ def main(argv: list[str] | None = None) -> None:
         parser.error(str(exc))
     except UnsupportedFileTypeError as exc:
         parser.error(str(exc))
-    except ValueError as exc:
+    except MetadataExtractionError as exc:
         parser.error(f"Failed to parse metadata from filename: {exc}")
 
 

@@ -4,12 +4,9 @@ import json
 import os
 from unittest.mock import patch, MagicMock
 import numpy as np
-from bfd9000_dicom.converters import (
-    TIFFConverter,
-    extract_bolton_brush_data_from_filename,
-)
+from bfd9000_dicom.converters import TIFFConverter
+from bfd9000_dicom.extractors import extract_metadata_from_filename
 from bfd9000_dicom.models import RadiographMetadata, PatientSex
-from bfd9000_dicom.converters.base import ConversionError
 
 # Get the correct path to test.dcm.json
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -31,25 +28,25 @@ class TestTIFFConverter(unittest.TestCase):
         """Test metadata extraction from Bolton Brush filename format."""
         # Test the example from the old test
         file_path = "./Downloads/B0013LM18y01m.tif"
-        patient_id, patient_sex, patient_age, image_type = extract_bolton_brush_data_from_filename(file_path)
-        
-        self.assertEqual(patient_id, "B0013")
-        self.assertEqual(patient_sex, "M")
-        self.assertEqual(patient_age, "217M")
-        self.assertEqual(image_type, "L")
+        result = extract_metadata_from_filename(file_path)
+
+        self.assertEqual(result.patient_id, "B0013")
+        self.assertEqual(result.patient_sex, "M")
+        self.assertEqual(result.patient_age, "217M")
+        self.assertEqual(result.image_type, "L")
 
     def test_extract_bolton_brush_data_edge_cases(self):
         """Test filename parsing with different formats."""
         # Test female patient
-        patient_id, patient_sex, patient_age, image_type = extract_bolton_brush_data_from_filename("B00202F015y08m.jpg")
-        self.assertEqual(patient_id, "B0020")
-        self.assertEqual(patient_sex, "F")
-        self.assertEqual(patient_age, "188M")  # 15*12 + 8 = 188 months
-        self.assertEqual(image_type, "2")
+        result = extract_metadata_from_filename("B00202F015y08m.jpg")
+        self.assertEqual(result.patient_id, "B0020")
+        self.assertEqual(result.patient_sex, "F")
+        self.assertEqual(result.patient_age, "188M")  # 15*12 + 8 = 188 months
+        self.assertEqual(result.image_type, "2")
 
     @patch('PIL.Image.open')
     @patch('bfd9000_dicom.converters.tiff.TIFFConverter._validate_input_file')
-    def test_tiff_converter_convert_basic(self, mock_validate, mock_image_open):
+    def test_tiff_converter_convert_basic(self, _mock_validate, mock_image_open):
         """Test basic TIFF conversion functionality."""
         # Mock the image
         mock_img = MagicMock()

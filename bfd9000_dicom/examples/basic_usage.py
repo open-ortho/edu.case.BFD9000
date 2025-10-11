@@ -13,7 +13,7 @@ from bfd9000_dicom import (
     BurnedInAnnotation,
 )
 
-from bfd9000_dicom.converters.utils import extract_bolton_brush_data_from_filename
+from bfd9000_dicom.extractors import extract_metadata_from_filename, MetadataExtractionError
 
 def example_basic_radiograph():
     """Basic example: Create DICOM metadata for a radiograph."""
@@ -129,13 +129,18 @@ def example_filename_parsing():
     """
     filename = "B0013LM18y01m.tif"
 
-    patient_id, image_type, sex, age_months = extract_bolton_brush_data_from_filename(filename)
+    try:
+        result = extract_metadata_from_filename(filename)
+    except MetadataExtractionError as exc:
+        print(f"Failed to extract metadata from {filename}: {exc}")
+        return None
+    sex = PatientSex(result.patient_sex)
 
     # Create metadata
     metadata = RadiographMetadata(
-        patient_id=patient_id,
-        patient_sex=PatientSex[sex],
-        patient_age=age_months, # This might not be the correct format for the DTO.
+        patient_id=result.patient_id,
+        patient_sex=sex,
+        patient_age=result.patient_age,
         secondary_capture_device_manufacturer="Vidar",
         secondary_capture_device_manufacturer_model_name="DosimetryPRO Advantage",
     )
@@ -143,9 +148,9 @@ def example_filename_parsing():
     ds = metadata.to_dataset()
 
     print(f"\nParsed from filename: {filename}")
-    print(f"  Patient ID: {patient_id}")
-    print(f"  Sex: {sex}")
-    print(f"  Age: {age_months} (months)")
+    print(f"  Patient ID: {result.patient_id}")
+    print(f"  Sex: {sex.value}")
+    print(f"  Age: {result.patient_age}")
 
     return ds
 
@@ -165,15 +170,20 @@ def example_radiograph_converter():
     
     # Method 2: Using metadata from filename
     filename = "B0013LM18y01m.tif"
-    patient_id, image_type, sex, age = extract_bolton_brush_data_from_filename(filename)
+    try:
+        result = extract_metadata_from_filename(filename)
+    except MetadataExtractionError as exc:
+        print(f"Failed to extract metadata from {filename}: {exc}")
+        return
+    sex = PatientSex(result.patient_sex)
     
-    print(f"\nRadiograph Converter Example:")
+    print("\nRadiograph Converter Example:")
     print(f"  Extracted from {filename}:")
-    print(f"    Patient ID: {patient_id}")
-    print(f"    Image Type: {image_type}")
-    print(f"    Sex: {sex}")
-    print(f"    Age: {age}")
-    print(f"  Ready to convert to DICOM!")
+    print(f"    Patient ID: {result.patient_id}")
+    print(f"    Image Type: {result.image_type}")
+    print(f"    Sex: {sex.value}")
+    print(f"    Age: {result.patient_age}")
+    print("  Ready to convert to DICOM!")
 
 
 if __name__ == "__main__":
