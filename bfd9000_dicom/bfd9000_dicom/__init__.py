@@ -34,6 +34,8 @@ from .converters import (
     JPEGConverter,
     PDFConverter,
     STLConverter,
+    extract_bolton_brush_data_from_filename,
+    load_radiograph_metadata_from_json,
 )
 
 # Import converter exceptions
@@ -96,6 +98,9 @@ __all__ = [
     'JPEGConverter',
     'PDFConverter',
     'STLConverter',
+    # Bolton Brush utilities
+    'extract_bolton_brush_data_from_filename',
+    'load_radiograph_metadata_from_json',
     # Exceptions
     'TIFF2DICOMError',
     'UnsupportedImageModeError',

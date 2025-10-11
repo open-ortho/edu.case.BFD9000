@@ -13,13 +13,8 @@ Successfully refactored the `bfd9000_dicom` package to improve code organization
 Created two new packages:
 
 #### `bfd9000_dicom/converters/`
-Specialized converters for different imaging modalities:
-- **`radiograph.py`** - Converts TIFF/PNG radiographs to DICOM (fully implemented)
-  - `RadiographConverter` class with static methods for conversion
-  - Backward compatibility functions maintained
-- **`surface.py`** - STL 3D model conversion (planned, raises NotImplementedError)
-- **`document.py`** - PDF document conversion (planned, raises NotImplementedError)
-- **`photograph.py`** - JPEG/PNG photograph conversion (planned, raises NotImplementedError)
+
+See [Converters](./CONVERTER_REFACTORING.md)
 
 #### `bfd9000_dicom/core/`
 Core building blocks:

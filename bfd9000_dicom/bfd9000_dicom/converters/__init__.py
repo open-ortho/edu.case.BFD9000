@@ -36,6 +36,7 @@ from .png import PNGConverter
 from .jpeg import JPEGConverter
 from .pdf import PDFConverter
 from .stl import STLConverter
+from .utils import extract_bolton_brush_data_from_filename, load_radiograph_metadata_from_json
 
 __all__ = [
     'convert_to_dicom',
@@ -45,4 +46,6 @@ __all__ = [
     'JPEGConverter',
     'PDFConverter',
     'STLConverter',
+    'extract_bolton_brush_data_from_filename',
+    'load_radiograph_metadata_from_json',
 ]

@@ -150,7 +150,7 @@ class BaseDICOMMetadata:
         """
         file_meta = FileMetaDataset()
         file_meta.MediaStorageSOPClassUID = UID(self.sop_class_uid)
-        file_meta.MediaStorageSOPInstanceUID = UID(self.sop_instance_uid)
+        file_meta.MediaStorageSOPInstanceUID = UID(str(self.sop_instance_uid))
         file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
         file_meta.ImplementationClassUID = generate_uid()
         return file_meta
@@ -255,15 +255,33 @@ class RadiographMetadata(BaseDICOMMetadata):
     pixel_spacing_calibration_type: str = "GEOMETRY"
     image_laterality: str = "U"  # Unknown by default
 
+    # Bolton Brush specific attributes
+    is_bolton_brush_study: bool = False  # Flag to enable Bolton Brush tags
+
     def __post_init__(self):
         """Set radiograph-specific defaults."""
         super().__post_init__()
         # Default modality for radiographs
         if self.modality == ModalityType.OT:
             self.modality = ModalityType.RG
+            
+        # Set Bolton Brush defaults if enabled
+        if self.is_bolton_brush_study:
+            self._set_bolton_brush_defaults()
+
+    def _set_bolton_brush_defaults(self):
+        """Set Bolton Brush specific defaults."""
+        self.patient_name = f"{self.patient_id}^Bolton Study Subject"
+        self.referring_physician_name = "Broadbent^Birdsall^Holly^Dr.^Sr."
+        self.secondary_capture_device_id = "Vidar"
+        self.secondary_capture_device_manufacturer = "Vidar"
+        self.secondary_capture_device_manufacturer_model_name = "DosimetryPRO Advantage"
+        self.secondary_capture_device_software_versions = "49.7"
+        self.conversion_type = ConversionType.DF
+        self.burned_in_annotation = BurnedInAnnotation.YES
 
     def _add_image_module(self, ds: Dataset):
-        """Add radiograph-specific image attributes."""
+        """Add radiograph-specific image attributes to dataset."""
         super()._add_image_module(ds)
 
         ds.ConversionType = self.conversion_type.value
@@ -278,6 +296,24 @@ class RadiographMetadata(BaseDICOMMetadata):
 
         if self.image_laterality:
             ds.ImageLaterality = self.image_laterality
+
+    def set_orientation_ll(self):
+        """Set orientation for Left Lateral cephalogram."""
+        self.image_position_patient = ""
+        self.image_orientation_patient = ""
+        self.patient_orientation = "LL"
+
+    def set_orientation_pa(self):
+        """Set orientation for Postero-Anterior cephalogram."""
+        self.image_position_patient = ""
+        self.image_orientation_patient = ""
+        self.patient_orientation = "PA"
+
+    def set_orientation_hand(self):
+        """Set orientation for hand radiograph."""
+        self.image_position_patient = ""
+        self.image_orientation_patient = ""
+        self.patient_orientation = "HAND"
 
 
 @dataclass

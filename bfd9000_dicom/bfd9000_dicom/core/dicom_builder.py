@@ -10,7 +10,7 @@ from pydicom import Dataset, FileMetaDataset
 from pydicom.uid import ExplicitVRLittleEndian, SecondaryCaptureImageStorage, JPEG2000Lossless, generate_uid
 import numpy as np
 from PIL import Image
-from bfd9000_dicom.core.compression import get_encapsulated_jpeg2k_pixel_data
+from bfd9000_dicom.converters.compression import get_encapsulated_jpeg2k_pixel_data
 
 logger = logging.getLogger(__name__)
 

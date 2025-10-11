@@ -1,7 +1,7 @@
 """Tests for core compression utilities."""
 import unittest
 import numpy as np
-from bfd9000_dicom.core.compression import (
+from bfd9000_dicom.converters.compression import (
     is_valid_jpeg2000_codestream,
     get_codestream,
     get_encapsulated_jpeg2k_pixel_data,

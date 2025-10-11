@@ -68,11 +68,6 @@ converters/
 ├── jpeg.py                  # JPEG → DICOM (8-bit RGB/grayscale)
 ├── pdf.py                   # PDF → Encapsulated PDF Storage
 ├── stl.py                   # STL → Encapsulated STL (planned)
-└── old/                     # Legacy code moved here
-    ├── radiograph.py
-    ├── photograph.py
-    ├── document.py
-    └── surface.py
 ```
 
 ## Usage Examples
