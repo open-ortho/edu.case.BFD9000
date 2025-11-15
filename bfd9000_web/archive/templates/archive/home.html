@@ -1,0 +1,76 @@
+{% extends "archive/base.html" %}
+
+{% block title %}Subjects · BFD9000{% endblock %}
+
+{% block content %}
+<section class="card">
+    <form method="get" class="search">
+        <label for="q">Search subjects</label>
+        <div style="display:flex;gap:0.5rem;align-items:flex-end;">
+            <input type="text" id="q" name="q" value="{{ search_query }}" placeholder="Name, identifier…">
+            <button type="submit" class="btn btn-secondary">Search</button>
+        </div>
+    </form>
+</section>
+
+<section class="card">
+    <header style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <div>
+            <h2 style="margin:0;">Subjects</h2>
+            <p style="margin:0;color:#94a3b8;">{{ page_obj.paginator.count }} total</p>
+        </div>
+        <a href="{% url 'archive:reports' %}" class="btn btn-secondary">Reports (coming soon)</a>
+    </header>
+
+    {% if subjects %}
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Identifier</th>
+                    <th>Gender</th>
+                    <th>Birth date</th>
+                    <th>Encounters</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for subject in subjects %}
+                    <tr>
+                        <td>{{ subject.humanname_family }}, {{ subject.humanname_given }}</td>
+                        <td>
+                            {% with id=subject.identifiers.all|first %}
+                                {% if id %}
+                                    {{ id.value }}
+                                {% else %}
+                                    <span style="color:#94a3b8;">—</span>
+                                {% endif %}
+                            {% endwith %}
+                        </td>
+                        <td>{{ subject.get_gender_display }}</td>
+                        <td>{{ subject.birth_date|date:"Y-m-d" }}</td>
+                        <td>{{ subject.encounter_count }}</td>
+                        <td><a class="btn btn-secondary" href="{% url 'archive:subject-detail' subject.pk %}">View</a></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if is_paginated %}
+            <div style="display:flex;justify-content:center;gap:1rem;margin-top:1rem;">
+                {% if page_obj.has_previous %}
+                    <a class="btn btn-secondary" href="?q={{ search_query }}&page={{ page_obj.previous_page_number }}">Previous</a>
+                {% endif %}
+                <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                    <a class="btn btn-secondary" href="?q={{ search_query }}&page={{ page_obj.next_page_number }}">Next</a>
+                {% endif %}
+            </div>
+        {% endif %}
+    {% else %}
+        <div class="empty-state">No subjects match your query yet.</div>
+    {% endif %}
+</section>
+{% endblock %}

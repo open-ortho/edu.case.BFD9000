@@ -1,0 +1,71 @@
+{% extends "archive/base.html" %}
+
+{% block title %}Subject {{ subject.humanname_family }} · BFD9000{% endblock %}
+
+{% block content %}
+<nav style="margin-bottom:1rem;">
+    <a class="btn btn-secondary" href="{% url 'archive:subjects' %}">← Back to subjects</a>
+</nav>
+
+<section class="card">
+    <header style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+            <h2 style="margin:0;">{{ subject.humanname_family }}, {{ subject.humanname_given }}</h2>
+            <p style="margin:0;color:#94a3b8;">{{ subject.get_gender_display }} · born {{ subject.birth_date|date:"Y-m-d" }}</p>
+        </div>
+        <a href="{% url 'archive:record-add' subject.pk %}" class="btn btn-primary">Add record</a>
+    </header>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-top:1.5rem;">
+        <div>
+            <h4 style="margin:0;color:#94a3b8;">Primary identifier</h4>
+            {% with id=subject.identifiers.all|first %}
+                <p style="margin:0.25rem 0;">{{ id.value|default:"—" }}</p>
+            {% endwith %}
+        </div>
+        <div>
+            <h4 style="margin:0;color:#94a3b8;">Address</h4>
+            <p style="margin:0.25rem 0;">{{ subject.address|default:"—" }}</p>
+        </div>
+        <div>
+            <h4 style="margin:0;color:#94a3b8;">Encounters</h4>
+            <p style="margin:0.25rem 0;">{{ encounters|length }}</p>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <header style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <div>
+            <h3 style="margin:0;">Records</h3>
+            <p style="margin:0;color:#94a3b8;">Physical artifacts linked to this subject</p>
+        </div>
+        <a href="{% url 'archive:record-add' subject.pk %}" class="btn btn-primary">Add record</a>
+    </header>
+    {% if records %}
+        <table>
+            <thead>
+            <tr>
+                <th>Record type</th>
+                <th>Collection</th>
+                <th>Encounter</th>
+                <th>Location</th>
+                <th>Digital scan</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for record in records %}
+                <tr>
+                    <td>{{ record.record_type.display|default:record.record_type }}</td>
+                    <td>{{ record.collection.short_name|default:record.collection }}</td>
+                    <td>{{ record.encounter.actual_period_start|date:"Y-m-d"|default:"—" }}</td>
+                    <td>{% if record.physical_location %}{{ record.physical_location }}{% else %}{{ record.physical_location_box|default:"—" }}{% endif %}</td>
+                    <td>{% if record.imaging_study %}✅{% else %}—{% endif %}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="empty-state">No records yet. Use “Add record” to start cataloguing.</div>
+    {% endif %}
+</section>
+{% endblock %}

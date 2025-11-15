@@ -1,0 +1,71 @@
+{% extends "archive/base.html" %}
+
+{% block title %}Add record · {{ subject.humanname_family }}{% endblock %}
+
+{% block content %}
+<nav style="margin-bottom:1rem;">
+    <a class="btn btn-secondary" href="{% url 'archive:subject-detail' subject.pk %}">← Cancel</a>
+</nav>
+
+<section class="card">
+    <header>
+        <h2 style="margin-top:0;">Add record for {{ subject.humanname_family }}, {{ subject.humanname_given }}</h2>
+        <p style="color:#94a3b8;margin-bottom:0;">Select the encounter and describe the physical artifact. Digital ingest is a placeholder for now.</p>
+    </header>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;">
+            <div>
+                {{ form.encounter.label_tag }}
+                {{ form.encounter }}
+                {% if form.encounter.help_text %}<small style="color:#94a3b8;">{{ form.encounter.help_text }}</small>{% endif %}
+                {{ form.encounter.errors }}
+            </div>
+            <div>
+                {{ form.collection.label_tag }}
+                {{ form.collection }}
+                {{ form.collection.errors }}
+            </div>
+            <div>
+                {{ form.record_type.label_tag }}
+                {{ form.record_type }}
+                {{ form.record_type.errors }}
+            </div>
+        </div>
+
+        <h3>Physical storage</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;">
+            <div>{{ form.physical_location.label_tag }}{{ form.physical_location }}{{ form.physical_location.errors }}</div>
+            <div>{{ form.physical_location_box.label_tag }}{{ form.physical_location_box }}{{ form.physical_location_box.errors }}</div>
+            <div>{{ form.physical_location_shelf.label_tag }}{{ form.physical_location_shelf }}{{ form.physical_location_shelf.errors }}</div>
+            <div>{{ form.physical_location_tray.label_tag }}{{ form.physical_location_tray }}{{ form.physical_location_tray.errors }}</div>
+            <div>{{ form.physical_location_compartment.label_tag }}{{ form.physical_location_compartment }}{{ form.physical_location_compartment.errors }}</div>
+            <div>{{ form.device.label_tag }}{{ form.device }}{{ form.device.errors }}</div>
+        </div>
+
+        <h3>Digital ingestion modes</h3>
+        <div class="card" style="background:#0b1220;border:1px solid rgba(255,255,255,0.08);">
+            <p style="margin-top:0;color:#94a3b8;">Select how the pixels will arrive. Only direct upload is live right now.</p>
+            <div>{{ form.ingestion_mode }}</div>
+            <div style="margin-top:1rem;">
+                {{ form.upload.label_tag }}
+                {{ form.upload }}
+                {% if form.upload.help_text %}<small style="color:#94a3b8;">{{ form.upload.help_text }}</small>{% endif %}
+                {{ form.upload.errors }}
+            </div>
+            <div class="empty-state" style="margin-top:1rem;">Scanning via BFD9001 and importing from external storage are on the roadmap.</div>
+        </div>
+
+        <div>
+            {{ form.identifiers.label_tag }}
+            {{ form.identifiers }}
+            {{ form.identifiers.errors }}
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn-primary">Save record</button>
+            <a class="btn btn-secondary" href="{% url 'archive:subject-detail' subject.pk %}">Cancel</a>
+        </div>
+    </form>
+</section>
+{% endblock %}
