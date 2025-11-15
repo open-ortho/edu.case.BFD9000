@@ -22,3 +22,8 @@ The tools will also likely include a GUI for the operator, assisting them in add
 ## Future Uses
 
 Other collections, such as [the ones in the AAOF Legacy Collection](https://www.aaoflegacycollection.org/), may also benefit from these tools. If needed, they can utilize them to achieve an organization based on an open standard like DICOM. This uniform approach could greatly enhance the research community's access to consistent and standardized datasets.
+
+## Repository Structure
+
+- `bfd9000_web/`: Django application for managing and viewing the BFD9000 data.
+  To run the application, follow the instructions in `bfd9000_web/README.md`.
