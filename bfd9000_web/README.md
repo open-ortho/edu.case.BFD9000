@@ -17,15 +17,15 @@ From the workspace root:
 
 1. Make sure to apply any database migrations:
 
-   ```bash
-   python bfd9000_web/manage.py migrate
-   ```
+    ```bash
+    python bfd9000_web/manage.py migrate
+    ```
 
 2. Start the Django development server:
 
-   ```bash
-   python bfd9000_web/manage.py runserver
-   ```
+    ```bash
+    python bfd9000_web/manage.py runserver
+    ```
 
 3. Open your web browser and go to `http://127.0.0.1:8000` to view the application.
 
@@ -34,4 +34,3 @@ From the workspace root:
 - The application settings can be found in `bfd9000/settings.py`.
 - URL routing is defined in `bfd9000/urls.py`.
 - For deployment, refer to the WSGI configuration in `bfd9000/wsgi.py`.
-
