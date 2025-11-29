@@ -1,5 +1,69 @@
 # API Requirements for Frontend
 
+- [API Requirements for Frontend](#api-requirements-for-frontend)
+  - [UC01: Add New Records - API Requirements](#uc01-add-new-records---api-requirements)
+    - [Complete Workflow for UC01](#complete-workflow-for-uc01)
+    - [1. Subject Management](#1-subject-management)
+      - [1.1 Search for Subject](#11-search-for-subject)
+      - [1.2 Create New Subject](#12-create-new-subject)
+      - [1.3 Get Subject Details](#13-get-subject-details)
+    - [2. Encounter Management](#2-encounter-management)
+      - [2.1 List Encounters for Subject](#21-list-encounters-for-subject)
+      - [2.2 Create New Encounter](#22-create-new-encounter)
+      - [2.3 Get Encounter Details](#23-get-encounter-details)
+      - [2.4 Update Encounter](#24-update-encounter)
+      - [2.5 Delete Encounter](#25-delete-encounter)
+    - [3. Metadata and Enumerations](#3-metadata-and-enumerations)
+      - [3.1 Get All Metadata](#31-get-all-metadata)
+    - [4. Record Management](#4-record-management)
+      - [4.1 List Records for Encounter](#41-list-records-for-encounter)
+      - [4.2 Search Records (Alternative)](#42-search-records-alternative)
+    - [5. Record Creation \& Management](#5-record-creation--management)
+      - [5.1 Create Record with File Upload](#51-create-record-with-file-upload)
+      - [5.2 Get Record Details](#52-get-record-details)
+      - [5.3 Update Record Metadata](#53-update-record-metadata)
+      - [5.4 Delete Record](#54-delete-record)
+    - [6. Image Serving](#6-image-serving)
+      - [6.1 Get Record Full Image](#61-get-record-full-image)
+      - [6.2 Get Record Thumbnail](#62-get-record-thumbnail)
+      - [6.3 Get Record DICOM File](#63-get-record-dicom-file)
+    - [7. Background Processing Status](#7-background-processing-status)
+      - [7.1 Retry Failed Processing](#71-retry-failed-processing)
+  - [UC02: Browse for Records - API Requirements](#uc02-browse-for-records---api-requirements)
+    - [Workflow Mapping](#workflow-mapping)
+      - [Step 1: Browse/Search Subjects](#step-1-browsesearch-subjects)
+      - [Step 2: View Subject Details with Encounters](#step-2-view-subject-details-with-encounters)
+      - [Step 3: View Encounter with Records](#step-3-view-encounter-with-records)
+      - [Step 4: View Full Record](#step-4-view-full-record)
+  - [UC04: Export and Sharing - API Requirements](#uc04-export-and-sharing---api-requirements)
+  - [Design Notes and Conventions](#design-notes-and-conventions)
+    - [RESTful Resource Hierarchy](#restful-resource-hierarchy)
+    - [ID Types](#id-types)
+    - [Pagination](#pagination)
+    - [Timestamps](#timestamps)
+    - [Image URLs](#image-urls)
+    - [Nested vs. Direct Access](#nested-vs-direct-access)
+    - [Status Enumerations](#status-enumerations)
+    - [Real-time Updates](#real-time-updates)
+  - [Error Handling and HTTP Status Codes](#error-handling-and-http-status-codes)
+    - [Standard Status Codes](#standard-status-codes)
+    - [Error Response Format](#error-response-format)
+    - [Common Error Codes](#common-error-codes)
+    - [Validation Rules](#validation-rules)
+  - [Authentication \& Authorization](#authentication--authorization)
+    - [9. Authentication](#9-authentication)
+      - [9.1 Get Current User](#91-get-current-user)
+    - [Authorization Notes](#authorization-notes)
+  - [Summary of Required Endpoints](#summary-of-required-endpoints)
+    - [Subject Management](#subject-management)
+    - [Encounter Management](#encounter-management)
+    - [Metadata \& Enumerations](#metadata--enumerations)
+    - [Record Management](#record-management)
+    - [Image Serving](#image-serving)
+    - [Authentication](#authentication)
+    - [Total Endpoints: 21](#total-endpoints-21)
+
+
 Based on the use cases defined in `use_cases.md`, the following API endpoints are required to support the frontend workflow.
 
 **Note**: UC03 (Record maintenance and administration) will use Django's built-in admin interface and does not require custom API endpoints.
@@ -14,13 +78,10 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 2. **Create subject if not found** → `POST /api/subjects/`
 3. **Create or select encounter** → `POST /api/subjects/{subject_id}/encounters/` or select existing
 4. **Check for duplicate records** → `GET /api/subjects/{subject_id}/records/?age_at_encounter={age}&record_type={type}`
-5. **List available scanners** → `GET /api/scanners/`
-6. **Initiate scan** → `POST /api/scanners/{scanner_id}/scans/` with encounter_id
-7. **Poll scan status** → `GET /api/scans/{scan_id}/`
-8. **Preview scanned image** → `GET /api/scans/{scan_id}/image/`
-9. **Get metadata options** → `GET /api/metadata/` (called once on page load)
-10. **Create record with metadata** → `POST /api/encounters/{encounter_id}/records/`
-11. **Monitor DICOM/PACS status** → Poll `GET /api/records/{id}/` for status updates
+5. **Get metadata options** → `GET /api/metadata/` (called once on page load)
+6. **User scans via localhost** → Browser communicates with BFD9010 bridge on localhost, receives PNG or STL file
+7. **Upload and create record with metadata** → `POST /api/encounters/{encounter_id}/records/` with file upload
+8. **Monitor DICOM/PACS status** → Poll `GET /api/records/{id}/` for status updates
 
 ### 1. Subject Management
 
@@ -186,79 +247,18 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 
 ---
 
-### 5. Scanner Integration
+### 5. Record Creation & Management
 
-#### 5.1 List Available Scanners
-**User Action**: System detects connected scanners via BFD9010 bridge
+#### 5.1 Create Record with File Upload
+**User Action**: Operator uploads scanned file (PNG or STL) and creates record with metadata
 
-**API Requirement**:
-- **Endpoint**: `GET /api/scanners/`
-- **Response**: List of detected scanners with:
-  - `id` (integer)
-  - `name` (string): scanner model/name
-  - `status` (string): "online" or "offline"
-  - `type` (string): scanner type
-  - `bridge_connection_id` (string): BFD9010 bridge identifier
-  - `instructions` (string): usage instructions for placing physical records
-
-#### 5.2 Get Scanner Details
-**User Action**: View specific scanner information
-
-**API Requirement**:
-- **Endpoint**: `GET /api/scanners/{id}/`
-- **Response**: Complete scanner object with detailed capabilities
-
-#### 5.3 Initiate Scan
-**User Action**: Operator clicks scan button to start scanning
-
-**API Requirement**:
-- **Endpoint**: `POST /api/scanners/{scanner_id}/scans/`
-- **Request Body**:
-  - `encounter_id` (integer, required): the encounter to associate this scan with
-- **Response**: 
-  - `id` (integer): scan resource ID
-  - `status` (string): "initiated", "scanning", "complete", "failed"
-  - `created_at` (datetime)
-  - `progress` (integer): 0-100
-
-**Note**: For real-time updates, clients should poll `GET /api/scans/{id}/` or use WebSocket connection at `ws://server/api/scans/{id}/stream/` (WebSocket spec to be defined separately)
-
-#### 5.4 Get Scan Status and Details
-**User Action**: Check scan progress and retrieve completed scan
-
-**API Requirement**:
-- **Endpoint**: `GET /api/scans/{id}/`
-- **Response**:
-  - `id` (integer)
-  - `scanner_id` (integer)
-  - `encounter_id` (integer)
-  - `status` (string): "initiated", "scanning", "complete", "failed"
-  - `progress` (integer): 0-100
-  - `created_at` (datetime)
-  - `completed_at` (datetime, nullable)
-  - `error_message` (string, nullable)
-  - `image_preview_url` (string, nullable): available when status is "complete"
-
-#### 5.5 Get Scan Image Preview
-**User Action**: Display scanned image for operator verification before creating record
-
-**API Requirement**:
-- **Endpoint**: `GET /api/scans/{id}/image/`
-- **Response**: Image file (JPEG/PNG) with appropriate `Content-Type` header
-- **Authentication**: Requires valid session
-- **Note**: This endpoint serves the actual image bytes, not a URL
-
----
-
-### 6. Record Creation & Management
-
-#### 6.1 Create Record from Scan
-**User Action**: Operator confirms metadata and creates record from completed scan
+**Note**: Scanning happens directly on localhost via BFD9010 bridge. The frontend communicates with the bridge, receives the file, and then uploads it to BFD9000.
 
 **API Requirement**:
 - **Endpoint**: `POST /api/encounters/{encounter_id}/records/`
-- **Request Body**:
-  - `scan_id` (integer, required): ID of completed scan
+- **Content-Type**: `multipart/form-data`
+- **Request Body** (form fields):
+  - `file` (file upload, required): PNG or STL file from scanner
   - `record_type` (string, required): from metadata endpoint
   - `orientation` (string, required): from metadata endpoint
   - `modality` (string, required): e.g., "RG", "M3D", "PX", "DX"
@@ -268,28 +268,28 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 - **Response**: Created record object with:
   - `id` (integer)
   - `encounter_id` (integer)
-  - `scan_id` (integer)
   - `record_type`, `orientation`, `modality`, `operator`
   - `acquisition_date` (date)
   - `file_size` (integer, bytes)
-  - `image_type` (string): e.g., "TIFF", "JPEG2000"
+  - `file_format` (string): "PNG" or "STL"
+  - `image_type` (string): e.g., "TIFF", "JPEG2000" (after conversion)
   - `thumbnail_url` (string): path to thumbnail (served via API)
   - `image_url` (string): path to full image (served via API)
   - `dicom_status` (string): "pending", "processing", "complete", "failed"
   - `pacs_status` (string): "pending", "uploading", "complete", "failed"
   - `created_at` (datetime)
 
-#### 6.2 Get Record Details
+#### 5.2 Get Record Details
 **User Action**: View complete record information
 
 **API Requirement**:
 - **Endpoint**: `GET /api/records/{id}/`
-- **Response**: Complete record object (same fields as 6.1) plus:
+- **Response**: Complete record object (same fields as 5.1) plus:
   - `encounter`: nested encounter object with subject info
   - `dicom_url` (string, nullable): path to DICOM file if conversion complete
   - `error_message` (string, nullable): if processing failed
 
-#### 6.3 Update Record Metadata
+#### 5.3 Update Record Metadata
 **User Action**: Operator corrects metadata after record creation
 
 **API Requirement**:
@@ -298,9 +298,9 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
   - `record_type`, `orientation`, `modality`
   - `acquisition_date`, `operator`, `notes`
 - **Response**: Updated record object
-- **Note**: Cannot change `encounter_id` or `scan_id` after creation
+- **Note**: Cannot change `encounter_id` after creation. File cannot be replaced after upload.
 
-#### 6.4 Delete Record
+#### 5.4 Delete Record
 **User Action**: Remove record (admin or if DICOM/PACS upload not complete)
 
 **API Requirement**:
@@ -310,20 +310,20 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 
 ---
 
-### 7. Image Serving
+### 6. Image Serving
 
 **Strategy**: All images are served through authenticated API endpoints to maintain access control.
 
-#### 7.1 Get Record Full Image
+#### 6.1 Get Record Full Image
 **User Action**: Display full-resolution record image
 
 **API Requirement**:
 - **Endpoint**: `GET /api/records/{id}/image/`
-- **Response**: Image file with appropriate `Content-Type` (image/tiff, image/jpeg, etc.)
+- **Response**: Image file with appropriate `Content-Type` (image/png, image/tiff, image/jpeg, model/stl, etc.)
 - **Authentication**: Required
 - **Caching**: Support `ETag` and `Last-Modified` headers
 
-#### 7.2 Get Record Thumbnail
+#### 6.2 Get Record Thumbnail
 **User Action**: Display thumbnail in list views
 
 **API Requirement**:
@@ -331,8 +331,9 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 - **Response**: JPEG thumbnail image (max 300x300px)
 - **Authentication**: Required
 - **Caching**: Support `ETag` and `Last-Modified` headers
+- **Note**: For STL files, thumbnail should be a rendered preview image
 
-#### 7.3 Get Record DICOM File
+#### 6.3 Get Record DICOM File
 **User Action**: Download DICOM file for external use
 
 **API Requirement**:
@@ -343,11 +344,11 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 
 ---
 
-### 8. Background Processing Status
+### 7. Background Processing Status
 
 **Note**: Status is embedded in record object. For real-time updates, poll `GET /api/records/{id}/` or use WebSocket at `ws://server/api/records/{id}/stream/`
 
-#### 8.1 Retry Failed Processing
+#### 7.1 Retry Failed Processing
 **User Action**: Manually retry failed DICOM conversion or PACS upload
 
 **API Requirement**:
@@ -377,8 +378,8 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 - Returns encounter with full list of records including thumbnails
 
 #### Step 4: View Full Record
-- **Use**: `GET /api/records/{id}/` (Section 6.2)
-- **Use**: `GET /api/records/{id}/image/` (Section 7.1) to display image
+- **Use**: `GET /api/records/{id}/` (Section 5.2)
+- **Use**: `GET /api/records/{id}/image/` (Section 6.1) to display image
 - Returns complete record metadata and serves full-resolution image
 
 ---
@@ -411,10 +412,6 @@ The API follows a clear resource hierarchy:
   │           └── /records/
   │                 └── /{id}/
   └── /records/ (search across all encounters)
-
-/api/scanners/{id}/
-  └── /scans/
-        └── /{id}/
 ```
 
 ### ID Types
@@ -479,7 +476,7 @@ Polling recommended interval: 1-2 seconds during active operations
 
 **Server Errors**:
 - `500 Internal Server Error` - Unexpected server error
-- `503 Service Unavailable` - Scanner or external service unavailable
+- `503 Service Unavailable` - External service (e.g., PACS) unavailable
 
 ### Error Response Format
 
@@ -505,8 +502,8 @@ All error responses follow this structure:
 - `NOT_FOUND` - 404
 - `VALIDATION_ERROR` - 422
 - `DUPLICATE_RECORD` - 409
-- `SCANNER_UNAVAILABLE` - 503
-- `SCAN_FAILED` - 400
+- `FILE_TOO_LARGE` - 413
+- `UNSUPPORTED_FILE_TYPE` - 415
 - `PROCESSING_FAILED` - 500
 
 ### Validation Rules
@@ -522,15 +519,11 @@ All error responses follow this structure:
 - Cannot create encounter with date before subject's `date_of_birth`
 
 **Record Creation**:
-- `scan_id` must reference completed scan
-- `scan_id` can only be used once (prevents duplicate records from same scan)
+- `file` must be provided and must be PNG or STL format
+- Maximum file size: 100MB (configurable)
 - `record_type`, `orientation`, `modality` must exist in metadata
 - `acquisition_date` cannot be in the future
-
-**Scanner Operations**:
-- Scanner must be in `online` status to initiate scan
-- Encounter must exist before starting scan
-- Only one active scan per scanner at a time
+- File content must match file extension (validated via magic bytes)
 
 ---
 
@@ -596,15 +589,6 @@ All error responses follow this structure:
 | DELETE | `/api/records/{id}/` | Delete record |
 | POST | `/api/records/{id}/retry-processing/` | Retry failed DICOM/PACS |
 
-### Scanner Integration
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| GET | `/api/scanners/` | List available scanners |
-| GET | `/api/scanners/{id}/` | Get scanner details |
-| POST | `/api/scanners/{scanner_id}/scans/` | Initiate new scan |
-| GET | `/api/scans/{id}/` | Get scan status and details |
-| GET | `/api/scans/{id}/image/` | Get scan preview image |
-
 ### Image Serving
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
@@ -617,5 +601,7 @@ All error responses follow this structure:
 |--------|----------|---------|
 | GET | `/api/auth/user/` | Get current authenticated user info |
 
-### Total Endpoints: 26
+### Total Endpoints: 21
 All endpoints support proper REST semantics with appropriate HTTP verbs and status codes.
+
+**Note**: Scanner integration is handled entirely on localhost via BFD9010 bridge. The frontend communicates directly with the bridge, and BFD9000 only receives the resulting PNG or STL file via the record creation endpoint.
