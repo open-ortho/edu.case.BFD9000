@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# DaisyUI
+daisyui.mjs
+daisyui-theme.mjs
+tailwindcss
+tailwindcss.exe

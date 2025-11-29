@@ -21,13 +21,30 @@ From the workspace root:
     python bfd9000_web/manage.py migrate
     ```
 
-2. Start the Django development server:
+2. If you are developing the frontend, install DaisyUI and run tailwindcss in a seperate terminal window.
+
+    ```bash
+    # https://daisyui.com/docs/install/django/
+    # Linux / MacOS
+    cd bfd9000_web/archive/static/css && curl -sL daisyui.com/fast | bash
+    # Windows
+    cd bfd9000_web/archive/static/css && powershell -c "irm daisyui.com/fast.ps1 | iex"
+
+    cd ../../..
+
+    # Linux / MacOS
+    bfd9000_web/archive/static/css/tailwindcss -i bfd9000_web/archive/static/css/input.css -o bfd9000_web/archive/static/css/output.css --watch
+    # Windows
+    bfd9000_web\archive\static\css\tailwindcss.exe -i bfd9000_web/archive/static/css/input.css -o bfd9000_web/archive/static/css/output.css --watch
+    ```
+
+3. Start the Django development server:
 
     ```bash
     python bfd9000_web/manage.py runserver
     ```
 
-3. Open your web browser and go to `http://127.0.0.1:8000` to view the application.
+4. Open your web browser and go to `http://127.0.0.1:8000` to view the application.
 
 ## Additional Information
 

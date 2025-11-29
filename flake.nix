@@ -9,16 +9,16 @@
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
-      python = pkgs.python311; # pick your Python version
     in {
 
       devShells.${system}.default = pkgs.mkShell {
         name = "django-env";
 
-        buildInputs = [
-          python
-          python.pkgs.django
-          python.pkgs.pip
+        buildInputs = with pkgs; [
+          python311
+          python311.pkgs.django
+          python311.pkgs.pip
+          watchman
         ];
 
         # Optional: environment variables for Django

@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}BFD9000{% endblock %}</title>
+    {% load static %}
+    <link href="{% static 'css/output.css' %}" rel="stylesheet" type="text/css" />
     <style>
         :root {
             --primary-50: oklch(96.9% 0.016 293.756);
@@ -22,7 +24,7 @@
             --primary-800: oklch(43.2% 0.232 292.759);
             --primary-900: oklch(38% 0.189 293.745);
             --primary-1000: oklch(28.3% 0.141 291.089)
-            
+
             --surface-50: oklch(98.5% 0 0);
             --surface-100: oklch(96.7% 0.003 264.542);
             --surface-200: oklch(92.8% 0.006 264.531);
@@ -34,20 +36,14 @@
             --surface-800: oklch(27.8% 0.033 256.848);
             --surface-900: oklch(21% 0.034 264.665);
             --surface-950: oklch(13% 0.028 261.692)
-            
+
             --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
-        
+
         ::selection {
             background: var(--primary-500-80);
             opacity: 0.3;
             color: white;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
         }
 
         body {
@@ -190,50 +186,14 @@
                 margin: 4px 0;
             }
         }
-
-        .btn {
-            background: var(--primary-500);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            font-weight: 600;
-            transition: transform 0.2s, box-shadow 0.2s;
-            user-select: none;
-
-            &:hover {
-                box-shadow: 0 4px 12px var(--primary-500-50);
-            }
-
-            &:active {
-                transform: scale(0.95);
-            }
-
-            &:focus {
-                outline: none;
-            }
-
-            &.small {
-                padding: 8px 12px;
-                font-size: 14px;
-            }
-
-            &.large {
-                padding: 16px 24px;
-                font-size: 16px;
-            }
-        }
-        
         .w-full {
             width: 100%;
         }
-        
+
         .grow {
             flex-grow: 1;
         }
-        
+
         .grow-0 {
             flex-grow: 0;
         }
@@ -278,25 +238,6 @@
         .user-name {
             color: #666;
             font-size: 14px;
-        }
-
-        .btn-logout {
-            padding: 10px 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            text-decoration: none;
-            transition: transform 0.2s, box-shadow 0.2s;
-            display: inline-block;
-        }
-
-        .btn-logout:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
         }
 
         .content {
