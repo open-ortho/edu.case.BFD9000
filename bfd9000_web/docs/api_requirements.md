@@ -13,8 +13,8 @@
       - [2.3 Get Encounter Details](#23-get-encounter-details)
       - [2.4 Update Encounter](#24-update-encounter)
       - [2.5 Delete Encounter](#25-delete-encounter)
-    - [3. Metadata and Enumerations](#3-metadata-and-enumerations)
-      - [3.1 Get All Metadata](#31-get-all-metadata)
+    - [3. Valuesets](#3-valuesets)
+      - [3.1 Get Valueset](#31-get-valueset)
     - [4. Record Management](#4-record-management)
       - [4.1 List Records for Encounter](#41-list-records-for-encounter)
       - [4.2 Search Records (Alternative)](#42-search-records-alternative)
@@ -51,9 +51,10 @@
   - [Summary of Required Endpoints](#summary-of-required-endpoints)
     - [Subject Management](#subject-management)
     - [Encounter Management](#encounter-management)
-    - [Metadata \& Enumerations](#metadata--enumerations)
+    - [Valuesets](#valuesets)
     - [Record Management](#record-management)
     - [Image Serving](#image-serving)
+    - [Total Endpoints: 20](#total-endpoints-20)
 
 Based on the use cases defined in `use_cases.md`, the following API endpoints are required to support the frontend workflow.
 
@@ -69,7 +70,7 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 2. **Create subject if not found** → `POST /api/subjects/`
 3. **Create or select encounter** → `POST /api/subjects/{subject_id}/encounters/` or select existing
 4. **Check for duplicate records** → `GET /api/subjects/{subject_id}/records/?age_at_encounter={age}&record_type={type}`
-5. **Get metadata options** → `GET /api/metadata/` (called once on page load)
+5. **Get form options** → Fetch required valuesets in parallel using type parameter (e.g., `GET /api/valuesets/?type=record_types`, `GET /api/valuesets/?type=orientations`, etc.)
 6. **User scans via localhost** → Browser communicates with BFD9010 bridge on localhost, receives PNG or STL file
 7. **Upload and create record with metadata** → `POST /api/encounters/{encounter_id}/records/` with file upload
 
@@ -197,44 +198,59 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 
 --------------------------------------------------------------------------------
 
-### 3\. Metadata and Enumerations
+### 3\. Valuesets
 
-#### 3.1 Get All Metadata
+**Purpose**: Valuesets provide enumerated options for dropdown fields and validation. Valuesets are dynamic and can be queried by type.
 
-**User Action**: Frontend needs dropdown options and field constraints
+**Response Format**: All valueset queries return an array of objects with:
+- `id` (string): The identifier/code to submit in API requests
+- `display` (string): Localized, human-readable text to show in the UI
+
+#### 3.1 Get Valueset
+
+**User Action**: Frontend needs enumeration values for dropdown fields
 
 **API Requirement**:
+- **Endpoint**: `GET /api/valuesets/?type={valueset_type}`
+- **Query Parameters**:
+  - `type` (string, required): The type of valueset to retrieve
+- **Response**: Array of objects with `id` and `display` fields
 
-- **Endpoint**: `GET /api/metadata/`
-- **Response**: Object containing all enumeration values and constraints:
+**Supported Valueset Types**:
 
-  ```json
-  {
-    "record_types": [
-      {"value": "lateral", "label": "Lateral"},
-      {"value": "pa", "label": "PA"},
-      {"value": "hand", "label": "Hand"}
-    ],
-    "orientations": [
-      {"value": "left", "label": "Left"},
-      {"value": "right", "label": "Right"}
-    ],
-    "collections": [
-      {"value": "bolton_brush", "label": "Bolton-Brush"}
-    ],
-    "sex_options": [
-      {"value": "M", "label": "Male"},
-      {"value": "F", "label": "Female"},
-      {"value": "O", "label": "Other"}
-    ],
-    "modalities": [
-      {"value": "RG", "label": "Radiography"},
-      {"value": "M3D", "label": "3D Model"},
-      {"value": "PX", "label": "Photo"},
-      {"value": "DX", "label": "Digital X-Ray"}
-    ]
-  }
-  ```
+- **`record_types`**: Available record type options
+- **`orientations`**: Available orientation options
+- **`collections`**: Available collection names
+- **`sex_options`**: Available sex/gender options
+- **`modalities`**: Available modality codes (DICOM codes) with display names
+
+**Example Response Format**:
+```json
+[
+  {"id": "lateral", "display": "Lateral"},
+  {"id": "pa", "display": "PA"},
+  {"id": "hand", "display": "Hand"}
+]
+```
+
+**For Modalities**:
+```json
+[
+  {"id": "RG", "display": "Radiography"},
+  {"id": "M3D", "display": "3D Model"},
+  {"id": "PX", "display": "Photo"}
+]
+```
+
+**Note**: 
+- The `id` field contains the code/identifier stored in the database and submitted in API requests
+- The `display` field contains localized, human-readable text for UI display
+- Actual values returned are managed in the database and can be added/modified without changing this API specification
+- Frontend displays `display` in dropdowns but submits `id` back to the API
+
+**Error Responses**:
+- `400 Bad Request` - Missing or invalid `type` parameter
+- `404 Not Found` - Unknown valueset type
 
 --------------------------------------------------------------------------------
 
@@ -294,9 +310,9 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 - **Request Body** (form fields):
 
   - `file` (file upload, required): PNG or STL file from scanner
-  - `record_type` (string, required): from metadata endpoint
-  - `orientation` (string, required): from metadata endpoint
-  - `modality` (string, required): e.g., "RG", "M3D", "PX", "DX"
+  - `record_type` (string, required): value from `/api/valuesets/?type=record_types`
+  - `orientation` (string, required): value from `/api/valuesets/?type=orientations`
+  - `modality` (string, required): value from `/api/valuesets/?type=modalities`
   - `operator` (string, optional - defaults to authenticated user)
   - `acquisition_date` (date, optional - defaults to today)
   - `notes` (string, optional)
@@ -572,8 +588,8 @@ All error responses follow this structure:
 **Subject Creation**:
 
 - `identifier` must be unique within collection
-- `sex` must be one of: M, F, O
-- `collection` must exist in metadata
+- `sex` must be a valid value from `/api/valuesets/?type=sex_options`
+- `collection` must be a valid value from `/api/valuesets/?type=collections`
 
 **Encounter Creation**:
 
@@ -585,7 +601,9 @@ All error responses follow this structure:
 
 - `file` must be provided and must be PNG or STL format
 - Maximum file size: 100MB (configurable)
-- `record_type`, `orientation`, `modality` must exist in metadata
+- `record_type` must be a valid value from `/api/valuesets/?type=record_types`
+- `orientation` must be a valid value from `/api/valuesets/?type=orientations`
+- `modality` must be a valid value from `/api/valuesets/?type=modalities`
 - `acquisition_date` cannot be in the future
 - File content must match file extension (validated via magic bytes)
 
@@ -611,11 +629,11 @@ GET    | `/api/encounters/{id}/`                  | Get encounter with records
 PATCH  | `/api/encounters/{id}/`                  | Update encounter metadata
 DELETE | `/api/encounters/{id}/`                  | Delete encounter (admin)
 
-### Metadata & Enumerations
+### Valuesets
 
-Method | Endpoint         | Purpose
------- | ---------------- | ----------------------------------------
-GET    | `/api/metadata/` | Get all dropdown options and constraints
+Method | Endpoint           | Purpose
+------ | ------------------ | ---------------------------------------
+GET    | `/api/valuesets/`  | Get valueset by type (query parameter)
 
 ### Record Management
 
@@ -635,6 +653,8 @@ Method | Endpoint                       | Purpose
 GET    | `/api/records/{id}/image/`     | Serve full-resolution image
 GET    | `/api/records/{id}/thumbnail/` | Serve thumbnail image
 GET    | `/api/records/{id}/dicom/`     | Download DICOM file
+
+### Total Endpoints: 20
 
 All endpoints support proper REST semantics with appropriate HTTP verbs and status codes.
 
