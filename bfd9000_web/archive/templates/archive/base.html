@@ -7,55 +7,14 @@
     {% load static %}
     <link href="{% static 'css/output.css' %}" rel="stylesheet" type="text/css" />
     <style>
-        :root {
-            --primary-50: oklch(96.9% 0.016 293.756);
-            --primary-100: oklch(94.3% 0.029 294.588);
-            --primary-200: oklch(89.4% 0.057 293.283);
-            --primary-300: oklch(81.1% 0.111 293.571);
-            --primary-400: oklch(70.2% 0.183 293.541);
-            --primary-500: oklch(60.6% 0.25 292.717);
-            --primary-500-20: oklch(60.6% 0.25 292.717 / 20%);
-            --primary-500-40: oklch(60.6% 0.25 292.717 / 40%);
-            --primary-500-50: oklch(60.6% 0.25 292.717 / 50%);
-            --primary-500-60: oklch(60.6% 0.25 292.717 / 60%);
-            --primary-500-80: oklch(60.6% 0.25 292.717 / 80%);
-            --primary-600: oklch(54.1% 0.281 293.009);
-            --primary-700: oklch(49.1% 0.27 292.581);
-            --primary-800: oklch(43.2% 0.232 292.759);
-            --primary-900: oklch(38% 0.189 293.745);
-            --primary-1000: oklch(28.3% 0.141 291.089)
-
-            --surface-50: oklch(98.5% 0 0);
-            --surface-100: oklch(96.7% 0.003 264.542);
-            --surface-200: oklch(92.8% 0.006 264.531);
-            --surface-300: oklch(87.2% 0.01 258.338);
-            --surface-400: oklch(70.7% 0.022 261.325);
-            --surface-500: oklch(55.1% 0.027 264.364);
-            --surface-600: oklch(44.6% 0.03 256.802);
-            --surface-700: oklch(37.3% 0.034 259.733);
-            --surface-800: oklch(27.8% 0.033 256.848);
-            --surface-900: oklch(21% 0.034 264.665);
-            --surface-950: oklch(13% 0.028 261.692)
-
-            --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        }
-
         ::selection {
-            background: var(--primary-500-80);
+            background: oklch(60.6% 0.25 292.717 / 80%);
             opacity: 0.3;
             color: white;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: var(--surface-400);
-            min-height: 100vh;
-            {% block body_style %}padding: 20px;{% endblock %}
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
+            {% block body_style %}{% endblock %}
         }
 
         .header {
@@ -124,90 +83,6 @@
             max-width: 400px;
             padding: 40px;
         }
-
-        .login-header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .login-header h1 {
-            color: #333;
-            font-size: 28px;
-            margin-bottom: 8px;
-        }
-
-        .login-header p {
-            color: #666;
-            font-size: 14px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-
-            label {
-                display: block;
-                color: #333;
-                font-weight: 500;
-                margin-bottom: 8px;
-                font-size: 14px;
-            }
-
-            input {
-                width: 100%;
-                padding: 12px 16px;
-                border: 2px solid #e1e8ed;
-                border-radius: 8px;
-                font-size: 14px;
-                transition: border-color 0.3s;
-            }
-
-            input:focus {
-                outline: none;
-                border-color: #667eea;
-            }
-        }
-
-        .error-messages {
-            background: #fee;
-            border: 1px solid #fcc;
-            border-radius: 8px;
-            padding: 12px 16px;
-            margin-bottom: 20px;
-            color: #c33;
-            font-size: 14px;
-
-            ul {
-                list-style: none;
-                margin: 0;
-                padding: 0;
-            }
-
-            li {
-                margin: 4px 0;
-            }
-        }
-        .w-full {
-            width: 100%;
-        }
-
-        .grow {
-            flex-grow: 1;
-        }
-
-        .grow-0 {
-            flex-grow: 0;
-        }
-
-        .info-message {
-            background: #e7f3ff;
-            border: 1px solid #b3d9ff;
-            border-radius: 8px;
-            padding: 12px 16px;
-            margin-bottom: 20px;
-            color: #004085;
-            font-size: 14px;
-        }
-
         .container {
             max-width: 1200px;
             margin: 0 auto;
@@ -273,7 +148,7 @@
         {% block styles %}{% endblock %}
     </style>
 </head>
-<body>
+<body class="bg-neutral-content md:p-8 p-4 min-h-screen">
     {% block body %}{% endblock %}
 </body>
 </html>

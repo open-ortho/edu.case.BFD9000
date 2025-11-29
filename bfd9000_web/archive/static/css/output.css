@@ -1141,9 +1141,6 @@
   .mb-2 {
     margin-bottom: calc(var(--spacing) * 2);
   }
-  .mb-4 {
-    margin-bottom: calc(var(--spacing) * 4);
-  }
   .mb-8 {
     margin-bottom: calc(var(--spacing) * 8);
   }
@@ -1201,14 +1198,17 @@
   .block {
     display: block;
   }
+  .contents {
+    display: contents;
+  }
+  .flex {
+    display: flex;
+  }
   .hidden {
     display: none;
   }
-  .h-6 {
-    height: calc(var(--spacing) * 6);
-  }
-  .w-6 {
-    width: calc(var(--spacing) * 6);
+  .min-h-screen {
+    min-height: 100vh;
   }
   .w-9 {
     width: calc(var(--spacing) * 9);
@@ -1228,9 +1228,6 @@
   .shrink-0 {
     flex-shrink: 0;
   }
-  .flex-grow {
-    flex-grow: 1;
-  }
   .grow {
     flex-grow: 1;
   }
@@ -1242,6 +1239,9 @@
   }
   .resize {
     resize: both;
+  }
+  .flex-col {
+    flex-direction: column;
   }
   .rounded-box {
     border-radius: var(--radius-box);
@@ -1262,6 +1262,12 @@
   .bg-base-200 {
     background-color: var(--color-base-200);
   }
+  .bg-base-300 {
+    background-color: var(--color-base-300);
+  }
+  .bg-neutral-content {
+    background-color: var(--color-neutral-content);
+  }
   .alert-soft {
     @layer daisyui.l1 {
       color: var(--alert-color, var(--color-base-content));
@@ -1281,15 +1287,6 @@
       background-image: none;
     }
   }
-  .stroke-info {
-    stroke: var(--color-info);
-  }
-  .p-0 {
-    padding: calc(var(--spacing) * 0);
-  }
-  .p-0\! {
-    padding: calc(var(--spacing) * 0) !important;
-  }
   .p-4 {
     padding: calc(var(--spacing) * 4);
   }
@@ -1303,13 +1300,12 @@
     font-size: var(--text-3xl);
     line-height: var(--tw-leading, var(--text-3xl--line-height));
   }
-  .text-base {
-    font-size: var(--text-base);
-    line-height: var(--tw-leading, var(--text-base--line-height));
-  }
   .font-bold {
     --tw-font-weight: var(--font-weight-bold);
     font-weight: var(--font-weight-bold);
+  }
+  .text-nowrap {
+    text-wrap: nowrap;
   }
   .alert-error {
     @layer daisyui.l1.l2 {
@@ -1324,12 +1320,6 @@
       --alert-border-color: var(--color-info);
       --alert-color: var(--color-info);
     }
-  }
-  .text-base-200 {
-    color: var(--color-base-200);
-  }
-  .text-base-content {
-    color: var(--color-base-content);
   }
   .shadow-sm {
     --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
@@ -1350,10 +1340,12 @@
   .filter {
     filter: var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,);
   }
-  .transition {
-    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events;
-    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
-    transition-duration: var(--tw-duration, var(--default-transition-duration));
+  .btn-sm {
+    @layer daisyui.l1.l2 {
+      --fontsize: 0.75rem;
+      --btn-p: 0.75rem;
+      --size: calc(var(--size-field, 0.25rem) * 8);
+    }
   }
   .btn-primary {
     @layer daisyui.l1.l2.l3 {
@@ -1363,6 +1355,11 @@
   }
   .\[a\:\1c �\1a \<��\] {
     a: �<��;
+  }
+  .md\:p-8 {
+    @media (width >= 48rem) {
+      padding: calc(var(--spacing) * 8);
+    }
   }
 }
 @layer base {
