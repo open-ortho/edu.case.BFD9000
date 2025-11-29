@@ -27,8 +27,6 @@
       - [6.1 Get Record Full Image](#61-get-record-full-image)
       - [6.2 Get Record Thumbnail](#62-get-record-thumbnail)
       - [6.3 Get Record DICOM File](#63-get-record-dicom-file)
-    - [7. Background Processing Status](#7-background-processing-status)
-      - [7.1 Retry Failed Processing](#71-retry-failed-processing)
   - [UC02: Browse for Records - API Requirements](#uc02-browse-for-records---api-requirements)
     - [Workflow Mapping](#workflow-mapping)
       - [Step 1: Browse/Search Subjects](#step-1-browsesearch-subjects)
@@ -61,7 +59,7 @@
     - [Record Management](#record-management)
     - [Image Serving](#image-serving)
     - [Authentication](#authentication)
-    - [Total Endpoints: 21](#total-endpoints-21)
+    - [Total Endpoints: 20](#total-endpoints-20)
 
 
 Based on the use cases defined in `use_cases.md`, the following API endpoints are required to support the frontend workflow.
@@ -81,7 +79,6 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 5. **Get metadata options** → `GET /api/metadata/` (called once on page load)
 6. **User scans via localhost** → Browser communicates with BFD9010 bridge on localhost, receives PNG or STL file
 7. **Upload and create record with metadata** → `POST /api/encounters/{encounter_id}/records/` with file upload
-8. **Monitor DICOM/PACS status** → Poll `GET /api/records/{id}/` for status updates
 
 ### 1. Subject Management
 
@@ -275,9 +272,11 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
   - `image_type` (string): e.g., "TIFF", "JPEG2000" (after conversion)
   - `thumbnail_url` (string): path to thumbnail (served via API)
   - `image_url` (string): path to full image (served via API)
-  - `dicom_status` (string): "pending", "processing", "complete", "failed"
-  - `pacs_status` (string): "pending", "uploading", "complete", "failed"
+  - `dicom_status` (string): "pending", "processing", "complete", "failed" (for backend tracking)
+  - `pacs_status` (string): "pending", "uploading", "complete", "failed" (for backend tracking)
   - `created_at` (datetime)
+
+**Note**: DICOM conversion and PACS upload happen asynchronously in the background. Status fields are included for informational purposes but no user action is required. Failed operations are handled by backend monitoring/alerting systems.
 
 #### 5.2 Get Record Details
 **User Action**: View complete record information
@@ -341,21 +340,6 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 - **Response**: DICOM file (.dcm) with `Content-Disposition: attachment`
 - **Authentication**: Required
 - **Note**: Returns 404 if DICOM conversion not yet complete
-
----
-
-### 7. Background Processing Status
-
-**Note**: Status is embedded in record object. For real-time updates, poll `GET /api/records/{id}/` or use WebSocket at `ws://server/api/records/{id}/stream/`
-
-#### 7.1 Retry Failed Processing
-**User Action**: Manually retry failed DICOM conversion or PACS upload
-
-**API Requirement**:
-- **Endpoint**: `POST /api/records/{id}/retry-processing/`
-- **Request Body**:
-  - `operation` (string): "dicom_conversion" or "pacs_upload"
-- **Response**: Updated record object with status reset to "pending"
 
 ---
 
@@ -527,8 +511,6 @@ All error responses follow this structure:
 
 ---
 
----
-
 ## Authentication & Authorization
 
 ### 9. Authentication
@@ -587,7 +569,6 @@ All error responses follow this structure:
 | GET | `/api/records/{id}/` | Get complete record details |
 | PATCH | `/api/records/{id}/` | Update record metadata |
 | DELETE | `/api/records/{id}/` | Delete record |
-| POST | `/api/records/{id}/retry-processing/` | Retry failed DICOM/PACS |
 
 ### Image Serving
 | Method | Endpoint | Purpose |
@@ -601,7 +582,7 @@ All error responses follow this structure:
 |--------|----------|---------|
 | GET | `/api/auth/user/` | Get current authenticated user info |
 
-### Total Endpoints: 21
+### Total Endpoints: 20
 All endpoints support proper REST semantics with appropriate HTTP verbs and status codes.
 
 **Note**: Scanner integration is handled entirely on localhost via BFD9010 bridge. The frontend communicates directly with the bridge, and BFD9000 only receives the resulting PNG or STL file via the record creation endpoint.
