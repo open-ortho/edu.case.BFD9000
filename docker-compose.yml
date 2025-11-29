@@ -1,0 +1,14 @@
+services:
+  backend:
+    build: .
+    container_name: bfd9000-backend
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      # Mount the source code for live reloading
+      - ./bfd9000_web:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=1
+      - SECRET_KEY=dev_secret_key
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,[::1],0.0.0.0
