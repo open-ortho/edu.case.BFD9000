@@ -1,6 +1,6 @@
 # Use Cases
 
-The BFD9000 shall be able to accomodate the following use cases.
+The BFD9000 shall be able to accommodate the following use cases.
 
 
 ## UC01: Add new records
