@@ -22,4 +22,10 @@ The BFD9000 shall be able to accomodate the following use cases.
 ### Steps
 
 1. Operator searches for the subject related to the physical record. If the subject doesn't exist, the operator shall create a new subject with a minimum of subject identifier, collection name, sex.
-2. Operator searches for the record to make sure it hasn't been digitized already, by age at encounter and 
+2. Operator searches for the record by age at encounter (to make sure it hasn't been digitized already) and record type (Lateral, Hand, etc)
+3. If record doesn't exist, operator proceeds to Add a new Record.
+4. The system shows a new view, which shows the user the scanner that has been detected and instructs the user how to use it, i.e. how to place the physical record into the scanner.
+5. Operator then clicks the scan button, and waits for the scan to be complete.
+6. The operator is then presented with a view of the scanned record, and is able to verify all the metadata is appropriately selected (record type, orientation, operator name, date of acquisition, encounter date, collection)
+7. The operator makes any correction to the data, using the appropriate fields and drop down menus: the user should not type anything, if possible, but make selections. 
+8. Once the user confirms, the digitized record is added to the database. The system proceeds to convert it to DICOM and uploads it to a PACS or other DICOM Node.
