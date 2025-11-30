@@ -1,66 +1,50 @@
-""" DICOM tags for specific types of images.
+"""
+DICOM dataset builder utilities.
 
-A good explanation for ImageOrientationPatient
-https://dicomiseasy.blogspot.com/2013/06/getting-oriented-using-image-plane.html
+This module provides functions for building DICOM datasets with appropriate
+tags and metadata for various imaging modalities.
 """
 from typing import Optional
-import pydicom
+import logging
 from pydicom import Dataset, FileMetaDataset
 from pydicom.uid import ExplicitVRLittleEndian, SecondaryCaptureImageStorage, JPEG2000Lossless, generate_uid
 import numpy as np
 from PIL import Image
-from bfd9000_dicom.jpeg2000 import get_encapsulated_jpeg2k_pixel_data
-from bfd9000_dicom import logger, UnsupportedBitDepthError, UnsupportedImageModeError
+from bfd9000_dicom.converters.compression import get_encapsulated_jpeg2k_pixel_data
 
-def dicom_tags_LL(ds: Dataset):
-    ds.ImagePositionPatient = ''
-    ds.ImageOrientationPatient = ''
+logger = logging.getLogger(__name__)
 
 
-def dicom_tags_PA(ds: Dataset):
-    ds.ImagePositionPatient = ''
-    ds.ImageOrientationPatient = ''
-
-
-def dicom_tags_HAND(ds: Dataset):
-    ds.ImagePositionPatient = ''
-    ds.ImageOrientationPatient = ''
-
-
-
-image_type_dispatcher = {
-    "XV.CG.LL": dicom_tags_LL,
-    "XV.CG.PA": dicom_tags_PA
-}
-
-
-def expected_tags():
-    """ The set of expected tags to come in from JSON.
-
-    These depend on the image, 
-
-    """
-
-    ds = Dataset()
-    ds.DateOfSecondaryCapture = ''
-    ds.TimeOfSecondaryCapture = ''
-    ds.PatientAge = ''
-    ds.PatientSex = ''
-    ds.PatientId = ''
-    ds.PatientOrientation = ''
-    ds.AnatomicRegionSequence = []
+# Import exceptions - avoiding circular import by importing at runtime
+def _get_exception_classes():
+    """Get exception classes from main module to avoid circular imports."""
+    from bfd9000_dicom import UnsupportedBitDepthError, UnsupportedImageModeError
+    return UnsupportedBitDepthError, UnsupportedImageModeError
 
 
 def build_file_meta() -> FileMetaDataset:
-    """ File Meta for Secondary Capture SC IOD. """
+    """
+    Build File Meta Information for Secondary Capture SC IOD.
+    
+    Returns:
+        FileMetaDataset: DICOM file meta information dataset
+    """
     file_meta = FileMetaDataset()
     file_meta.MediaStorageSOPClassUID = SecondaryCaptureImageStorage
     file_meta.MediaStorageSOPInstanceUID = generate_uid()
     file_meta.ImplementationClassUID = generate_uid()
     return file_meta
 
-def add_common_bolton_brush_tags(ds:Dataset) -> Optional[Dataset]:
-    """ Add tags which are common to all scanned bolton brush radiographs.
+
+def add_common_bolton_brush_tags(ds: Dataset) -> Optional[Dataset]:
+    """
+    Add tags which are common to all scanned Bolton Brush radiographs.
+    
+    Args:
+        ds: DICOM Dataset to add tags to
+        
+    Returns:
+        The modified Dataset, or None if input was None
     """
     if ds is None:
         return None
@@ -76,7 +60,7 @@ def add_common_bolton_brush_tags(ds:Dataset) -> Optional[Dataset]:
     ds.ConversionType = 'DF'  # Digitized Film
 
     # Patient Module
-    ds.PatientBirthDate = '' # Required, must stay empty
+    ds.PatientBirthDate = ''  # Required, must stay empty
     ds.PatientIdentityRemoved = 'YES'
     ds.DeidentificationMethod = 'Removed: Patient name, birthdate, study date/time.'[:64]
 
@@ -86,17 +70,31 @@ def add_common_bolton_brush_tags(ds:Dataset) -> Optional[Dataset]:
 
     # General Image Module
     ds.BurnedInAnnotation = 'YES'  # do all of the cephs have it?
+    
+    return ds
 
 
-def add_image_module(ds:Dataset,tiff_path,with_compression=True):
-    """ Adds the DICOM Image Module. """
+def add_image_module(ds: Dataset, tiff_path, with_compression=True):
+    """
+    Add the DICOM Image Module with pixel data from a TIFF file.
+    
+    Args:
+        ds: DICOM Dataset to add image data to
+        tiff_path: Path to the TIFF file
+        with_compression: Whether to use JPEG2000 compression (default: True)
+        
+    Returns:
+        The modified Dataset with image data, or None on error
+    """
+    UnsupportedBitDepthError, UnsupportedImageModeError = _get_exception_classes()
+    
     try:
         with Image.open(tiff_path) as img:
             img.seek(0)
             # Extract DPI information
             dpi_horizontal, dpi_vertical = img.info['dpi']
             mode = img.mode
-            if mode in ['RGBA','P']:
+            if mode in ['RGBA', 'P']:
                 img = img.convert('RGB')
             elif mode == 'LA':
                 img = img.convert('L')
@@ -149,14 +147,14 @@ def dpi_to_dicom_spacing(dpi_horizontal, dpi_vertical=None):
     Convert DPI to DICOM's NominalScannedPixelSpacing and PixelAspectRatio.
 
     Parameters:
-    dpi_horizontal (float): The DPI for the horizontal dimension.
-    dpi_vertical (float, optional): The DPI for the vertical dimension. If not provided,
-        it is assumed that vertical DPI is the same as horizontal DPI.
+        dpi_horizontal (float): The DPI for the horizontal dimension.
+        dpi_vertical (float, optional): The DPI for the vertical dimension. If not provided,
+            it is assumed that vertical DPI is the same as horizontal DPI.
 
     Returns:
-    tuple: Returns two tuples:
-        - NominalScannedPixelSpacing: Tuple of two floats (spacingX, spacingY) in mm.
-        - PixelAspectRatio: Tuple of two integers (aspectX, aspectY) or None if pixels are square.
+        tuple: Returns two tuples:
+            - NominalScannedPixelSpacing: Tuple of two floats (spacingX, spacingY) in mm.
+            - PixelAspectRatio: Tuple of two integers (aspectX, aspectY) or None if pixels are square.
     """
     mm_per_inch = 25.4  # 1 inch is 25.4 millimeters
 
@@ -173,7 +171,7 @@ def dpi_to_dicom_spacing(dpi_horizontal, dpi_vertical=None):
 
     # Calculate PixelAspectRatio using original dpi values to avoid rounding errors
     if dpi_horizontal == dpi_vertical:
-        pixel_aspect_ratio = [1, 1]
+        pixel_aspect_ratio = ["1", "1"]
     else:
         # Reduce aspect ratio to simplest form
         from math import gcd

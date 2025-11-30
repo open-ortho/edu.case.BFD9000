@@ -2,12 +2,12 @@
     "python.testing.unittestArgs": [
         "-v",
         "-s",
-        "./bbc2dcm/tests/",
+        "./bfd9000_dicom/tests/",
         "-p",
         "test_*.py"
     ],
     "python.analysis.extraPaths": [
-        "${workspaceFolder}/bbc2dcm/",
+        "${workspaceFolder}/bfd9000_dicom/",
     ],
     "python.testing.pytestEnabled": false,
     "python.testing.unittestEnabled": true,

@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bfd9000_dicom"
+version = "0.1.0"
+description = "Bolton File Dicomizer 9000: Convert scanned images to DICOM format"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Open Ortho", email = "info@open-ortho.org"}
+]
+keywords = ["dicom", "medical imaging", "radiography", "image conversion"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Healthcare Industry",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+
+dependencies = [
+    "imagecodecs",
+    "numpy",
+    "pillow",
+    "pydicom",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+]
+
+[project.urls]
+Homepage = "https://github.com/open-ortho/BFD9000"
+Repository = "https://github.com/open-ortho/BFD9000"
+Issues = "https://github.com/open-ortho/BFD9000/issues"
+
+[tool.setuptools]
+packages = ["bfd9000_dicom"]
