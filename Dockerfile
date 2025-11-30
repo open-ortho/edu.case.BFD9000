@@ -22,7 +22,9 @@ WORKDIR /app
 
 # Install runtime dependencies
 # (Add libpq-dev here if/when we switch to Postgres)
+# libmagic1 is required for python-magic
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy wheels from builder
@@ -43,4 +45,4 @@ USER django
 EXPOSE 8000
 
 # Default command
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+CMD ["gunicorn", "BFD9000.wsgi:application", "--bind", "0.0.0.0:8000"]

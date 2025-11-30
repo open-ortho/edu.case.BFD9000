@@ -284,6 +284,7 @@ class ImagingStudy(TimestampedModel):
     scan_datetime = models.DateTimeField(null=True, blank=True)
     device = models.CharField(max_length=255, blank=True)
     endpoint = models.URLField(max_length=500, blank=True, help_text="URL endpoint for imaging data")
+    source_file = models.FileField(upload_to='uploads/%Y/%m/%d/', null=True, blank=True, help_text="Original uploaded file (PNG/STL)")
     body_site = models.ForeignKey(
         Coding,
         on_delete=models.SET_NULL,
@@ -327,6 +328,13 @@ class ImagingStudy(TimestampedModel):
         """Convenience property to get subject from encounter"""
         return self.encounter.subject
     
+    @property
+    def image_url(self):
+        """Return local file URL if present, otherwise external endpoint"""
+        if self.source_file:
+            return self.source_file.url
+        return self.endpoint
+
     def __str__(self):
         date_str = self.scan_datetime.strftime('%Y-%m-%d') if self.scan_datetime else 'No date'
         return f"ImagingStudy for {self.subject} - {date_str}"
