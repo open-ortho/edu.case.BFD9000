@@ -21,7 +21,7 @@ From the workspace root:
     python bfd9000_web/manage.py migrate
     ```
 
-2. If you are developing the frontend, install DaisyUI and run tailwindcss in a seperate terminal window.
+2. ONLY IF YOU ARE DEVELOPING THE FRONTEND, install DaisyUI and run tailwindcss in a seperate terminal window.
 
     ```bash
     # https://daisyui.com/docs/install/django/
@@ -30,7 +30,7 @@ From the workspace root:
     # Windows
     cd bfd9000_web/archive/static/css && powershell -c "irm daisyui.com/fast.ps1 | iex"
 
-    cd ../../..
+    cd ../../../..
 
     # Linux / MacOS
     bfd9000_web/archive/static/css/tailwindcss -i bfd9000_web/archive/static/css/input.css -o bfd9000_web/archive/static/css/output.css --watch

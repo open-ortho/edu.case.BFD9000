@@ -3,16 +3,14 @@
 {% block title %}{% block page_title %}Home{% endblock %} - BFD9000{% endblock %}
 
 {% block body %}
-<div class="flex flex-col card shadow-sm bg-base-100">
-    <div class="p-4 flex space-between align-center">
+<div class="card shadow-sm bg-base-100 h-full grow">
+    <div class="p-4 flex space-between align-center border-b-2 border-primary">
         <h1 class="text-3xl font-bold grow">BFD9000</h1>
-        <div class="user-info text-nowrap shrink-0">
-            <span class="user-name">Logged in as: <strong>{{ user.username }}</strong></span>
-            <a href="{% url 'logout' %}" class="btn btn-sm grow-0">Logout</a>
-        </div>
+        <span class="my-auto text-sm text-nowrap mr-4">Logged in as: <strong>{{ user.username }}</strong></span>
+        <a href="{% url 'logout' %}" class="btn btn-sm grow-0">Logout</a>
     </div>
 
-    <div class="content">
+    <div class="flex-[1_1_0] overflow-y-auto">
         {% block content %}{% endblock %}
     </div>
 </div>
