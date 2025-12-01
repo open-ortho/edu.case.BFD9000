@@ -5,3 +5,7 @@ from django.shortcuts import render
 @login_required
 def index(request):
     return render(request, "archive/index.html")
+
+@login_required
+def subjects(request):
+    return render(request, "archive/subjects.html")

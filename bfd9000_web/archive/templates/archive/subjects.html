@@ -1,0 +1,136 @@
+{% extends 'archive/base_index.html' %}
+
+{% block content %}
+<div class="flex-[1_1_0] flex flex-col overflow-x-auto">
+    <div class="min-w-0 flex-[1_1_0] overflow-y-auto">
+        <table class="table table-xs md:table-sm lg:table-md table-pin-rows ">
+            <!-- head -->
+            <thead>
+                <tr>
+                    <th>Subject</th>
+                    <th>Sex</th>
+                    <th>Age</th>
+                    <th>Encounters</th>
+                    <th>Records</th>
+                    <th>Dental Classification</th>
+                </tr>
+            </thead>
+            <tbody id="subject_table_body">
+                {% for _ in '    ' %}
+                    <tr>
+                        <td colspan="9">
+                            <div class="flex w-full gap-4">
+                                <div class="skeleton h-[1lh] w-1/3"></div>
+                                <div class="skeleton h-[1lh] grow"></div>
+                                <div class="skeleton h-[1lh] w-1/2"></div>
+                            </div>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="bg-base-200 p-2 flex">
+        <button class="btn btn-primary rounded-full" onclick="create_modal.showModal()">New</button>
+        <div class="grow"></div>
+        <div class="join">
+            <button class="join-item btn rounded-l-full" id="prev-button" disabled>«</button>
+            <button class="join-item btn" id="page-button">Page 1 / 0</button>
+            <button class="join-item btn rounded-r-full" id="next-button" disabled>»</button>
+        </div>
+    </div>
+</div>
+
+<dialog id="create_modal" class="modal">
+  <div class="modal-box prose prose-sm">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+    </form>
+    <h2 class="!mt-0">New Subject</h2>
+        <fieldset class="fieldset">
+            <input
+                type="text"
+                id="subject_humanname_given"
+                class="input"
+                placeholder="Given Name"
+                required>
+            <input
+                type="text"
+                id="subject_humanname_family"
+                class="input"
+                placeholder="Family Name"
+                required>
+            <select id="subject_sex" class="select" required>
+                <option disabled>Select Sex</option>
+                <option value="M">Male</option>
+                <option value="F">Female</option>
+                <option value="O">Other</option>
+            </select>
+            <select id="subject_dental_classification" class="select" required>
+                <option disabled>Select Dental Classification</option>
+                <option value="ABC">ABC</option>
+                <option value="DEF">DEF</option>
+                <option value="GHI">GHI</option>
+            </select>
+            <button type="submit" class="btn btn-primary">Create</button>
+        </fieldset>
+  </div>
+</dialog>
+
+<dialog id="subject_modal" class="modal">
+  <div class="modal-box prose prose-sm">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+    </form>
+    <h2 class="!mt-0">New Subject</h2>
+  </div>
+</dialog>
+{% endblock %}
+
+{%block head %}
+    <script>
+        let loaded = false;
+
+        // dummy data instead of a fetch
+        let subjects = [
+            { id: "B0001", sex: "M", age: 14, encounters: 2, records: 3, dental_classification: "ABC" },
+            { id: "B0002", sex: "F", age: 15, encounters: 3, records: 4, dental_classification: "DEF" },
+            { id: "B0003", sex: "M", age: 16, encounters: 4, records: 5, dental_classification: "GHI" },
+            { id: "B0001", sex: "M", age: 14, encounters: 2, records: 3, dental_classification: "ABC" },
+            { id: "B0002", sex: "F", age: 15, encounters: 3, records: 4, dental_classification: "DEF" },
+        ]
+        let tableBody;
+        const page_size = 20;
+
+        function populate() {
+            if (!loaded) return;
+
+            // populate table with subjects
+            const rows = subjects.map(subject => {
+                const row = document.createElement('tr');
+
+                const id = document.createElement('td');
+                id.textContent = subject.id;
+                const gender = document.createElement('td');
+                gender.textContent = subject.sex;
+                const age = document.createElement('td');
+                age.textContent = subject.age;
+                const encounters = document.createElement('td');
+                encounters.textContent = subject.encounters;
+                const records = document.createElement('td');
+                records.textContent = subject.records;
+                const dentalClassification = document.createElement('td');
+                dentalClassification.textContent = subject.dental_classification;
+
+                row.replaceChildren(id, gender, age, encounters, records, dentalClassification);
+                return row;
+            });
+            subject_table_body.replaceChildren(...rows);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loaded = true;
+            populate();
+        });
+    </script>
+{% endblock %}

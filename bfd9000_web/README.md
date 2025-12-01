@@ -41,6 +41,9 @@ From the workspace root:
 3. Start the Django development server:
 
     ```bash
+    # add yourself as a user
+    python bfd9000_web/manage.py createsuperuser
+    
     python bfd9000_web/manage.py runserver
     ```
 

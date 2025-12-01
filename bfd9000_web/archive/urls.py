@@ -6,4 +6,5 @@ app_name = "archive"
 
 urlpatterns = [
     path("", views.index, name="index"),
+    path("subjects/", views.subjects, name="subjects"),
 ]
