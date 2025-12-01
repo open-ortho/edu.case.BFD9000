@@ -6,7 +6,6 @@ from drf_spectacular.utils import extend_schema
 from drf_spectacular.types import OpenApiTypes
 from django.http import FileResponse, HttpResponse
 from django.db.models import Count
-import datetime
 import io
 import os
 from PIL import Image
