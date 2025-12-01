@@ -46,12 +46,12 @@ class ValuesetViewSet(viewsets.ViewSet):
             data = [{'id': c.code, 'display': c.display} for c in codings]
             
         elif valueset_type == 'orientations':
-             codings = Coding.objects.filter(system=SYSTEM_ORIENTATION)
-             data = [{'id': c.code, 'display': c.display} for c in codings]
-             
+            codings = Coding.objects.filter(system=SYSTEM_ORIENTATION)
+            data = [{'id': c.code, 'display': c.display} for c in codings]
+            
         elif valueset_type == 'modalities':
-             codings = Coding.objects.filter(system=SYSTEM_MODALITY)
-             data = [{'id': c.code, 'display': c.display} for c in codings]
+            codings = Coding.objects.filter(system=SYSTEM_MODALITY)
+            data = [{'id': c.code, 'display': c.display} for c in codings]
              
         else:
             return Response({"error": f"Unknown valueset type: {valueset_type}"}, status=404)
