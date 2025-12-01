@@ -2,7 +2,7 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 from rest_framework import status
 from django.core.files.uploadedfile import SimpleUploadedFile
-from archive.models import Subject, Encounter, Record, Collection, Coding
+from archive.models import Record, Collection, Coding
 from archive.constants import SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE
 import datetime
 
