@@ -37,8 +37,12 @@ RUN pip install --no-cache /wheels/*
 # Copy project code
 COPY bfd9000_web/ .
 
+# Collect static files
+RUN python manage.py collectstatic --noinput
+
 # Create non-root user for security
 RUN useradd -m django
+RUN chown -R django:django /app
 USER django
 
 # Expose port
