@@ -164,7 +164,7 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         
         ext = value.name.split('.')[-1].lower()
         if ext not in ['png', 'stl']:
-             raise serializers.ValidationError("Only PNG and STL files are allowed")
+            raise serializers.ValidationError("Only PNG and STL files are allowed")
         
         return value
 
