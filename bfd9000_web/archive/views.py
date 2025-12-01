@@ -206,21 +206,21 @@ class RecordViewSet(viewsets.ModelViewSet):
             return HttpResponse(buf, content_type='image/jpeg')
             
         try:
-            # Open image
-            img = Image.open(source_file)
-            # Convert to RGB if RGBA (PNG)
-            if img.mode in ('RGBA', 'LA'):
-                background = Image.new(img.mode[:-1], img.size, (255, 255, 255))
-                background.paste(img, img.split()[-1])
-                img = background
-            
-            img.thumbnail((300, 300))
-            
-            buf = io.BytesIO()
-            img.save(buf, format='JPEG')
-            buf.seek(0)
-            
-            return HttpResponse(buf, content_type='image/jpeg')
+            # Open image using a context manager
+            with Image.open(source_file) as img:
+                # Convert to RGB if RGBA (PNG)
+                if img.mode in ('RGBA', 'LA'):
+                    background = Image.new(img.mode[:-1], img.size, (255, 255, 255))
+                    background.paste(img, img.split()[-1])
+                    img = background
+                
+                img.thumbnail((300, 300))
+                
+                buf = io.BytesIO()
+                img.save(buf, format='JPEG')
+                buf.seek(0)
+                
+                return HttpResponse(buf, content_type='image/jpeg')
         except Exception as e:
             return Response({"error": f"Error generating thumbnail: {e}"}, status=500)
 
