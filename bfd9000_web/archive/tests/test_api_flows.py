@@ -4,7 +4,6 @@ from rest_framework import status
 from django.core.files.uploadedfile import SimpleUploadedFile
 from archive.models import Record, Collection, Coding
 from archive.constants import SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE
-import datetime
 
 class ApiFlowTests(APITestCase):
     def setUp(self):
