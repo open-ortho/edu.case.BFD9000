@@ -131,3 +131,6 @@ dmypy.json
 # Docker
 .docker/
 docker-compose.override.yml
+
+# Copilot Prompts
+.github/prompts/
