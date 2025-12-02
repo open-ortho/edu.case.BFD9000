@@ -1,10 +1,29 @@
 from rest_framework.views import exception_handler
+from rest_framework.response import Response
 from rest_framework import status
+import logging
+
+logger = logging.getLogger(__name__)
 
 def custom_exception_handler(exc, context):
     # Call REST framework's default exception handler first,
     # to get the standard error response.
     response = exception_handler(exc, context)
+
+    # If the exception handler returned None, it's not a DRF exception
+    # (e.g. a standard Python exception like KeyError, ValueError, etc.)
+    if response is None:
+        # Log the exception for debugging
+        logger.exception("Unhandled exception: %s", exc)
+        
+        # Return a generic error response
+        return Response({
+            "error": {
+                "code": "INTERNAL_SERVER_ERROR",
+                "message": "An unexpected error occurred",
+                "details": None
+            }
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     # If the exception handler returned a response, add the standard error format.
     if response is not None:

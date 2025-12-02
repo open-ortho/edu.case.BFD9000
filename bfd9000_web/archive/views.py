@@ -1,7 +1,9 @@
-from rest_framework import viewsets
+from rest_framework import viewsets, serializers
+from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from drf_spectacular.utils import extend_schema
 from drf_spectacular.types import OpenApiTypes
 from django.http import FileResponse, HttpResponse
@@ -27,6 +29,8 @@ class ValuesetViewSet(viewsets.ViewSet):
     """
     API endpoint that allows valuesets to be viewed.
     """
+    permission_classes = [IsAuthenticated]
+
     def list(self, request):
         valueset_type = request.query_params.get('type')
         if not valueset_type:
@@ -89,11 +93,12 @@ class SubjectViewSet(viewsets.ModelViewSet):
     serializer_class = SubjectSerializer
     filterset_fields = {
         'identifiers__value': ['exact', 'icontains'],
-        'humanname_family': ['exact', 'icontains'],
         'gender': ['exact'],
-        'birth_date': ['exact'],
+        'ethnicity__code': ['exact'],
+        'skeletal_pattern__code': ['exact'],
+        'palatal_cleft__code': ['exact'],
     }
-    search_fields = ['humanname_family', 'humanname_given', 'identifiers__value']
+    search_fields = ['identifiers__value']
 
 class EncounterViewSet(viewsets.ModelViewSet):
     queryset = Encounter.objects.all()
@@ -107,7 +112,7 @@ class EncounterViewSet(viewsets.ModelViewSet):
         if not subject:
             subject_pk = self.kwargs.get('subject_pk')
             if subject_pk:
-                subject = Subject.objects.get(pk=subject_pk)
+                subject = get_object_or_404(Subject, pk=subject_pk)
             else:
                 raise serializers.ValidationError({"subject": "This field is required."})
 
@@ -144,11 +149,8 @@ class RecordViewSet(viewsets.ModelViewSet):
             # If nested, get encounter
             encounter_pk = self.kwargs.get('encounter_pk')
             if encounter_pk:
-                try:
-                    encounter = Encounter.objects.get(pk=encounter_pk)
-                    context['encounter'] = encounter
-                except Encounter.DoesNotExist:
-                    raise NotFound("Encounter not found")
+                encounter = get_object_or_404(Encounter, pk=encounter_pk)
+                context['encounter'] = encounter
         return context
         
     def get_queryset(self):
@@ -192,7 +194,7 @@ class RecordViewSet(viewsets.ModelViewSet):
         source_file = record.imaging_study.source_file
         # Check if file exists
         if not os.path.exists(source_file.path):
-             return Response({"error": "File not found on server"}, status=404)
+            return Response({"error": "File not found on server"}, status=404)
 
         ext = os.path.splitext(source_file.name)[1].lower()
         

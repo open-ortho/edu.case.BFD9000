@@ -133,13 +133,18 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         write_only=True
     )
     
-    operator = serializers.CharField(required=False, write_only=True)
     acquisition_date = serializers.DateField(required=False, write_only=True)
-    notes = serializers.CharField(required=False, write_only=True)
+    
+    # Allow encounter to be passed in body (for flat endpoint) or context (for nested)
+    encounter = serializers.PrimaryKeyRelatedField(
+        queryset=Encounter.objects.all(),
+        required=False,
+        write_only=True
+    )
     
     class Meta:
         model = Record
-        fields = ['id', 'file', 'record_type', 'orientation', 'modality', 'operator', 'acquisition_date', 'notes']
+        fields = ['id', 'file', 'record_type', 'orientation', 'modality', 'acquisition_date', 'encounter']
 
     def to_representation(self, instance):
         return RecordSerializer(instance, context=self.context).data
@@ -151,21 +156,31 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         initial_pos = value.tell()
         value.seek(0)
         
-        if magic:
-            try:
-                mime = magic.from_buffer(value.read(2048), mime=True)
-            except Exception:
-                # Fallback if magic fails
-                mime = 'application/octet-stream'
-        else:
-            mime = 'application/octet-stream'
-            
-        value.seek(initial_pos)
-        
+        # Validate file extension
         ext = value.name.split('.')[-1].lower()
         if ext not in ['png', 'stl']:
             raise serializers.ValidationError("Only PNG and STL files are allowed")
         
+        # Validate MIME type if python-magic is available
+        if magic:
+            try:
+                mime = magic.from_buffer(value.read(2048), mime=True)
+                
+                # Validate MIME type matches extension
+                if ext == 'png' and mime != 'image/png':
+                    raise serializers.ValidationError(f"Invalid MIME type for PNG: {mime}")
+                if ext == 'stl' and mime not in ['application/octet-stream', 'model/stl', 'text/plain']:
+                    # STL can be binary (octet-stream/model/stl) or ASCII (text/plain)
+                    raise serializers.ValidationError(f"Invalid MIME type for STL: {mime}")
+                    
+            except Exception as e:
+                # If validation fails explicitly, re-raise
+                if isinstance(e, serializers.ValidationError):
+                    raise e
+                # Otherwise ignore magic errors and trust extension
+                pass
+            
+        value.seek(initial_pos)
         return value
 
     def create(self, validated_data):
@@ -176,11 +191,15 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         view_coding = validated_data.pop('orientation') # Maps to 'view'
         mod_coding = validated_data.pop('modality')     # Maps to 'series_modality'
         
-        operator_name = validated_data.pop('operator', None)
         acquisition_date = validated_data.pop('acquisition_date', datetime.date.today())
-        notes = validated_data.pop('notes', '')
         
-        encounter = self.context['encounter']
+        # Resolve encounter: check body first, then context
+        encounter = validated_data.pop('encounter', None)
+        if not encounter:
+            encounter = self.context.get('encounter')
+            
+        if not encounter:
+            raise serializers.ValidationError({"encounter": "This field is required (either in URL or body)."})
         
         # Try to get user from request
         request = self.context.get('request')
