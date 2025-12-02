@@ -134,3 +134,6 @@ docker-compose.override.yml
 
 # Copilot Prompts
 .github/prompts/
+
+# Media files
+bfd9000_web/media/
