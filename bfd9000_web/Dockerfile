@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install dependencies
 # We copy requirements first to leverage Docker cache
-COPY bfd9000_web/requirements.txt .
+COPY requirements.txt .
 RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r requirements.txt
 
 # Stage 2: Final
@@ -35,7 +35,7 @@ COPY --from=builder /app/requirements.txt .
 RUN pip install --no-cache /wheels/*
 
 # Copy project code
-COPY bfd9000_web/ .
+COPY . .
 
 # Collect static files
 RUN python manage.py collectstatic --noinput

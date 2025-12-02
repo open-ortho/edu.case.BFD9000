@@ -8,6 +8,8 @@ services:
     volumes:
       # Keep media files (uploads) persistent
       - media_volume:/app/media
+      # Mount local SQLite database for persistence
+      - ./db.sqlite3:/app/db.sqlite3
     ports:
       - "8000:8000"
     # environment:
