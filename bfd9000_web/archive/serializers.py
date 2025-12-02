@@ -1,4 +1,12 @@
+"""
+Serializers for the archive app.
+
+This module defines the serializers for converting complex data types (models)
+to and from native Python datatypes that can then be easily rendered into JSON, XML, or other content types.
+It includes specialized logic for file uploads and validation.
+"""
 import datetime
+from typing import Any, Dict, Optional
 try:
     import magic
 except ImportError:
@@ -14,21 +22,25 @@ from .constants import (
 )
 
 class CodingSerializer(serializers.ModelSerializer):
+    """Serializer for Coding model."""
     class Meta:
         model = Coding
         fields = '__all__'
 
 class IdentifierSerializer(serializers.ModelSerializer):
+    """Serializer for Identifier model."""
     class Meta:
         model = Identifier
         fields = '__all__'
 
 class AddressSerializer(serializers.ModelSerializer):
+    """Serializer for Address model."""
     class Meta:
         model = Address
         fields = '__all__'
 
 class LocationSerializer(serializers.ModelSerializer):
+    """Serializer for Location model."""
     address = AddressSerializer(read_only=True)
     
     class Meta:
@@ -36,6 +48,7 @@ class LocationSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class CollectionSerializer(serializers.ModelSerializer):
+    """Serializer for Collection model."""
     address = AddressSerializer(read_only=True)
     
     class Meta:
@@ -43,6 +56,7 @@ class CollectionSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class SubjectSerializer(serializers.ModelSerializer):
+    """Serializer for Subject model."""
     address = AddressSerializer(read_only=True)
     identifiers = IdentifierSerializer(many=True, read_only=True)
     ethnicity = CodingSerializer(read_only=True)
@@ -57,6 +71,7 @@ class SubjectSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class EncounterSerializer(serializers.ModelSerializer):
+    """Serializer for Encounter model."""
     diagnosis = CodingSerializer(read_only=True)
     procedure_code = serializers.PrimaryKeyRelatedField(queryset=Coding.objects.all())
     age_at_encounter = serializers.FloatField(required=False)
@@ -69,7 +84,8 @@ class EncounterSerializer(serializers.ModelSerializer):
             'procedure_occurrence_age': {'write_only': True}
         }
 
-    def to_representation(self, instance):
+    def to_representation(self, instance: Encounter) -> Dict[str, Any]:
+        """Convert instance to dictionary representation."""
         ret = super().to_representation(instance)
         if instance.procedure_occurrence_age:
             # Convert duration to years (approx)
@@ -79,19 +95,22 @@ class EncounterSerializer(serializers.ModelSerializer):
             ret['age_at_encounter'] = None
         return ret
 
-    def create(self, validated_data):
+    def create(self, validated_data: Dict[str, Any]) -> Encounter:
+        """Create a new Encounter instance."""
         age = validated_data.pop('age_at_encounter', None)
         if age is not None:
             validated_data['procedure_occurrence_age'] = datetime.timedelta(days=age * 365.25)
         return super().create(validated_data)
 
-    def update(self, instance, validated_data):
+    def update(self, instance: Encounter, validated_data: Dict[str, Any]) -> Encounter:
+        """Update an existing Encounter instance."""
         age = validated_data.pop('age_at_encounter', None)
         if age is not None:
             validated_data['procedure_occurrence_age'] = datetime.timedelta(days=age * 365.25)
         return super().update(instance, validated_data)
 
 class ImagingStudySerializer(serializers.ModelSerializer):
+    """Serializer for ImagingStudy model."""
     identifiers = IdentifierSerializer(many=True, read_only=True)
     record_type = CodingSerializer(read_only=True)
     view = CodingSerializer(read_only=True)
@@ -105,6 +124,7 @@ class ImagingStudySerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class RecordSerializer(serializers.ModelSerializer):
+    """Serializer for Record model."""
     identifiers = IdentifierSerializer(many=True, read_only=True)
     record_type = CodingSerializer(read_only=True)
     physical_location = AddressSerializer(read_only=True)
@@ -114,6 +134,12 @@ class RecordSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class RecordUploadSerializer(serializers.ModelSerializer):
+    """
+    Serializer for uploading records with files.
+    
+    Handles file validation, metadata extraction, and creation of related
+    ImagingStudy and Record objects within a transaction.
+    """
     file = serializers.FileField(write_only=True)
     
     # Use SlugRelatedField for idiomatic lookup by 'code'
@@ -146,10 +172,12 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         model = Record
         fields = ['id', 'file', 'record_type', 'orientation', 'modality', 'acquisition_date', 'encounter']
 
-    def to_representation(self, instance):
+    def to_representation(self, instance: Record) -> Dict[str, Any]:
+        """Use standard RecordSerializer for response."""
         return RecordSerializer(instance, context=self.context).data
 
-    def validate_file(self, value):
+    def validate_file(self, value: Any) -> Any:
+        """Validate uploaded file size, extension, and MIME type."""
         if value.size > 100 * 1024 * 1024:
             raise serializers.ValidationError("File too large (max 100MB)")
         
@@ -183,7 +211,12 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         value.seek(initial_pos)
         return value
 
-    def create(self, validated_data):
+    def create(self, validated_data: Dict[str, Any]) -> Record:
+        """
+        Create Record and associated ImagingStudy.
+        
+        Wraps creation in a transaction to ensure data integrity.
+        """
         file_obj = validated_data.pop('file')
         
         # These are now Coding objects, not strings!

@@ -1,13 +1,22 @@
+"""
+Views for the archive app.
+
+This module defines the ViewSets for the API, handling CRUD operations
+for subjects, encounters, records, and related medical entities.
+It also includes custom actions for file serving and valueset retrieval.
+"""
+from typing import Any, Dict, List, Optional, Type
 from rest_framework import viewsets, serializers
 from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
+from rest_framework.request import Request
 from rest_framework.exceptions import NotFound
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from drf_spectacular.utils import extend_schema
 from drf_spectacular.types import OpenApiTypes
 from django.http import FileResponse, HttpResponse
-from django.db.models import Count
+from django.db.models import Count, QuerySet
 import io
 import os
 from PIL import Image
@@ -28,15 +37,27 @@ from .constants import (
 class ValuesetViewSet(viewsets.ViewSet):
     """
     API endpoint that allows valuesets to be viewed.
+    
+    Provides a read-only interface for retrieving standard codes and options
+    used throughout the application (e.g., sex, modalities, orientations).
     """
     permission_classes = [IsAuthenticated]
 
-    def list(self, request):
+    def list(self, request: Request) -> Response:
+        """
+        List values for a specific valueset type.
+        
+        Args:
+            request: The HTTP request containing the 'type' query parameter.
+            
+        Returns:
+            Response: A list of dictionaries with 'id' and 'display' keys.
+        """
         valueset_type = request.query_params.get('type')
         if not valueset_type:
             return Response({"error": "Missing 'type' parameter"}, status=400)
         
-        data = []
+        data: List[Dict[str, Any]] = []
         
         if valueset_type == 'sex_options':
             data = [{'id': k, 'display': v} for k, v in Subject.GENDER_CHOICES]
@@ -63,29 +84,57 @@ class ValuesetViewSet(viewsets.ViewSet):
         return Response(data)
 
 class CodingViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Coding model.
+    
+    Handles standard medical codes (SNOMED, DICOM, etc.).
+    """
     queryset = Coding.objects.all()
     serializer_class = CodingSerializer
     filterset_fields = ['system', 'code']
 
 class IdentifierViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Identifier model.
+    
+    Handles identifiers associated with subjects and other entities.
+    """
     queryset = Identifier.objects.all()
     serializer_class = IdentifierSerializer
     filterset_fields = ['system', 'value', 'use']
 
 class AddressViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Address model.
+    """
     queryset = Address.objects.all()
     serializer_class = AddressSerializer
 
 class LocationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Location model.
+    
+    Represents physical locations where encounters or scans occur.
+    """
     queryset = Location.objects.all()
     serializer_class = LocationSerializer
 
 class CollectionViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Collection model.
+    
+    Manages collections of records (e.g., specific studies or datasets).
+    """
     queryset = Collection.objects.all()
     serializer_class = CollectionSerializer
     filterset_fields = ['short_name']
 
 class SubjectViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Subject model.
+    
+    Manages patient/subject information including demographics.
+    """
     queryset = Subject.objects.annotate(
         encounter_count=Count('encounters', distinct=True),
         record_count=Count('encounters__records', distinct=True)
@@ -101,11 +150,19 @@ class SubjectViewSet(viewsets.ModelViewSet):
     search_fields = ['identifiers__value']
 
 class EncounterViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Encounter model.
+    
+    Manages clinical encounters or visits.
+    """
     queryset = Encounter.objects.all()
     serializer_class = EncounterSerializer
     filterset_fields = ['subject', 'actual_period_start']
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: serializers.ModelSerializer) -> None:
+        """
+        Custom creation logic to handle subject association and age calculation.
+        """
         subject = serializer.validated_data.get('subject')
         
         # If not in body, check URL
@@ -129,21 +186,34 @@ class EncounterViewSet(viewsets.ModelViewSet):
         serializer.save(subject=subject)
 
 class ImagingStudyViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for ImagingStudy model.
+    
+    Manages the technical details of an imaging session.
+    """
     queryset = ImagingStudy.objects.all()
     serializer_class = ImagingStudySerializer
     filterset_fields = ['encounter', 'collection', 'scan_datetime']
 
 class RecordViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Record model.
+    
+    Manages the high-level record entries that link encounters to imaging studies.
+    Supports file uploads via a specialized serializer.
+    """
     queryset = Record.objects.all()
     serializer_class = RecordSerializer
     filterset_fields = ['encounter', 'collection']
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> Type[serializers.Serializer]:
+        """Return the appropriate serializer class based on the action."""
         if self.action == 'create':
             return RecordUploadSerializer
         return RecordSerializer
 
-    def get_serializer_context(self):
+    def get_serializer_context(self) -> Dict[str, Any]:
+        """Add extra context to the serializer."""
         context = super().get_serializer_context()
         if self.action == 'create':
             # If nested, get encounter
@@ -153,7 +223,8 @@ class RecordViewSet(viewsets.ModelViewSet):
                 context['encounter'] = encounter
         return context
         
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
+        """Filter queryset based on nested routes."""
         qs = super().get_queryset()
         # Filter by nested encounter if present
         encounter_pk = self.kwargs.get('encounter_pk')
@@ -173,7 +244,8 @@ class RecordViewSet(viewsets.ModelViewSet):
         }
     )
     @action(detail=True, methods=['get'])
-    def image(self, request, pk=None, **kwargs):
+    def image(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Response:
+        """Serve the raw image file associated with the record."""
         record = self.get_object()
         if not record.imaging_study or not record.imaging_study.source_file:
             return Response({"error": "No image file available"}, status=404)
@@ -186,7 +258,8 @@ class RecordViewSet(viewsets.ModelViewSet):
         }
     )
     @action(detail=True, methods=['get'])
-    def thumbnail(self, request, pk=None, **kwargs):
+    def thumbnail(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Response:
+        """Generate and serve a thumbnail for the record's image."""
         record = self.get_object()
         if not record.imaging_study or not record.imaging_study.source_file:
             return Response({"error": "No image file available"}, status=404)
@@ -226,6 +299,7 @@ class RecordViewSet(viewsets.ModelViewSet):
             return Response({"error": f"Error generating thumbnail: {e}"}, status=500)
 
     @action(detail=True, methods=['get'])
-    def dicom(self, request, pk=None, **kwargs):
+    def dicom(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Response:
+        """Serve the DICOM file (Not Implemented)."""
         # Not implemented yet
         return Response({"error": "DICOM download not implemented"}, status=404)

@@ -1,3 +1,11 @@
+"""
+Data models for the archive app.
+
+This module defines the database schema for the BFD9000 system, including
+core entities like Subject, Encounter, ImagingStudy, and Record, as well as
+supporting entities like Coding, Identifier, and Collection.
+"""
+from typing import Optional, List
 from django.db import models
 from django.conf import settings
 from django.core.exceptions import ValidationError

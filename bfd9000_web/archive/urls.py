@@ -1,3 +1,9 @@
+"""
+URL configuration for the archive app.
+
+This module defines the API routes using DRF routers, including nested routes
+for hierarchical resources (e.g., subjects -> encounters -> records).
+"""
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_nested import routers
