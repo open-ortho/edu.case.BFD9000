@@ -405,10 +405,8 @@
                 const encountersBtn = document.createElement("button");
                 encountersBtn.className = "btn btn-soft btn-xs";
                 encountersBtn.textContent = subject.encounters || 0;
-                encountersBtn.onclick = () => {
-                    // TODO: Navigate to encounters view filtered by subject
-                    console.log("Navigate to encounters for subject:", subject.id);
-                };
+                encountersBtn.onclick = () =>
+                    (window.location.href = `/encounters?search=${subject.id}`);
                 encounters.appendChild(encountersBtn);
 
                 // Records column with default button
@@ -416,10 +414,8 @@
                 const recordsBtn = document.createElement("button");
                 recordsBtn.className = "btn btn-soft btn-xs";
                 recordsBtn.textContent = subject.records || 0;
-                recordsBtn.onclick = () => {
-                    // TODO: Navigate to records view filtered by subject
-                    console.log("Navigate to records for subject:", subject.id);
-                };
+                recordsBtn.onclick = () =>
+                    (window.location.href = `/records?search=${subject.id}`);
                 records.appendChild(recordsBtn);
 
                 // Dental Classification column (no button)

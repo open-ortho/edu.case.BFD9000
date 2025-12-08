@@ -17,5 +17,15 @@ def subject_create(request):
 
 
 @login_required
+def encounters(request):
+    return render(request, "archive/encounters.html")
+
+
+@login_required
 def records(request):
     return render(request, "archive/records.html")
+
+
+@login_required
+def record_detail(request, record_id):
+    return render(request, "archive/record_detail.html", {"record_id": record_id})
