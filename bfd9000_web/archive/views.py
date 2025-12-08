@@ -12,5 +12,10 @@ def subjects(request):
 
 
 @login_required
+def subject_create(request):
+    return render(request, "archive/subject_create.html")
+
+
+@login_required
 def records(request):
     return render(request, "archive/records.html")
