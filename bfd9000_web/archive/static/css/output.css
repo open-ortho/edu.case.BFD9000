@@ -2712,6 +2712,9 @@
       color: color-mix(in oklab, var(--color-base-content) 50%, transparent);
     }
   }
+  .text-error {
+    color: var(--color-error);
+  }
   .prose {
     & :where(.btn-link):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
       text-decoration-line: none;
@@ -2760,11 +2763,66 @@
   .filter {
     filter: var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,);
   }
+  .btn-soft {
+    @layer daisyui.l1 {
+      &:not( .btn-active, :hover, :active:focus, :focus-visible, input:checked:not(.filter .btn), :disabled, [disabled], .btn-disabled ) {
+        --btn-shadow: "";
+        --btn-fg: var(--btn-color, var(--color-base-content));
+        --btn-bg: var(--btn-color, var(--color-base-content));
+        @supports (color: color-mix(in lab, red, red)) {
+          --btn-bg: color-mix(
+        in oklab,
+        var(--btn-color, var(--color-base-content)) 8%,
+        var(--color-base-100)
+      );
+        }
+        --btn-border: var(--btn-color, var(--color-base-content));
+        @supports (color: color-mix(in lab, red, red)) {
+          --btn-border: color-mix(
+        in oklab,
+        var(--btn-color, var(--color-base-content)) 10%,
+        var(--color-base-100)
+      );
+        }
+        --btn-noise: none;
+      }
+      @media (hover: none) {
+        &:not(.btn-active, :active, :focus-visible, input:checked:not(.filter .btn)):hover {
+          --btn-shadow: "";
+          --btn-fg: var(--btn-color, var(--color-base-content));
+          --btn-bg: var(--btn-color, var(--color-base-content));
+          @supports (color: color-mix(in lab, red, red)) {
+            --btn-bg: color-mix(
+          in oklab,
+          var(--btn-color, var(--color-base-content)) 8%,
+          var(--color-base-100)
+        );
+          }
+          --btn-border: var(--btn-color, var(--color-base-content));
+          @supports (color: color-mix(in lab, red, red)) {
+            --btn-border: color-mix(
+          in oklab,
+          var(--btn-color, var(--color-base-content)) 10%,
+          var(--color-base-100)
+        );
+          }
+          --btn-noise: none;
+        }
+      }
+    }
+  }
   .btn-sm {
     @layer daisyui.l1.l2 {
       --fontsize: 0.75rem;
       --btn-p: 0.75rem;
       --size: calc(var(--size-field, 0.25rem) * 8);
+    }
+  }
+  .btn-xs {
+    @layer daisyui.l1.l2 {
+      --fontsize: 0.6875rem;
+      --btn-p: 0.5rem;
+      --size: calc(var(--size-field, 0.25rem) * 6);
     }
   }
   .btn-primary {

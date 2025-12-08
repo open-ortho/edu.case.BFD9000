@@ -59,3 +59,373 @@
     </div>
 </div>
 {% endblock %}
+
+
+{% block head %}
+{{ block.super }}
+<script>
+/**
+ * PaginatedTableManager - A reusable class for managing paginated tables with search
+ *
+ * This class handles:
+ * - State management (pagination, search, custom query params)
+ * - URL synchronization with browser history
+ * - Data fetching and rendering
+ * - Search and pagination controls
+ *
+ * @example
+ * const tableManager = new PaginatedTableManager({
+ *   tableBodyId: 'subject_table_body',
+ *   fetchData: async (params) => {
+ *     const response = await fetch(`/api/subjects/?${new URLSearchParams(params)}`);
+ *     return await response.json();
+ *   },
+ *   renderRows: (subjects) => {
+ *     return subjects.map(subject => {
+ *       const row = document.createElement('tr');
+ *       row.innerHTML = `<td>${subject.id}</td><td>${subject.name}</td>`;
+ *       return row;
+ *     });
+ *   },
+ *   columnCount: 5
+ * });
+ *
+ * document.addEventListener('DOMContentLoaded', () => tableManager.init());
+ */
+class PaginatedTableManager {
+    /**
+     * @param {Object} config - Configuration object
+     * @param {string} config.tableBodyId - ID of the tbody element
+     * @param {Function} config.fetchData - Async function that fetches data. Should return { count, next, previous, results }
+     * @param {Function} config.renderRows - Function that takes an array of items and returns an array of TR elements
+     * @param {number} config.columnCount - Number of columns in the table (for empty/loading states)
+     * @param {string} [config.searchInputId='search-input'] - ID of the search input element
+     * @param {string} [config.searchButtonId='search-button'] - ID of the search button
+     * @param {string} [config.clearButtonId='clear-search-button'] - ID of the clear search button
+     * @param {string} [config.prevButtonId='prev-button'] - ID of the previous page button
+     * @param {string} [config.nextButtonId='next-button'] - ID of the next page button
+     * @param {string} [config.pageButtonId='page-button'] - ID of the page display button
+     * @param {number} [config.pageSize=20] - Number of items per page
+     * @param {Function} [config.getEmptyStateMessage] - Optional function that returns empty state message. Receives hasSearch boolean, returns string
+     * @param {Function} [config.renderEmptyState] - Optional custom empty state renderer (overrides getEmptyStateMessage)
+     * @param {Function} [config.renderLoadingState] - Optional custom loading state renderer
+     * @param {Array<string>} [config.queryParams=[]] - Additional query parameters to track in URL
+     * @param {Function} [config.onRowClick] - Optional callback when a row is clicked, receives the item data
+     */
+    constructor(config) {
+        // Required config
+        this.tableBodyId = config.tableBodyId;
+        this.fetchData = config.fetchData;
+        this.renderRows = config.renderRows;
+        this.columnCount = config.columnCount;
+
+        // Optional config with defaults
+        this.searchInputId = config.searchInputId || 'search-input';
+        this.searchButtonId = config.searchButtonId || 'search-button';
+        this.clearButtonId = config.clearButtonId || 'clear-search-button';
+        this.prevButtonId = config.prevButtonId || 'prev-button';
+        this.nextButtonId = config.nextButtonId || 'next-button';
+        this.pageButtonId = config.pageButtonId || 'page-button';
+        this.pageSize = config.pageSize || 20;
+        this.getEmptyStateMessage = config.getEmptyStateMessage || this._defaultGetEmptyStateMessage.bind(this);
+        this.renderEmptyState = config.renderEmptyState || this._defaultRenderEmptyState.bind(this);
+        this.renderLoadingState = config.renderLoadingState || this._defaultRenderLoadingState.bind(this);
+        this.queryParams = config.queryParams || [];
+        this.onRowClick = config.onRowClick || null;
+
+        // State
+        this.currentPage = 1;
+        this.currentSearch = '';
+        this.totalPages = 0;
+        this.isLoading = false;
+        this.customParams = {};
+    }
+
+    /**
+     * Initialize the table manager - call this in DOMContentLoaded
+     */
+    init() {
+        // Get elements
+        this.tableBody = document.getElementById(this.tableBodyId);
+        this.searchInput = document.getElementById(this.searchInputId);
+        this.searchButton = document.getElementById(this.searchButtonId);
+        this.clearButton = document.getElementById(this.clearButtonId);
+        this.prevButton = document.getElementById(this.prevButtonId);
+        this.nextButton = document.getElementById(this.nextButtonId);
+        this.pageButton = document.getElementById(this.pageButtonId);
+
+        // Initialize state from URL
+        const urlState = this._getStateFromURL();
+        this.currentSearch = urlState.search;
+        this.currentPage = urlState.page;
+        this.customParams = urlState.customParams;
+
+        // Populate search input with URL parameter
+        if (this.searchInput) {
+            this.searchInput.value = this.currentSearch;
+        }
+
+        // Attach event listeners
+        if (this.searchButton) {
+            this.searchButton.addEventListener('click', () => this.handleSearch());
+        }
+        if (this.clearButton) {
+            this.clearButton.addEventListener('click', () => this.handleClearSearch());
+        }
+        if (this.prevButton) {
+            this.prevButton.addEventListener('click', () => this.handlePrevPage());
+        }
+        if (this.nextButton) {
+            this.nextButton.addEventListener('click', () => this.handleNextPage());
+        }
+
+        // Handle Enter key in search input
+        if (this.searchInput) {
+            this.searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.handleSearch();
+                }
+            });
+        }
+
+        // Handle browser back/forward buttons
+        window.addEventListener('popstate', () => {
+            const urlState = this._getStateFromURL();
+            this.currentSearch = urlState.search;
+            this.currentPage = urlState.page;
+            this.customParams = urlState.customParams;
+            if (this.searchInput) {
+                this.searchInput.value = this.currentSearch;
+            }
+            this.loadData();
+        });
+
+        // Load initial data
+        this.loadData();
+    }
+
+    /**
+     * Load data from the API and render it
+     */
+    async loadData() {
+        if (this.isLoading) return;
+
+        this.isLoading = true;
+        this.renderLoadingState();
+
+        try {
+            const params = {
+                search: this.currentSearch,
+                page: this.currentPage,
+                page_size: this.pageSize,
+                ...this.customParams
+            };
+
+            const response = await this.fetchData(params);
+
+            this._renderData(response.results);
+            this._updatePagination(response.count, this.currentPage);
+        } catch (error) {
+            console.error('Failed to load data:', error);
+            this._renderError(error);
+        } finally {
+            this.isLoading = false;
+        }
+    }
+
+    /**
+     * Handle search button click
+     */
+    handleSearch() {
+        if (this.searchInput) {
+            this.currentSearch = this.searchInput.value.trim();
+        }
+        this.currentPage = 1;
+        this._updateURL();
+        this.loadData();
+    }
+
+    /**
+     * Handle clear search button click
+     */
+    handleClearSearch() {
+        if (this.searchInput) {
+            this.searchInput.value = '';
+        }
+        this.currentSearch = '';
+        this.currentPage = 1;
+        this._updateURL();
+        this.loadData();
+    }
+
+    /**
+     * Handle previous page button click
+     */
+    handlePrevPage() {
+        if (this.currentPage > 1) {
+            this.currentPage--;
+            this._updateURL();
+            this.loadData();
+        }
+    }
+
+    /**
+     * Handle next page button click
+     */
+    handleNextPage() {
+        if (this.currentPage < this.totalPages) {
+            this.currentPage++;
+            this._updateURL();
+            this.loadData();
+        }
+    }
+
+    /**
+     * Set a custom query parameter
+     * @param {string} key - Parameter name
+     * @param {*} value - Parameter value
+     */
+    setQueryParam(key, value) {
+        this.customParams[key] = value;
+        this.currentPage = 1;
+        this._updateURL();
+        this.loadData();
+    }
+
+    /**
+     * Get a custom query parameter
+     * @param {string} key - Parameter name
+     * @returns {*} Parameter value
+     */
+    getQueryParam(key) {
+        return this.customParams[key];
+    }
+
+    // Private methods
+
+    _getStateFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        const state = {
+            search: params.get('search') || '',
+            page: parseInt(params.get('page')) || 1,
+            customParams: {}
+        };
+
+        // Extract custom parameters
+        for (const param of this.queryParams) {
+            const value = params.get(param);
+            if (value !== null) {
+                state.customParams[param] = value;
+            }
+        }
+
+        return state;
+    }
+
+    _updateURL() {
+        const params = new URLSearchParams();
+
+        if (this.currentSearch) {
+            params.set('search', this.currentSearch);
+        }
+        if (this.currentPage > 1) {
+            params.set('page', this.currentPage.toString());
+        }
+
+        // Add custom parameters
+        for (const [key, value] of Object.entries(this.customParams)) {
+            if (value !== null && value !== undefined && value !== '') {
+                params.set(key, value.toString());
+            }
+        }
+
+        const newURL = params.toString()
+            ? `${window.location.pathname}?${params.toString()}`
+            : window.location.pathname;
+
+        window.history.pushState({
+            search: this.currentSearch,
+            page: this.currentPage,
+            customParams: this.customParams
+        }, '', newURL);
+    }
+
+    _renderData(items) {
+        if (items.length === 0) {
+            this.renderEmptyState(!!this.currentSearch);
+            return;
+        }
+
+        const rows = this.renderRows(items);
+
+        // Add click handlers if onRowClick is provided
+        if (this.onRowClick) {
+            rows.forEach((row, index) => {
+                row.classList.add('hover', 'cursor-pointer');
+                row.onclick = () => this.onRowClick(items[index]);
+            });
+        }
+
+        this.tableBody.replaceChildren(...rows);
+    }
+
+    _updatePagination(count, page) {
+        this.totalPages = Math.ceil(count / this.pageSize);
+
+        if (this.pageButton) {
+            this.pageButton.textContent = `Page ${page} / ${this.totalPages || 1}`;
+        }
+        if (this.prevButton) {
+            this.prevButton.disabled = page <= 1;
+        }
+        if (this.nextButton) {
+            this.nextButton.disabled = page >= this.totalPages;
+        }
+    }
+
+    _defaultGetEmptyStateMessage(hasSearch) {
+        return hasSearch
+            ? 'No items found matching your search'
+            : 'No items found';
+    }
+
+    _defaultRenderEmptyState(hasSearch) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = this.columnCount;
+        cell.className = 'text-center text-base-content/50 py-8';
+        cell.textContent = this.getEmptyStateMessage(hasSearch);
+        row.appendChild(cell);
+        this.tableBody.replaceChildren(row);
+    }
+
+    _defaultRenderLoadingState() {
+        const skeletonRows = Array.from({ length: 4 }, () => {
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = this.columnCount;
+            cell.innerHTML = `
+                <div class="flex w-full gap-4">
+                    <div class="skeleton h-[1lh] w-1/3"></div>
+                    <div class="skeleton h-[1lh] grow"></div>
+                    <div class="skeleton h-[1lh] w-1/2"></div>
+                </div>
+            `;
+            row.appendChild(cell);
+            return row;
+        });
+        this.tableBody.replaceChildren(...skeletonRows);
+    }
+
+    _renderError(error) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = this.columnCount;
+        cell.className = 'text-center text-error py-8';
+        cell.textContent = `Error loading data: ${error.message}`;
+        row.appendChild(cell);
+        this.tableBody.replaceChildren(row);
+    }
+}
+</script>
+{% endblock %}
