@@ -1,7 +1,19 @@
 {% extends 'archive/base_index.html' %}
 
 {% block content %}
-<div class="flex-[1_1_0] flex flex-col overflow-x-auto">
+<div class="flex-[1_1_0] flex flex-col overflow-auto">
+    <div class="bg-base-200 p-3 border-b border-base-300">
+        <div class="flex gap-2 items-center">
+            <input
+                type="text"
+                id="search-input"
+                placeholder="Search subjects by identifier..."
+                class="input input-bordered input-sm flex-1 max-w-md"
+            />
+            <button id="search-button" class="btn btn-sm btn-primary">Search</button>
+            <button id="clear-search-button" class="btn btn-sm btn-ghost">Clear</button>
+        </div>
+    </div>
     <div class="min-w-0 flex-[1_1_0] overflow-y-auto">
         <table class="table table-xs md:table-sm lg:table-md table-pin-rows table-zebra">
             <!-- head -->
@@ -41,48 +53,315 @@
 </div>
 {% endblock %}
 
-{%block head %}
+{% block head %}
     <script>
-        let loaded = false;
+        // ========================================
+        // DATA LAYER - Replace this section when connecting to real API
+        // ========================================
 
-        // dummy data instead of a fetch
-        let subjects = [
-            { id: "B0001", encounters: 2, records: 3, dental_classification: "ABC", collection: "Collection A" },
-            { id: "B0002", encounters: 3, records: 4, dental_classification: "DEF", collection: "Collection B" },
-            { id: "B0003", encounters: 4, records: 5, dental_classification: "GHI", collection: "Collection C" },
-            { id: "B0001", encounters: 2, records: 3, dental_classification: "ABC", collection: "Collection A" },
-            { id: "B0002", encounters: 3, records: 4, dental_classification: "DEF", collection: "Collection B" },
-        ]
-        let tableBody;
-        const page_size = 20;
+        // Dummy data for development
+        const DUMMY_SUBJECTS = [
+            { id: "B1234", encounters: 5, records: 7, dental_classification: "XYZ", collection: "Collection B" },
+            { id: "B5678", encounters: 2, records: 3, dental_classification: "DEF", collection: "Collection A" },
+            { id: "B9101", encounters: 4, records: 6, dental_classification: "ABC", collection: "Collection C" },
+            { id: "B1123", encounters: 3, records: 5, dental_classification: "GHI", collection: "Collection B" },
+            { id: "B1415", encounters: 1, records: 2, dental_classification: "JKL", collection: "Collection A" },
+            { id: "B1617", encounters: 6, records: 8, dental_classification: "MNO", collection: "Collection C" },
+            { id: "B1819", encounters: 2, records: 4, dental_classification: "PQR", collection: "Collection B" },
+            { id: "B2021", encounters: 3, records: 5, dental_classification: "STU", collection: "Collection A" },
+            { id: "B2223", encounters: 4, records: 7, dental_classification: "VWX", collection: "Collection C" },
+            { id: "B2425", encounters: 1, records: 3, dental_classification: "YZA", collection: "Collection B" },
+            { id: "B2627", encounters: 5, records: 6, dental_classification: "BCD", collection: "Collection A" },
+            { id: "B2829", encounters: 2, records: 4, dental_classification: "EFG", collection: "Collection C" },
+            { id: "B3031", encounters: 3, records: 5, dental_classification: "HIJ", collection: "Collection B" },
+            { id: "B3233", encounters: 4, records: 6, dental_classification: "KLM", collection: "Collection A" },
+            { id: "B3435", encounters: 1, records: 2, dental_classification: "NOP", collection: "Collection C" },
+            { id: "B3637", encounters: 6, records: 8, dental_classification: "QRS", collection: "Collection B" },
+            { id: "B3839", encounters: 2, records: 3, dental_classification: "TUV", collection: "Collection A" },
+            { id: "B4041", encounters: 3, records: 5, dental_classification: "WXY", collection: "Collection C" },
+            { id: "B4243", encounters: 4, records: 7, dental_classification: "ZAB", collection: "Collection B" },
+            { id: "B4445", encounters: 1, records: 3, dental_classification: "CDE", collection: "Collection A" },
+            { id: "B4647", encounters: 5, records: 6, dental_classification: "FGH", collection: "Collection C" },
+            { id: "B4849", encounters: 2, records: 4, dental_classification: "IJK", collection: "Collection B" },
+            { id: "B5051", encounters: 3, records: 5, dental_classification: "LMN", collection: "Collection A" },
+            { id: "B5253", encounters: 4, records: 6, dental_classification: "OPQ", collection: "Collection C" },
+            { id: "B5455", encounters: 1, records: 2, dental_classification: "RST", collection: "Collection B" },
+            { id: "B5657", encounters: 6, records: 8, dental_classification: "UVW", collection: "Collection A" },
+            { id: "B5859", encounters: 2, records: 3, dental_classification: "XYZ", collection: "Collection C" },
+            { id: "B6061", encounters: 3, records: 5, dental_classification: "ABC", collection: "Collection B" },
+            { id: "B6263", encounters: 4, records: 7, dental_classification: "DEF", collection: "Collection A" },
+            { id: "B6465", encounters: 1, records: 3, dental_classification: "GHI", collection: "Collection C" },
+            { id: "B6667", encounters: 5, records: 6, dental_classification: "JKL", collection: "Collection B" },
+            { id: "B6869", encounters: 2, records: 4, dental_classification: "MNO", collection: "Collection A" },
+            { id: "B7071", encounters: 3, records: 5, dental_classification: "PQR", collection: "Collection C" },
+            { id: "B7273", encounters: 4, records: 6, dental_classification: "STU", collection: "Collection B" },
+            { id: "B7475", encounters: 1, records: 2, dental_classification: "VWX", collection: "Collection A" },
+            { id: "B7677", encounters: 6, records: 8, dental_classification: "YZA", collection: "Collection C" },
+        ];
 
-        function populate() {
-            if (!loaded) return;
+        /**
+         * Fetch subjects from the API
+         * @param {Object} params - Query parameters
+         * @param {string} params.search - Search query for subject identifier
+         * @param {number} params.page - Page number (1-indexed)
+         * @param {number} params.page_size - Number of items per page
+         * @returns {Promise<Object>} Response with { count, next, previous, results }
+         *
+         * TO SWITCH TO REAL API:
+         * Replace the body of this function with:
+         * const params = new URLSearchParams({ search, page, page_size });
+         * const response = await fetch(`/api/subjects/?${params}`);
+         * return await response.json();
+         */
+        async function fetchSubjects({ search = '', page = 1, page_size = 20 } = {}) {
+            // Simulate API delay
+            await new Promise(resolve => setTimeout(resolve, 300));
 
-            // populate table with subjects
-            const rows = subjects.map(subject => {
-                const row = document.createElement('tr');
+            // Filter subjects based on search query
+            let filtered = DUMMY_SUBJECTS;
+            if (search) {
+                const searchLower = search.toLowerCase();
+                filtered = DUMMY_SUBJECTS.filter(s =>
+                    s.id.toLowerCase().includes(searchLower)
+                );
+            }
 
-                const id = document.createElement('td');
-                id.textContent = subject.id;
-                const encounters = document.createElement('td');
-                encounters.textContent = subject.encounters;
-                const records = document.createElement('td');
-                records.textContent = subject.records;
-                const dentalClassification = document.createElement('td');
-                dentalClassification.textContent = subject.dental_classification;
-                const collection = document.createElement('td');
-                collection.textContent = subject.collection;
+            // Paginate results
+            const start = (page - 1) * page_size;
+            const end = start + page_size;
+            const results = filtered.slice(start, end);
 
-                row.replaceChildren(id, encounters, records, dentalClassification, collection);
-                return row;
-            });
-            subject_table_body.replaceChildren(...rows);
+            return {
+                count: filtered.length,
+                next: end < filtered.length ? page + 1 : null,
+                previous: page > 1 ? page - 1 : null,
+                results: results
+            };
         }
 
+        // ========================================
+        // APPLICATION STATE
+        // ========================================
+
+        let currentPage = 1;
+        let currentSearch = '';
+        const pageSize = 20;
+        let totalPages = 0;
+        let isLoading = false;
+
+        /**
+         * Get current state from URL query parameters
+         */
+        function getStateFromURL() {
+            const params = new URLSearchParams(window.location.search);
+            return {
+                search: params.get('search') || '',
+                page: parseInt(params.get('page')) || 1
+            };
+        }
+
+        /**
+         * Update URL with current state using History API
+         */
+        function updateURL() {
+            const params = new URLSearchParams();
+            if (currentSearch) {
+                params.set('search', currentSearch);
+            }
+            if (currentPage > 1) {
+                params.set('page', currentPage.toString());
+            }
+
+            const newURL = params.toString()
+                ? `${window.location.pathname}?${params.toString()}`
+                : window.location.pathname;
+
+            window.history.pushState({ search: currentSearch, page: currentPage }, '', newURL);
+        }
+
+        // ========================================
+        // UI RENDERING
+        // ========================================
+
+        function renderSubjects(subjects) {
+            const tableBody = document.getElementById('subject_table_body');
+
+            if (subjects.length === 0) {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 5;
+                cell.className = 'text-center text-base-content/50 py-8';
+                cell.textContent = currentSearch
+                    ? 'No subjects found matching your search'
+                    : 'No subjects found';
+                row.appendChild(cell);
+                tableBody.replaceChildren(row);
+                return;
+            }
+
+            const rows = subjects.map(subject => {
+                const row = document.createElement('tr');
+                row.className = 'hover cursor-pointer';
+                row.onclick = () => {
+                    // TODO: Navigate to subject detail page
+                    console.log('Navigate to subject:', subject.id);
+                };
+
+                const identifier = document.createElement('td');
+                identifier.textContent = subject.id;
+
+                const encounters = document.createElement('td');
+                encounters.textContent = subject.encounters || 0;
+
+                const records = document.createElement('td');
+                records.textContent = subject.records || 0;
+
+                const dentalClassification = document.createElement('td');
+                dentalClassification.textContent = subject.dental_classification || '-';
+
+                const collection = document.createElement('td');
+                collection.textContent = subject.collection || '-';
+
+                row.replaceChildren(identifier, encounters, records, dentalClassification, collection);
+                return row;
+            });
+
+            tableBody.replaceChildren(...rows);
+        }
+
+        function renderLoadingState() {
+            const tableBody = document.getElementById('subject_table_body');
+            const skeletonRows = Array.from({ length: 4 }, () => {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 5;
+                cell.innerHTML = `
+                    <div class="flex w-full gap-4">
+                        <div class="skeleton h-[1lh] w-1/3"></div>
+                        <div class="skeleton h-[1lh] grow"></div>
+                        <div class="skeleton h-[1lh] w-1/2"></div>
+                    </div>
+                `;
+                row.appendChild(cell);
+                return row;
+            });
+            tableBody.replaceChildren(...skeletonRows);
+        }
+
+        function updatePagination(count, page) {
+            totalPages = Math.ceil(count / pageSize);
+
+            const pageButton = document.getElementById('page-button');
+            const prevButton = document.getElementById('prev-button');
+            const nextButton = document.getElementById('next-button');
+
+            pageButton.textContent = `Page ${page} / ${totalPages || 1}`;
+            prevButton.disabled = page <= 1;
+            nextButton.disabled = page >= totalPages;
+        }
+
+        // ========================================
+        // DATA LOADING
+        // ========================================
+
+        async function loadSubjects() {
+            if (isLoading) return;
+
+            isLoading = true;
+            renderLoadingState();
+
+            try {
+                const response = await fetchSubjects({
+                    search: currentSearch,
+                    page: currentPage,
+                    page_size: pageSize
+                });
+
+                renderSubjects(response.results);
+                updatePagination(response.count, currentPage);
+            } catch (error) {
+                console.error('Failed to load subjects:', error);
+                // TODO: Show error message to user
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        // ========================================
+        // EVENT HANDLERS
+        // ========================================
+
+        function handleSearch() {
+            const searchInput = document.getElementById('search-input');
+            currentSearch = searchInput.value.trim();
+            currentPage = 1;
+            updateURL();
+            loadSubjects();
+        }
+
+        function handleClearSearch() {
+            const searchInput = document.getElementById('search-input');
+            searchInput.value = '';
+            currentSearch = '';
+            currentPage = 1;
+            updateURL();
+            loadSubjects();
+        }
+
+        function handlePrevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                updateURL();
+                loadSubjects();
+            }
+        }
+
+        function handleNextPage() {
+            if (currentPage < totalPages) {
+                currentPage++;
+                updateURL();
+                loadSubjects();
+            }
+        }
+
+        // ========================================
+        // INITIALIZATION
+        // ========================================
+
         document.addEventListener('DOMContentLoaded', () => {
-            loaded = true;
-            populate();
+            // Initialize state from URL
+            const urlState = getStateFromURL();
+            currentSearch = urlState.search;
+            currentPage = urlState.page;
+
+            // Populate search input with URL parameter
+            const searchInput = document.getElementById('search-input');
+            searchInput.value = currentSearch;
+
+            // Attach event listeners
+            document.getElementById('search-button').addEventListener('click', handleSearch);
+            document.getElementById('clear-search-button').addEventListener('click', handleClearSearch);
+            document.getElementById('prev-button').addEventListener('click', handlePrevPage);
+            document.getElementById('next-button').addEventListener('click', handleNextPage);
+
+            // Handle Enter key in search input
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    handleSearch();
+                }
+            });
+
+            // Handle browser back/forward buttons
+            window.addEventListener('popstate', (event) => {
+                const urlState = getStateFromURL();
+                currentSearch = urlState.search;
+                currentPage = urlState.page;
+                searchInput.value = currentSearch;
+                loadSubjects();
+            });
+
+            // Load initial data
+            loadSubjects();
         });
     </script>
 {% endblock %}
