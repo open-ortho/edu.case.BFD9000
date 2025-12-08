@@ -9,3 +9,8 @@ def index(request):
 @login_required
 def subjects(request):
     return render(request, "archive/subjects.html")
+
+
+@login_required
+def records(request):
+    return render(request, "archive/records.html")

@@ -47,42 +47,33 @@
       <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
     </form>
     <h2 class="!mt-0">New Subject</h2>
-    <fieldset class="fieldset">
-        <input
-            type="text"
-            id="subject_humanname_given"
-            class="input"
-            placeholder="Given Name"
-            required>
-        <input
-            type="text"
-            id="subject_humanname_family"
-            class="input"
-            placeholder="Family Name"
-            required>
-        <select id="subject_sex" class="select" required>
-            <option disabled>Select Sex</option>
-            <option value="M">Male</option>
-            <option value="F">Female</option>
-            <option value="O">Other</option>
-        </select>
-        <select id="subject_dental_classification" class="select" required>
-            <option disabled>Select Dental Classification</option>
-            <option value="ABC">ABC</option>
-            <option value="DEF">DEF</option>
-            <option value="GHI">GHI</option>
-        </select>
-        <button type="submit" class="btn btn-primary">Create</button>
-    </fieldset>
-  </div>
-</dialog>
-
-<dialog id="subject_modal" class="modal">
-  <div class="modal-box prose prose-sm">
-    <form method="dialog">
-      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
-    </form>
-    <h2 class="!mt-0">New Subject</h2>
+        <fieldset class="fieldset">
+            <input
+                type="text"
+                id="subject_humanname_given"
+                class="input"
+                placeholder="Given Name"
+                required>
+            <input
+                type="text"
+                id="subject_humanname_family"
+                class="input"
+                placeholder="Family Name"
+                required>
+            <select id="subject_sex" class="select" required>
+                <option disabled>Select Sex</option>
+                <option value="M">Male</option>
+                <option value="F">Female</option>
+                <option value="O">Other</option>
+            </select>
+            <select id="subject_dental_classification" class="select" required>
+                <option disabled>Select Dental Classification</option>
+                <option value="ABC">ABC</option>
+                <option value="DEF">DEF</option>
+                <option value="GHI">GHI</option>
+            </select>
+            <button type="submit" class="btn btn-primary">Create</button>
+        </fieldset>
   </div>
 </dialog>
 {% endblock %}
