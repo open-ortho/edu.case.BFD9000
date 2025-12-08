@@ -6,6 +6,7 @@ from django.shortcuts import render
 def index(request):
     return render(request, "archive/index.html")
 
+
 @login_required
 def subjects(request):
     return render(request, "archive/subjects.html")
@@ -19,6 +20,11 @@ def subject_create(request):
 @login_required
 def encounters(request):
     return render(request, "archive/encounters.html")
+
+
+@login_required
+def encounter_create(request):
+    return render(request, "archive/encounter_create.html")
 
 
 @login_required
