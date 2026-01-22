@@ -182,10 +182,8 @@
                 const subjectBtn = document.createElement("button");
                 subjectBtn.className = "btn btn-soft btn-xs";
                 subjectBtn.textContent = encounter.subject_id;
-                subjectBtn.onclick = () => {
-                    // TODO: Navigate to subject detail page
-                    console.log("Navigate to subject:", encounter.subject_id);
-                };
+                subjectBtn.onclick = () =>
+                    (window.location.href = `/encounters?search=${encounter.subject_id}`);
                 subject.appendChild(subjectBtn);
 
                 // Records column with default button
