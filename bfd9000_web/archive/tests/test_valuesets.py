@@ -1,11 +1,11 @@
 from django.urls import reverse
-from rest_framework.test import APITestCase
 from rest_framework import status
 from django.contrib.auth.models import User
 from archive.models import Collection, Coding
 from archive.constants import SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE
+from .base import CleanupAPITestCase
 
-class ValuesetTests(APITestCase):
+class ValuesetTests(CleanupAPITestCase):
     def setUp(self):
         # Create user for authentication
         self.user = User.objects.create_user(username='testuser', password='testpassword')

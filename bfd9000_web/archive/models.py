@@ -6,9 +6,44 @@ core entities like Subject, Encounter, ImagingStudy, and Record, as well as
 supporting entities like Coding, Identifier, and Collection.
 """
 from typing import Optional, List
+import os
+from datetime import datetime
 from django.db import models
 from django.conf import settings
 from django.core.exceptions import ValidationError
+
+
+def imaging_study_upload_path(instance, filename: str) -> str:
+    """
+    Generate a structured upload path for imaging study files.
+
+    Format: uploads/subject_{id}/encounter_{id}/YYYYMMDD_HHMMSS_{record_type}.{ext}
+
+    Args:
+        instance: ImagingStudy instance
+        filename: Original filename
+
+    Returns:
+        Structured path string
+    """
+    # Get file extension
+    ext = os.path.splitext(filename)[1].lower()
+
+    # Get subject ID from encounter
+    subject_id = instance.encounter.subject.id if instance.encounter else 'unknown'
+    encounter_id = instance.encounter.id if instance.encounter else 'unknown'
+
+    # Generate timestamp
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    # Get record type code if available
+    record_type = instance.record_type.code if instance.record_type else 'unknown'
+
+    # Construct filename: timestamp_recordtype.ext
+    new_filename = f"{timestamp}_{record_type}{ext}"
+
+    # Construct path: uploads/subject_{id}/encounter_{id}/filename
+    return os.path.join('uploads', f'subject_{subject_id}', f'encounter_{encounter_id}', new_filename)
 
 
 class TimestampedModel(models.Model):
@@ -292,7 +327,7 @@ class ImagingStudy(TimestampedModel):
     scan_datetime = models.DateTimeField(null=True, blank=True)
     device = models.CharField(max_length=255, blank=True)
     endpoint = models.URLField(max_length=500, blank=True, help_text="URL endpoint for imaging data")
-    source_file = models.FileField(upload_to='uploads/%Y/%m/%d/', null=True, blank=True, help_text="Original uploaded file (PNG/STL)")
+    source_file = models.FileField(upload_to=imaging_study_upload_path, null=True, blank=True, help_text="Original uploaded file (PNG/STL)")
     body_site = models.ForeignKey(
         Coding,
         on_delete=models.SET_NULL,

@@ -48,6 +48,8 @@ Useful test options:
 - `--keepdb` - Keep test database between runs (faster)
 - `--parallel` - Run tests in parallel
 
+**Note**: Tests automatically clean up uploaded media files. Test images are stored in a temporary directory that is deleted after tests complete, so they won't clutter your `media/uploads/` directory.
+
 ## Additional Information
 
 - The application settings can be found in `bfd9000/settings.py`.

@@ -1,13 +1,13 @@
 from django.urls import reverse
-from rest_framework.test import APITestCase
 from rest_framework import status
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth.models import User, Permission
 from django.contrib.contenttypes.models import ContentType
 from archive.models import Subject, Encounter, Record, Coding, Collection
 from archive.constants import SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE
+from .base import CleanupAPITestCase
 
-class RecordTests(APITestCase):
+class RecordTests(CleanupAPITestCase):
     def setUp(self):
         # Create user for authentication
         self.user = User.objects.create_user(username='testuser', password='testpassword')
