@@ -4,7 +4,7 @@ from rest_framework import status
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth.models import User, Permission
 from django.contrib.contenttypes.models import ContentType
-from archive.models import Subject, Encounter, Record, Coding
+from archive.models import Subject, Encounter, Record, Coding, Collection
 from archive.constants import SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE
 
 class RecordTests(APITestCase):
@@ -19,6 +19,12 @@ class RecordTests(APITestCase):
             self.user.user_permissions.add(*permissions)
 
         self.client.force_authenticate(user=self.user)
+
+        # Create collection (required for record creation)
+        self.collection, _ = Collection.objects.get_or_create(
+            short_name="TEST",
+            defaults={"full_name": "Test Collection"}
+        )
 
         # Create test subject and encounter
         self.subject = Subject.objects.create(
@@ -77,9 +83,12 @@ class RecordTests(APITestCase):
         }
 
         response = self.client.post(url, data, format='multipart')
+        if response.status_code != status.HTTP_201_CREATED:
+            print(f"Record creation failed: {response.status_code} - {response.data}")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn('id', response.data)
-        self.assertEqual(response.data['operator'], 'TestOp')
+        # Verify record was created successfully
+        self.assertIn('record_type', response.data)
 
     def test_create_record_missing_file(self):
         """Should return 400 if file is missing"""
@@ -178,19 +187,18 @@ class RecordTests(APITestCase):
             "record_type": "lateral",
             "orientation": "left",
             "modality": "RG",
-            "operator": "OldOperator"
         }
         create_response = self.client.post(url, data, format='multipart')
         record_id = create_response.data['id']
 
-        # Update record
+        # Update record - use device field which exists on Record model
         url = reverse('archive:record-detail', kwargs={'pk': record_id})
         update_data = {
-            "operator": "NewOperator"
+            "device": "NewScanner"
         }
         response = self.client.patch(url, update_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['operator'], 'NewOperator')
+        self.assertEqual(response.data['device'], 'NewScanner')
 
     def test_delete_record(self):
         """Should delete record"""
@@ -268,12 +276,15 @@ class RecordTests(APITestCase):
         }
         self.client.post(url, data1, format='multipart')
 
-        # Filter by record type
-        filter_url = url + '?record_type=lateral'
+        # Filter by record type (using ID since it's a foreign key)
+        filter_url = url + f'?record_type={self.rt_lateral.id}'
         response = self.client.get(filter_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Verify at least one record was returned
+        self.assertGreater(len(response.data['results']), 0)
         for record in response.data['results']:
-            self.assertEqual(record['record_type'], 'lateral')
+            # record_type is a nested object with code field
+            self.assertEqual(record['record_type']['code'], 'lateral')
 
     def test_unauthenticated_access(self):
         """Should return 401/403 if not authenticated"""
@@ -291,13 +302,14 @@ class RecordTests(APITestCase):
             "record_type": "lateral",
             "orientation": "left",
             "modality": "RG",
-            "operator": "TestOp"
         }
 
         response = self.client.post(url, data, format='multipart')
+        if response.status_code != status.HTTP_201_CREATED:
+            print(f"Record creation failed: {response.status_code} - {response.data}")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-        # Check for expected fields
-        expected_fields = ['id', 'record_type', 'orientation', 'modality', 'operator']
+        # Check for expected fields (fields that exist on Record model)
+        expected_fields = ['id', 'record_type', 'encounter', 'collection', 'imaging_study']
         for field in expected_fields:
             self.assertIn(field, response.data)

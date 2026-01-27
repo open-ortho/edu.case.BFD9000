@@ -151,7 +151,7 @@ class SubjectViewSet(viewsets.ModelViewSet):
         'skeletal_pattern__code': ['exact'],
         'palatal_cleft__code': ['exact'],
     }
-    search_fields = ['identifiers__value']
+    search_fields = ['identifiers__value', 'humanname_family', 'humanname_given']
 
 class EncounterViewSet(viewsets.ModelViewSet):
     """

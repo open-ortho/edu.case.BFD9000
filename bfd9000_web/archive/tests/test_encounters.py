@@ -187,8 +187,11 @@ class EncounterTests(APITestCase):
         # Create multiple encounters via API
         url = reverse('archive:subject-encounters-list', kwargs={'subject_pk': self.subject.id})
         for i in range(25):
+            # Use sequential dates across multiple months/years
+            year = 2020 + (i // 12)
+            month = (i % 12) + 1
             self.client.post(url, {
-                "actual_period_start": f"2020-{i+1:02d}-01",
+                "actual_period_start": f"{year}-{month:02d}-01",
                 "procedure_code": self.procedure.id
             }, format='json')
 
