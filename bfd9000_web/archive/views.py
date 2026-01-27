@@ -31,7 +31,7 @@ from .serializers import (
     RecordUploadSerializer
 )
 from .constants import (
-    SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY
+    SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE
 )
 
 class ValuesetViewSet(viewsets.ViewSet):
@@ -76,6 +76,10 @@ class ValuesetViewSet(viewsets.ViewSet):
 
         elif valueset_type == 'modalities':
             codings = Coding.objects.filter(system=SYSTEM_MODALITY)
+            data = [{'id': c.code, 'display': c.display} for c in codings]
+
+        elif valueset_type == 'procedures':
+            codings = Coding.objects.filter(system=SYSTEM_PROCEDURE)
             data = [{'id': c.code, 'display': c.display} for c in codings]
 
         else:
