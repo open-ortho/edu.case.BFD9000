@@ -17,7 +17,7 @@ def imaging_study_upload_path(instance, filename: str) -> str:
     """
     Generate a structured upload path for imaging study files.
 
-    Format: uploads/subject_{id}/encounter_{id}/YYYYMMDD_HHMMSS_{record_type}.{ext}
+    Format: uploads/{collection}/{subject_id}/{encounter_id}/YYYYMMDD_HHMMSS_{record_type}.{ext}
 
     Args:
         instance: ImagingStudy instance
@@ -26,24 +26,14 @@ def imaging_study_upload_path(instance, filename: str) -> str:
     Returns:
         Structured path string
     """
-    # Get file extension
     ext = os.path.splitext(filename)[1].lower()
-
-    # Get subject ID from encounter
+    collection_name = instance.collection.short_name if instance.collection else 'unknown'
     subject_id = instance.encounter.subject.id if instance.encounter else 'unknown'
     encounter_id = instance.encounter.id if instance.encounter else 'unknown'
-
-    # Generate timestamp
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-
-    # Get record type code if available
     record_type = instance.record_type.code if instance.record_type else 'unknown'
-
-    # Construct filename: timestamp_recordtype.ext
     new_filename = f"{timestamp}_{record_type}{ext}"
-
-    # Construct path: uploads/subject_{id}/encounter_{id}/filename
-    return os.path.join('uploads', f'subject_{subject_id}', f'encounter_{encounter_id}', new_filename)
+    return os.path.join('uploads', collection_name, str(subject_id), str(encounter_id), new_filename)
 
 
 class TimestampedModel(models.Model):
