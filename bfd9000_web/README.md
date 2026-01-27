@@ -13,21 +13,40 @@ Alternatively just install django with python.
 
 ## Running the Django Application
 
-From the workspace root:
-
 1. Make sure to apply any database migrations:
 
    ```bash
-   python bfd9000_web/manage.py migrate
+   cd bfd9000_web
+   python manage.py migrate
    ```
 
 2. Start the Django development server:
 
    ```bash
-   python bfd9000_web/manage.py runserver
+   python manage.py runserver
    ```
 
 3. Open your web browser and go to `http://127.0.0.1:8000` to view the application.
+
+## Running Tests
+
+```bash
+cd bfd9000_web
+python manage.py test
+```
+
+Run specific test modules:
+
+```bash
+python manage.py test archive.tests.test_api_flows
+python manage.py test archive.tests.test_valuesets
+```
+
+Useful test options:
+- `--failfast` - Stop after first failure
+- `-v 2` - Verbose output
+- `--keepdb` - Keep test database between runs (faster)
+- `--parallel` - Run tests in parallel
 
 ## Additional Information
 

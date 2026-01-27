@@ -11,13 +11,19 @@
       pkgs = import nixpkgs { inherit system; };
       python = pkgs.python311; # pick your Python version
     in {
-
       devShells.${system}.default = pkgs.mkShell {
         name = "django-env";
 
         buildInputs = [
           python
           python.pkgs.django
+          python.pkgs.djangorestframework
+          python.pkgs.django-cors-headers
+          python.pkgs.django-filter
+          python.pkgs.drf-spectacular
+          python.pkgs.drf-nested-routers
+          python.pkgs.pillow
+          python.pkgs.whitenoise
           python.pkgs.pip
         ];
 

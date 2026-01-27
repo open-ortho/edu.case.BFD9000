@@ -10,12 +10,12 @@ class ValuesetTests(APITestCase):
         # Create user for authentication
         self.user = User.objects.create_user(username='testuser', password='testpassword')
         self.client.force_authenticate(user=self.user)
-        
+
         # Create test data
-        self.collection = Collection.objects.create(short_name="TEST", full_name="Test Collection")
-        self.rt = Coding.objects.create(system=SYSTEM_RECORD_TYPE, code='lateral', display='Lateral')
-        self.orient = Coding.objects.create(system=SYSTEM_ORIENTATION, code='left', display='Left')
-        self.mod = Coding.objects.create(system=SYSTEM_MODALITY, code='RG', display='Radiography')
+        self.collection, _ = Collection.objects.get_or_create(short_name="TEST", defaults={"full_name": "Test Collection"})
+        self.rt, _ = Coding.objects.get_or_create(system=SYSTEM_RECORD_TYPE, code='lateral', defaults={'display': 'Lateral'})
+        self.orient, _ = Coding.objects.get_or_create(system=SYSTEM_ORIENTATION, code='left', defaults={'display': 'Left'})
+        self.mod, _ = Coding.objects.get_or_create(system=SYSTEM_MODALITY, code='RG', defaults={'display': 'Radiography'})
 
     def test_missing_type_parameter(self):
         """Should return 400 if 'type' parameter is missing"""

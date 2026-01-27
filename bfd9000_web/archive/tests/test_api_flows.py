@@ -2,19 +2,33 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 from rest_framework import status
 from django.core.files.uploadedfile import SimpleUploadedFile
-from archive.models import Record, Collection, Coding
+from django.contrib.auth.models import User, Permission
+from django.contrib.contenttypes.models import ContentType
+from archive.models import Record, Collection, Coding, Subject, Encounter
 from archive.constants import SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE
 
 class ApiFlowTests(APITestCase):
     def setUp(self):
+        # Create user for authentication
+        self.user = User.objects.create_user(username='testuser', password='testpassword')
+
+        # Add necessary permissions
+        models = [Subject, Encounter, Record]
+        for model in models:
+            content_type = ContentType.objects.get_for_model(model)
+            permissions = Permission.objects.filter(content_type=content_type)
+            self.user.user_permissions.add(*permissions)
+
+        self.client.force_authenticate(user=self.user)
+
         # Create necessary data
-        self.collection = Collection.objects.create(short_name="TEST", full_name="Test Collection")
-        
+        self.collection, _ = Collection.objects.get_or_create(short_name="TEST", defaults={"full_name": "Test Collection"})
+
         # Ensure codings exist
-        self.rt = Coding.objects.create(system=SYSTEM_RECORD_TYPE, code='lateral', display='Lateral')
-        self.orient = Coding.objects.create(system=SYSTEM_ORIENTATION, code='left', display='Left')
-        self.mod = Coding.objects.create(system=SYSTEM_MODALITY, code='RG', display='Radiography')
-        self.proc = Coding.objects.create(system=SYSTEM_PROCEDURE, code='ortho-visit', display='Orthodontic Visit')
+        self.rt, _ = Coding.objects.get_or_create(system=SYSTEM_RECORD_TYPE, code='lateral', defaults={'display': 'Lateral'})
+        self.orient, _ = Coding.objects.get_or_create(system=SYSTEM_ORIENTATION, code='left', defaults={'display': 'Left'})
+        self.mod, _ = Coding.objects.get_or_create(system=SYSTEM_MODALITY, code='RG', defaults={'display': 'Radiography'})
+        self.proc, _ = Coding.objects.get_or_create(system=SYSTEM_PROCEDURE, code='ortho-visit', defaults={'display': 'Orthodontic Visit'})
         
         self.subject_data = {
             "humanname_family": "Doe",
@@ -27,6 +41,8 @@ class ApiFlowTests(APITestCase):
         # 1. Create Subject
         url = reverse('archive:subject-list')
         response = self.client.post(url, self.subject_data, format='json')
+        if response.status_code != status.HTTP_201_CREATED:
+            print(f"Subject creation failed: {response.status_code} - {response.data}")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         subject_id = response.data['id']
         

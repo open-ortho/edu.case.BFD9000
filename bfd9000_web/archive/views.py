@@ -21,12 +21,12 @@ import io
 import os
 from PIL import Image
 from .models import (
-    Coding, Identifier, Address, Collection, Subject, 
+    Coding, Identifier, Address, Collection, Subject,
     Encounter, Location, ImagingStudy, Record
 )
 from .serializers import (
-    CodingSerializer, IdentifierSerializer, AddressSerializer, 
-    CollectionSerializer, SubjectSerializer, EncounterSerializer, 
+    CodingSerializer, IdentifierSerializer, AddressSerializer,
+    CollectionSerializer, SubjectSerializer, EncounterSerializer,
     LocationSerializer, ImagingStudySerializer, RecordSerializer,
     RecordUploadSerializer
 )
@@ -37,7 +37,7 @@ from .constants import (
 class ValuesetViewSet(viewsets.ViewSet):
     """
     API endpoint that allows valuesets to be viewed.
-    
+
     Provides a read-only interface for retrieving standard codes and options
     used throughout the application (e.g., sex, modalities, orientations).
     """
@@ -46,47 +46,47 @@ class ValuesetViewSet(viewsets.ViewSet):
     def list(self, request: Request) -> Response:
         """
         List values for a specific valueset type.
-        
+
         Args:
             request: The HTTP request containing the 'type' query parameter.
-            
+
         Returns:
             Response: A list of dictionaries with 'id' and 'display' keys.
         """
         valueset_type = request.query_params.get('type')
         if not valueset_type:
             return Response({"error": "Missing 'type' parameter"}, status=400)
-        
+
         data: List[Dict[str, Any]] = []
-        
+
         if valueset_type == 'sex_options':
             data = [{'id': k, 'display': v} for k, v in Subject.GENDER_CHOICES]
-            
+
         elif valueset_type == 'collections':
             colls = Collection.objects.all()
             data = [{'id': c.short_name, 'display': c.full_name} for c in colls]
-            
+
         elif valueset_type == 'record_types':
             codings = Coding.objects.filter(system=SYSTEM_RECORD_TYPE)
             data = [{'id': c.code, 'display': c.display} for c in codings]
-            
+
         elif valueset_type == 'orientations':
             codings = Coding.objects.filter(system=SYSTEM_ORIENTATION)
             data = [{'id': c.code, 'display': c.display} for c in codings]
-            
+
         elif valueset_type == 'modalities':
             codings = Coding.objects.filter(system=SYSTEM_MODALITY)
             data = [{'id': c.code, 'display': c.display} for c in codings]
-             
+
         else:
             return Response({"error": f"Unknown valueset type: {valueset_type}"}, status=404)
-            
+
         return Response(data)
 
 class CodingViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Coding model.
-    
+
     Handles standard medical codes (SNOMED, DICOM, etc.).
     """
     queryset = Coding.objects.all()
@@ -96,7 +96,7 @@ class CodingViewSet(viewsets.ModelViewSet):
 class IdentifierViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Identifier model.
-    
+
     Handles identifiers associated with subjects and other entities.
     """
     queryset = Identifier.objects.all()
@@ -113,7 +113,7 @@ class AddressViewSet(viewsets.ModelViewSet):
 class LocationViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Location model.
-    
+
     Represents physical locations where encounters or scans occur.
     """
     queryset = Location.objects.all()
@@ -122,7 +122,7 @@ class LocationViewSet(viewsets.ModelViewSet):
 class CollectionViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Collection model.
-    
+
     Manages collections of records (e.g., specific studies or datasets).
     """
     queryset = Collection.objects.all()
@@ -132,7 +132,7 @@ class CollectionViewSet(viewsets.ModelViewSet):
 class SubjectViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Subject model.
-    
+
     Manages patient/subject information including demographics.
     """
     queryset = Subject.objects.annotate(
@@ -152,7 +152,7 @@ class SubjectViewSet(viewsets.ModelViewSet):
 class EncounterViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Encounter model.
-    
+
     Manages clinical encounters or visits.
     """
     queryset = Encounter.objects.all()
@@ -164,7 +164,7 @@ class EncounterViewSet(viewsets.ModelViewSet):
         Custom creation logic to handle subject association and age calculation.
         """
         subject = serializer.validated_data.get('subject')
-        
+
         # If not in body, check URL
         if not subject:
             subject_pk = self.kwargs.get('subject_pk')
@@ -176,7 +176,7 @@ class EncounterViewSet(viewsets.ModelViewSet):
         # Calculate age_at_encounter if not provided
         if 'age_at_encounter' not in serializer.validated_data:
             encounter_date = serializer.validated_data.get('actual_period_start')
-            
+
             if subject and subject.birth_date and encounter_date:
                 # Calculate duration
                 delta = encounter_date - subject.birth_date
@@ -188,7 +188,7 @@ class EncounterViewSet(viewsets.ModelViewSet):
 class ImagingStudyViewSet(viewsets.ModelViewSet):
     """
     ViewSet for ImagingStudy model.
-    
+
     Manages the technical details of an imaging session.
     """
     queryset = ImagingStudy.objects.all()
@@ -198,7 +198,7 @@ class ImagingStudyViewSet(viewsets.ModelViewSet):
 class RecordViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Record model.
-    
+
     Manages the high-level record entries that link encounters to imaging studies.
     Supports file uploads via a specialized serializer.
     """
@@ -222,7 +222,7 @@ class RecordViewSet(viewsets.ModelViewSet):
                 encounter = get_object_or_404(Encounter, pk=encounter_pk)
                 context['encounter'] = encounter
         return context
-        
+
     def get_queryset(self) -> QuerySet:
         """Filter queryset based on nested routes."""
         qs = super().get_queryset()
@@ -230,12 +230,12 @@ class RecordViewSet(viewsets.ModelViewSet):
         encounter_pk = self.kwargs.get('encounter_pk')
         if encounter_pk:
             qs = qs.filter(encounter__id=encounter_pk)
-        
+
         # Filter by nested subject if present
         subject_pk = self.kwargs.get('subject_pk')
         if subject_pk:
             qs = qs.filter(encounter__subject__id=subject_pk)
-            
+
         return qs
 
     @extend_schema(
@@ -249,7 +249,7 @@ class RecordViewSet(viewsets.ModelViewSet):
         record = self.get_object()
         if not record.imaging_study or not record.imaging_study.source_file:
             return Response({"error": "No image file available"}, status=404)
-        
+
         return FileResponse(record.imaging_study.source_file)
 
     @extend_schema(
@@ -263,14 +263,14 @@ class RecordViewSet(viewsets.ModelViewSet):
         record = self.get_object()
         if not record.imaging_study or not record.imaging_study.source_file:
             return Response({"error": "No image file available"}, status=404)
-            
+
         source_file = record.imaging_study.source_file
         # Check if file exists
         if not os.path.exists(source_file.path):
             return Response({"error": "File not found on server"}, status=404)
 
         ext = os.path.splitext(source_file.name)[1].lower()
-        
+
         if ext == '.stl':
             # Return placeholder for STL
             img = Image.new('RGB', (100, 100), color = (73, 109, 137))
@@ -278,7 +278,7 @@ class RecordViewSet(viewsets.ModelViewSet):
             img.save(buf, format='JPEG')
             buf.seek(0)
             return HttpResponse(buf, content_type='image/jpeg')
-            
+
         try:
             # Open image using a context manager
             with Image.open(source_file) as img:
@@ -287,13 +287,13 @@ class RecordViewSet(viewsets.ModelViewSet):
                     background = Image.new(img.mode[:-1], img.size, (255, 255, 255))
                     background.paste(img, img.split()[-1])
                     img = background
-                
+
                 img.thumbnail((300, 300))
-                
+
                 buf = io.BytesIO()
                 img.save(buf, format='JPEG')
                 buf.seek(0)
-                
+
                 return HttpResponse(buf, content_type='image/jpeg')
         except Exception as e:
             return Response({"error": f"Error generating thumbnail: {e}"}, status=500)
