@@ -4,9 +4,10 @@ name: Run Django Tests
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, develop]
   pull_request:
-    branches: [main, master]
+    # Run on all PRs, regardless of target branch
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
   test:
