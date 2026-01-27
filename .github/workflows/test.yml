@@ -1,0 +1,28 @@
+name: Run Django Tests
+# This uses nix to install all the dependencies for the dev shell.
+# AI should know how to fix it.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+
+      - name: Set up Nix Flake environment
+        run: nix develop --command true
+
+      - name: Run Django tests
+        run: |
+          cd bfd9000_web
+          nix develop --command python manage.py test --verbosity=2
