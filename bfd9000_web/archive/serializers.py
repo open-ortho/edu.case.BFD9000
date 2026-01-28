@@ -6,7 +6,7 @@ to and from native Python datatypes that can then be easily rendered into JSON, 
 It includes specialized logic for file uploads and validation.
 """
 import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 try:
     import magic
 except ImportError:

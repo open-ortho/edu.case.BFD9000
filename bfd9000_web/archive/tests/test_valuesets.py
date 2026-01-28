@@ -48,7 +48,7 @@ class ValuesetTests(CleanupAPITestCase):
         url = reverse('archive:valuesets-list') + '?type=sex_options'
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(len(response.data) > 0)
+        self.assertGreater(len(response.data), 0)
 
         # Verify structure
         for item in response.data:

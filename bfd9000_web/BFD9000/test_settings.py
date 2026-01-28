@@ -6,8 +6,6 @@ directory that gets cleaned up after tests complete.
 """
 from .settings import *
 import tempfile
-import shutil
-
 # Use a temporary directory for media files during testing
 MEDIA_ROOT = tempfile.mkdtemp(prefix='bfd9000_test_media_')
 

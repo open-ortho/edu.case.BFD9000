@@ -10,7 +10,6 @@ from rest_framework import viewsets, serializers
 from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.request import Request
-from rest_framework.exceptions import NotFound
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from drf_spectacular.utils import extend_schema
@@ -269,6 +268,7 @@ class RecordViewSet(viewsets.ModelViewSet):
     def thumbnail(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Response:
         """Generate and serve a thumbnail for the record's image."""
         record = self.get_object()
+
         if not record.imaging_study or not record.imaging_study.source_file:
             return Response({"error": "No image file available"}, status=404)
 
@@ -290,16 +290,19 @@ class RecordViewSet(viewsets.ModelViewSet):
         try:
             # Open image using a context manager
             with Image.open(source_file) as img:
-                # Convert to RGB if RGBA (PNG)
+                # Use a separate variable for any processed version of the image
+                processed_img = img
+
+                # Convert to RGB if RGBA (PNG) or LA
                 if img.mode in ('RGBA', 'LA'):
                     background = Image.new(img.mode[:-1], img.size, (255, 255, 255))
                     background.paste(img, img.split()[-1])
-                    img = background
+                    processed_img = background
 
-                img.thumbnail((300, 300))
+                processed_img.thumbnail((300, 300))
 
                 buf = io.BytesIO()
-                img.save(buf, format='JPEG')
+                processed_img.save(buf, format='JPEG')
                 buf.seek(0)
 
                 return HttpResponse(buf, content_type='image/jpeg')

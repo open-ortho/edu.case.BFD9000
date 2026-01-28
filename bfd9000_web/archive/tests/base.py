@@ -6,7 +6,6 @@ import tempfile
 from pathlib import Path
 from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
-from django.conf import settings
 
 
 # Create a temporary directory for test media
