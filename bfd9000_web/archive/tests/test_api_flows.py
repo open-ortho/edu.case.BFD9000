@@ -34,7 +34,8 @@ class ApiFlowTests(CleanupAPITestCase):
             "humanname_family": "Doe",
             "humanname_given": "John",
             "gender": "male",
-            "birth_date": "2000-01-01"
+            "birth_date": "2000-01-01",
+            "collection": "TEST",
         }
 
     def test_full_flow(self):

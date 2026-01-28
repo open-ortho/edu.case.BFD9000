@@ -92,7 +92,7 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 
 - **Response**: Paginated list of matching subjects with fields:
 
-  - `id`, `identifier`, `collection`, `sex`, `date_of_birth` (optional), `dental_classification`, `created_date`
+  - `id`, `identifier`, `collection` (subject-level dataset short name), `sex`, `date_of_birth` (optional), `dental_classification`, `created_date`
   - `encounter_count`: total number of encounters
   - `record_count`: total number of records
 
@@ -115,6 +115,8 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
   - `dental_classification` (string)
 
 - **Response**: Created subject object with generated `id` and all fields
+
+> **Important:** Collections live on the subject. Encounters, imaging studies, and records inherit `subject.collection` automatically and therefore no longer expose their own `collection` field. Attempting to upload a record for a subject without a collection results in a `400 Bad Request` response.
 
 #### 1.3 Get Subject Details
 
@@ -316,6 +318,8 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
   - `operator` (string, optional - defaults to authenticated user)
   - `acquisition_date` (date, optional - defaults to today)
   - `notes` (string, optional)
+
+**Prerequisite**: The encounter’s subject must be assigned to a collection before uploading. The record and its imaging study automatically inherit that collection; no collection field is accepted in this payload.
 
 - **Response**: Created record object with:
 
@@ -604,6 +608,7 @@ All error responses follow this structure:
 - `record_type` must be a valid value from `/api/valuesets/?type=record_types`
 - `orientation` must be a valid value from `/api/valuesets/?type=orientations`
 - `modality` must be a valid value from `/api/valuesets/?type=modalities`
+- Encounter subject must already belong to a valid collection; uploads are rejected otherwise
 - `acquisition_date` cannot be in the future
 - File content must match file extension (validated via magic bytes)
 

@@ -31,7 +31,8 @@ class RecordTests(CleanupAPITestCase):
             humanname_family="Doe",
             humanname_given="John",
             gender="male",
-            birth_date="2000-01-01"
+            birth_date="2000-01-01",
+            collection=self.collection,
         )
 
         self.procedure, _ = Coding.objects.get_or_create(
@@ -310,6 +311,6 @@ class RecordTests(CleanupAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         # Check for expected fields (fields that exist on Record model)
-        expected_fields = ['id', 'record_type', 'encounter', 'collection', 'imaging_study']
+        expected_fields = ['id', 'record_type', 'encounter', 'imaging_study']
         for field in expected_fields:
             self.assertIn(field, response.data)

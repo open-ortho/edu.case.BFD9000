@@ -150,6 +150,7 @@ class SubjectViewSet(viewsets.ModelViewSet):
         'ethnicity__code': ['exact'],
         'skeletal_pattern__code': ['exact'],
         'palatal_cleft__code': ['exact'],
+        'collection__short_name': ['exact'],
     }
     search_fields = ['identifiers__value', 'humanname_family', 'humanname_given']
 
@@ -208,7 +209,7 @@ class RecordViewSet(viewsets.ModelViewSet):
     """
     queryset = Record.objects.all()
     serializer_class = RecordSerializer
-    filterset_fields = ['encounter', 'collection']
+    filterset_fields = ['encounter', 'encounter__subject__collection', 'encounter__subject__collection__short_name']
 
     def get_serializer_class(self) -> Type[serializers.Serializer]:
         """Return the appropriate serializer class based on the action."""

@@ -62,6 +62,12 @@ class SubjectSerializer(serializers.ModelSerializer):
     ethnicity = CodingSerializer(read_only=True)
     skeletal_pattern = CodingSerializer(read_only=True)
     palatal_cleft = CodingSerializer(read_only=True)
+    collection = serializers.SlugRelatedField(
+        slug_field='short_name',
+        queryset=Collection.objects.all(),
+        allow_null=True,
+        required=False
+    )
     
     encounter_count = serializers.IntegerField(read_only=True)
     record_count = serializers.IntegerField(read_only=True)
@@ -241,11 +247,12 @@ class RecordUploadSerializer(serializers.ModelSerializer):
             scan_operator = request.user
         
         with transaction.atomic():
-            # Determine collection (fallback to first available or create default)
-            collection = Collection.objects.first()
+            subject = encounter.subject
+            collection = getattr(subject, 'collection', None)
             if not collection:
-                # Should not happen if initialized, but handle it
-                raise serializers.ValidationError("No collection available")
+                raise serializers.ValidationError({
+                    "collection": f"Subject {subject.id} must be assigned to a collection before uploading records."
+                })
 
             study = ImagingStudy.objects.create(
                 encounter=encounter,
@@ -260,7 +267,6 @@ class RecordUploadSerializer(serializers.ModelSerializer):
             
             record = Record.objects.create(
                 encounter=encounter,
-                collection=collection,
                 record_type=rt_coding,
                 imaging_study=study
             )

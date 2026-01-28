@@ -200,6 +200,13 @@ class Subject(TimestampedModel):
         related_name='subjects_palatal_cleft'
     )
     identifiers = models.ManyToManyField(Identifier, blank=True, related_name='subjects')
+    collection = models.ForeignKey(
+        Collection,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='subjects'
+    )
     
     class Meta:
         ordering = ['humanname_family', 'humanname_given']
@@ -214,15 +221,10 @@ class Subject(TimestampedModel):
         pass
     
     def get_collections(self):
-        """Get all distinct collections this subject is part of"""
-        from django.db.models import Q
-        record_collections = Collection.objects.filter(
-            record__encounter__subject=self
-        )
-        study_collections = Collection.objects.filter(
-            imagingstudy__encounter__subject=self
-        )
-        return (record_collections | study_collections).distinct()
+        """Return the subject's assigned collection, if any"""
+        if self.collection_id:
+            return Collection.objects.filter(pk=self.collection_id)
+        return Collection.objects.none()
     
     def __str__(self):
         return f"{self.humanname_family}, {self.humanname_given}"
@@ -380,7 +382,6 @@ class Record(TimestampedModel):
         on_delete=models.PROTECT,
         related_name='records'
     )
-    collection = models.ForeignKey(Collection, on_delete=models.PROTECT)
     record_type = models.ForeignKey(
         Coding,
         on_delete=models.PROTECT,

@@ -107,6 +107,9 @@ class SubjectAdmin(TimestampedAdmin):
         ('Contact', {
             'fields': ('address',)
         }),
+        ('Collection', {
+            'fields': ('collection',)
+        }),
         ('Medical Information', {
             'fields': ('ethnicity', 'skeletal_pattern', 'palatal_cleft')
         }),
@@ -180,8 +183,8 @@ class ImagingStudyAdmin(TimestampedAdmin):
 
 @admin.register(Record)
 class RecordAdmin(TimestampedAdmin):
-    list_display = ('encounter', 'collection', 'record_type', 'is_scanned', 'created_at')
-    list_filter = ('collection', 'record_type', 'created_at')
+    list_display = ('encounter', 'record_type', 'is_scanned', 'created_at')
+    list_filter = ('record_type', 'created_at')
     search_fields = (
         'encounter__subject__humanname_family',
         'encounter__subject__humanname_given',
@@ -192,7 +195,7 @@ class RecordAdmin(TimestampedAdmin):
     filter_horizontal = ('identifiers',)
     fieldsets = (
         (None, {
-            'fields': ('encounter', 'collection', 'record_type')
+            'fields': ('encounter', 'record_type')
         }),
         ('Physical Location', {
             'fields': (
