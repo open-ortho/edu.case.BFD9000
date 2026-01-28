@@ -213,8 +213,12 @@ class RecordUploadSerializer(serializers.ModelSerializer):
                     raise e
                 # Otherwise ignore magic errors and trust extension
                 pass
-            
-        value.seek(initial_pos)
+            finally:
+                # Always reset file position after MIME inspection
+                value.seek(initial_pos)
+        else:
+            # If magic is not available, reset position before returning
+            value.seek(initial_pos)
         return value
 
     def create(self, validated_data: Dict[str, Any]) -> Record:

@@ -41,6 +41,9 @@ class ValuesetViewSet(viewsets.ViewSet):
     Provides a read-only interface for retrieving standard codes and options
     used throughout the application (e.g., sex, modalities, orientations).
     """
+    # NOTE: This viewset is read-only and not tied to a specific model/queryset,
+    # so DjangoModelPermissions (the project-wide default) are not applicable.
+    # We intentionally use IsAuthenticated here to require login but not model-level perms.
     permission_classes = [IsAuthenticated]
 
     def list(self, request: Request) -> Response:
