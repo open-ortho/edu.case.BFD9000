@@ -33,6 +33,7 @@ from .constants import (
     SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE
 )
 
+
 class ValuesetViewSet(viewsets.ViewSet):
     """
     API endpoint that allows valuesets to be viewed.
@@ -66,7 +67,8 @@ class ValuesetViewSet(viewsets.ViewSet):
 
         elif valueset_type == 'collections':
             colls = Collection.objects.all()
-            data = [{'id': c.short_name, 'display': c.full_name} for c in colls]
+            data = [{'id': c.short_name, 'display': c.full_name}
+                    for c in colls]
 
         elif valueset_type == 'record_types':
             codings = Coding.objects.filter(system=SYSTEM_RECORD_TYPE)
@@ -89,6 +91,7 @@ class ValuesetViewSet(viewsets.ViewSet):
 
         return Response(data)
 
+
 class CodingViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Coding model.
@@ -98,6 +101,7 @@ class CodingViewSet(viewsets.ModelViewSet):
     queryset = Coding.objects.all()
     serializer_class = CodingSerializer
     filterset_fields = ['system', 'code']
+
 
 class IdentifierViewSet(viewsets.ModelViewSet):
     """
@@ -109,12 +113,14 @@ class IdentifierViewSet(viewsets.ModelViewSet):
     serializer_class = IdentifierSerializer
     filterset_fields = ['system', 'value', 'use']
 
+
 class AddressViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Address model.
     """
     queryset = Address.objects.all()
     serializer_class = AddressSerializer
+
 
 class LocationViewSet(viewsets.ModelViewSet):
     """
@@ -125,6 +131,7 @@ class LocationViewSet(viewsets.ModelViewSet):
     queryset = Location.objects.all()
     serializer_class = LocationSerializer
 
+
 class CollectionViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Collection model.
@@ -134,6 +141,7 @@ class CollectionViewSet(viewsets.ModelViewSet):
     queryset = Collection.objects.all()
     serializer_class = CollectionSerializer
     filterset_fields = ['short_name']
+
 
 class SubjectViewSet(viewsets.ModelViewSet):
     """
@@ -154,7 +162,9 @@ class SubjectViewSet(viewsets.ModelViewSet):
         'palatal_cleft__code': ['exact'],
         'collection__short_name': ['exact'],
     }
-    search_fields = ['identifiers__value', 'humanname_family', 'humanname_given']
+    search_fields = ['identifiers__value',
+                     'humanname_family', 'humanname_given']
+
 
 class EncounterViewSet(viewsets.ModelViewSet):
     """
@@ -178,19 +188,23 @@ class EncounterViewSet(viewsets.ModelViewSet):
             if subject_pk:
                 subject = get_object_or_404(Subject, pk=subject_pk)
             else:
-                raise serializers.ValidationError({"subject": "This field is required."})
+                raise serializers.ValidationError(
+                    {"subject": "This field is required."})
 
         # Calculate age_at_encounter if not provided
         if 'age_at_encounter' not in serializer.validated_data:
-            encounter_date = serializer.validated_data.get('actual_period_start')
+            encounter_date = serializer.validated_data.get(
+                'actual_period_start')
 
             if subject and subject.birth_date and encounter_date:
                 # Calculate duration
                 delta = encounter_date - subject.birth_date
-                serializer.save(subject=subject, procedure_occurrence_age=delta)
+                serializer.save(subject=subject,
+                                procedure_occurrence_age=delta)
                 return
 
         serializer.save(subject=subject)
+
 
 class ImagingStudyViewSet(viewsets.ModelViewSet):
     """
@@ -202,6 +216,7 @@ class ImagingStudyViewSet(viewsets.ModelViewSet):
     serializer_class = ImagingStudySerializer
     filterset_fields = ['encounter', 'collection', 'scan_datetime']
 
+
 class RecordViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Record model.
@@ -211,7 +226,8 @@ class RecordViewSet(viewsets.ModelViewSet):
     """
     queryset = Record.objects.all()
     serializer_class = RecordSerializer
-    filterset_fields = ['encounter', 'encounter__subject__collection', 'encounter__subject__collection__short_name']
+    filterset_fields = ['encounter', 'encounter__subject__collection',
+                        'encounter__subject__collection__short_name']
 
     def get_serializer_class(self) -> Type[serializers.Serializer]:
         """Return the appropriate serializer class based on the action."""
@@ -281,7 +297,7 @@ class RecordViewSet(viewsets.ModelViewSet):
 
         if ext == '.stl':
             # Return placeholder for STL
-            img = Image.new('RGB', (100, 100), color = (73, 109, 137))
+            img = Image.new('RGB', (100, 100), color=(73, 109, 137))
             buf = io.BytesIO()
             img.save(buf, format='JPEG')
             buf.seek(0)
@@ -295,7 +311,8 @@ class RecordViewSet(viewsets.ModelViewSet):
 
                 # Convert to RGB if RGBA (PNG) or LA
                 if img.mode in ('RGBA', 'LA'):
-                    background = Image.new(img.mode[:-1], img.size, (255, 255, 255))
+                    background = Image.new(
+                        img.mode[:-1], img.size, (255, 255, 255))
                     background.paste(img, img.split()[-1])
                     processed_img = background
 
@@ -314,3 +331,43 @@ class RecordViewSet(viewsets.ModelViewSet):
         """Serve the DICOM file (Not Implemented)."""
         # Not implemented yet
         return Response({"error": "DICOM download not implemented"}, status=404)
+
+
+# Template Views for HTML Pages
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+
+
+@login_required
+def index(request):
+    return render(request, "archive/index.html")
+
+
+@login_required
+def subjects(request):
+    return render(request, "archive/subjects.html")
+
+
+@login_required
+def subject_create(request):
+    return render(request, "archive/subject_create.html")
+
+
+@login_required
+def encounters(request):
+    return render(request, "archive/encounters.html")
+
+
+@login_required
+def encounter_create(request):
+    return render(request, "archive/encounter_create.html")
+
+
+@login_required
+def records(request):
+    return render(request, "archive/records.html")
+
+
+@login_required
+def record_detail(request, record_id):
+    return render(request, "archive/record_detail.html", {"record_id": record_id})

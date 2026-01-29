@@ -1,8 +1,8 @@
 """
 URL configuration for the archive app.
 
-This module defines the API routes using DRF routers, including nested routes
-for hierarchical resources (e.g., subjects -> encounters -> records).
+This module defines both template routes for HTML pages and API routes using DRF routers,
+including nested routes for hierarchical resources (e.g., subjects -> encounters -> records).
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
@@ -22,17 +22,31 @@ router.register(r'records', views.RecordViewSet)
 router.register(r'valuesets', views.ValuesetViewSet, basename='valuesets')
 
 # Nested routers
-subjects_router = routers.NestedDefaultRouter(router, r'subjects', lookup='subject')
-subjects_router.register(r'encounters', views.EncounterViewSet, basename='subject-encounters')
-subjects_router.register(r'records', views.RecordViewSet, basename='subject-records')
+subjects_router = routers.NestedDefaultRouter(
+    router, r'subjects', lookup='subject')
+subjects_router.register(
+    r'encounters', views.EncounterViewSet, basename='subject-encounters')
+subjects_router.register(r'records', views.RecordViewSet,
+                         basename='subject-records')
 
-encounters_router = routers.NestedDefaultRouter(router, r'encounters', lookup='encounter')
-encounters_router.register(r'records', views.RecordViewSet, basename='encounter-records')
+encounters_router = routers.NestedDefaultRouter(
+    router, r'encounters', lookup='encounter')
+encounters_router.register(
+    r'records', views.RecordViewSet, basename='encounter-records')
 
 app_name = 'archive'
 
 urlpatterns = [
-    path('', include(router.urls)),
-    path('', include(subjects_router.urls)),
-    path('', include(encounters_router.urls)),
+    # Template views for HTML pages
+    path('', views.index, name='index'),
+    path('subjects/', views.subjects, name='subjects'),
+    path('subjects/create/', views.subject_create, name='subject_create'),
+    path('encounters/', views.encounters, name='encounters'),
+    path('encounters/create/', views.encounter_create, name='encounter_create'),
+    path('records/', views.records, name='records'),
+    path('records/<str:record_id>/', views.record_detail, name='record_detail'),
+    # API routes
+    path('api/', include(router.urls)),
+    path('api/', include(subjects_router.urls)),
+    path('api/', include(encounters_router.urls)),
 ]

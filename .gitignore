@@ -137,3 +137,8 @@ docker-compose.override.yml
 
 # Media files
 bfd9000_web/media/
+# DaisyUI
+daisyui.mjs
+daisyui-theme.mjs
+tailwindcss
+tailwindcss.exe

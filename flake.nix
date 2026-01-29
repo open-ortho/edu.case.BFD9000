@@ -2,15 +2,17 @@
   description = "Django development environment using Nix flakes";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";  # or unstable
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05"; # or unstable
   };
 
-  outputs = { self, nixpkgs }:
+  outputs =
+    { self, nixpkgs }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
-      python = pkgs.python311; # pick your Python version
-    in {
+      python = pkgs.python311;
+    in
+    {
       devShells.${system}.default = pkgs.mkShell {
         name = "django-env";
 
@@ -25,6 +27,7 @@
           python.pkgs.pillow
           python.pkgs.whitenoise
           python.pkgs.pip
+          pkgs.watchman
         ];
 
         # Optional: environment variables for Django

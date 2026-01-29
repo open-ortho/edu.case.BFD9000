@@ -20,13 +20,33 @@ Alternatively just install django with python.
    python manage.py migrate
    ```
 
-2. Start the Django development server:
+2. ONLY IF YOU ARE DEVELOPING THE FRONTEND, install DaisyUI and run tailwindcss in a seperate terminal window.
 
-   ```bash
-   python manage.py runserver
-   ```
+    ```bash
+    # https://daisyui.com/docs/install/django/
+    # Linux / MacOS
+    cd bfd9000_web/archive/static/css && curl -sL daisyui.com/fast | bash
+    # Windows
+    cd bfd9000_web/archive/static/css && powershell -c "irm daisyui.com/fast.ps1 | iex"
 
-3. Open your web browser and go to `http://127.0.0.1:8000` to view the application.
+    cd ../../../..
+
+    # Linux / MacOS
+    bfd9000_web/archive/static/css/tailwindcss -i bfd9000_web/archive/static/css/input.css -o bfd9000_web/archive/static/css/output.css --watch
+    # Windows
+    bfd9000_web\archive\static\css\tailwindcss.exe -i bfd9000_web/archive/static/css/input.css -o bfd9000_web/archive/static/css/output.css --watch
+    ```
+
+3. Start the Django development server:
+
+    ```bash
+    # add yourself as a user
+    python bfd9000_web/manage.py createsuperuser
+    
+    python bfd9000_web/manage.py runserver
+    ```
+
+4. Open your web browser and go to `http://127.0.0.1:8000` to view the application.
 
 ## Running Tests
 
@@ -55,4 +75,3 @@ Useful test options:
 - The application settings can be found in `bfd9000/settings.py`.
 - URL routing is defined in `bfd9000/urls.py`.
 - For deployment, refer to the WSGI configuration in `bfd9000/wsgi.py`.
-
