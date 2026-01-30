@@ -1,49 +1,183 @@
-{% extends 'archive/base_index.html' %} {% block content %}
-<div class="flex-[1_1_0] flex flex-col items-center justify-center p-8">
-    <div class="card bg-base-200 shadow-xl max-w-2xl w-full">
-        <div class="card-body items-center text-center">
-            <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="1.5"
-                stroke="currentColor"
-                class="size-24 text-warning mb-4"
-            >
-                <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z"
-                />
-            </svg>
-            <h2 class="card-title text-3xl">Record View Under Construction</h2>
-            <p class="text-base-content/70 text-lg">
-                The individual record detail view is currently being developed.
-            </p>
-            <p class="text-base-content/50 mt-2">
-                Record ID:
-                <span class="font-mono font-bold">{{ record_id }}</span>
-            </p>
-            <div class="card-actions justify-center mt-6">
-                <a href="/records/" class="btn btn-primary">
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke-width="1.5"
-                        stroke="currentColor"
-                        class="size-5"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"
-                        />
-                    </svg>
-                    Back to Records
-                </a>
+{% extends 'archive/base_index.html' %}
+
+{% block content %}
+<div class="flex-[1_1_0] flex flex-col overflow-auto p-6">
+    <!-- Header -->
+    <div class="mb-4">
+        <div class="flex items-center gap-2 mb-2">
+            <a href="/records/" class="btn btn-sm btn-ghost">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+                </svg>
+                Back to Records
+            </a>
+            <h1 class="text-2xl font-bold">Record #<span id="record-id">{{ record_id }}</span></h1>
+        </div>
+        <div id="loading" class="text-base-content/60">Loading record details...</div>
+        <div id="error" class="alert alert-error hidden"></div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="content" class="hidden grid grid-cols-1 lg:grid-cols-[20rem_1fr] gap-6 flex-1">
+        <!-- Left: Image -->
+        <div class="card bg-base-200 shadow">
+            <div class="card-body">
+                <h2 class="card-title text-lg">Image</h2>
+                <div class="flex items-center justify-center bg-base-300 rounded">
+                    <img id="record-image" src="" alt="Record image" class="max-w-full max-h-[600px] object-contain rounded" />
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Details -->
+        <div class="flex flex-col gap-6">
+            <!-- Subject & Encounter Info -->
+            <div class="card bg-base-200 shadow">
+                <div class="card-body">
+                    <h2 class="card-title text-lg">Subject & Encounter</h2>
+                    <div class="overflow-x-auto">
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <th>Subject ID</th>
+                                    <td id="subject-id">-</td>
+                                </tr>
+                                <tr>
+                                    <th>Encounter ID</th>
+                                    <td id="encounter-id">-</td>
+                                </tr>
+                                <tr>
+                                    <th>Encounter Date</th>
+                                    <td id="encounter-date">-</td>
+                                </tr>
+                                <tr>
+                                    <th>Age at Encounter</th>
+                                    <td id="age-at-encounter">-</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Record Details -->
+            <div class="card bg-base-200 shadow">
+                <div class="card-body">
+                    <h2 class="card-title text-lg">Record Details</h2>
+                    <div class="overflow-x-auto">
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <th>Record Type</th>
+                                    <td id="record-type">-</td>
+                                </tr>
+                                <tr>
+                                    <th>Created</th>
+                                    <td id="created-at">-</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Imaging Study Details -->
+            <div class="card bg-base-200 shadow">
+                <div class="card-body">
+                    <h2 class="card-title text-lg">Imaging Study</h2>
+                    <div class="overflow-x-auto">
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <th>Orientation</th>
+                                    <td id="orientation">-</td>
+                                </tr>
+                                <tr>
+                                    <th>Modality</th>
+                                    <td id="modality">-</td>
+                                </tr>
+                                <tr>
+                                    <th>Scan Date</th>
+                                    <td id="scan-date">-</td>
+                                </tr>
+                                <tr>
+                                    <th>Operator</th>
+                                    <td id="operator">-</td>
+                                </tr>
+                                <tr>
+                                    <th>Collection</th>
+                                    <td id="collection">-</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block head %}
+{{ block.super }}
+<script>
+    const recordId = {{ record_id }};
+
+    async function loadRecord() {
+        try {
+            const response = await fetch(`/api/records/${recordId}/`);
+            if (!response.ok) {
+                throw new Error(`Failed to load record: ${response.status}`);
+            }
+            const record = await response.json();
+            displayRecord(record);
+        } catch (error) {
+            console.error('Error loading record:', error);
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('error').textContent = 'Error: ' + error.message;
+            document.getElementById('error').classList.remove('hidden');
+        }
+    }
+
+    function displayRecord(record) {
+        // Hide loading, show content
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('content').classList.remove('hidden');
+
+        // Set image
+        document.getElementById('record-image').src = `/api/records/${recordId}/image/`;
+
+        // Subject & Encounter
+        document.getElementById('subject-id').textContent = record.subject_id || '-';
+        document.getElementById('encounter-id').textContent = record.encounter_id || '-';
+        document.getElementById('encounter-date').textContent = record.encounter_date || '-';
+        document.getElementById('age-at-encounter').textContent = record.age_at_encounter 
+            ? `${record.age_at_encounter} years`
+            : '-';
+
+        // Record Details
+        document.getElementById('record-type').textContent = record.record_type?.display || '-';
+        document.getElementById('created-at').textContent = record.created_at 
+            ? new Date(record.created_at).toLocaleString()
+            : '-';
+
+        // Imaging Study (if available)
+        if (record.imaging_study) {
+            fetch(`/api/imaging-studies/${record.imaging_study}/`)
+                .then(res => res.json())
+                .then(study => {
+                    document.getElementById('orientation').textContent = study.view?.display || '-';
+                    document.getElementById('modality').textContent = study.series_modality?.display || '-';
+                    document.getElementById('scan-date').textContent = study.scan_datetime 
+                        ? new Date(study.scan_datetime).toLocaleString()
+                        : '-';
+                    document.getElementById('operator').textContent = study.scan_operator || '-';
+                    document.getElementById('collection').textContent = study.collection || '-';
+                })
+                .catch(err => console.error('Error loading imaging study:', err));
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadRecord);
+</script>
 {% endblock %}
