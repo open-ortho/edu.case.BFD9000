@@ -268,13 +268,22 @@
     }
 
     async function createRecord(encounterId, formData) {
+        // Get CSRF token from cookie
+        const csrftoken = document.cookie.split('; ')
+            .find(row => row.startsWith('csrftoken='))
+            ?.split('=')[1];
+        
         const response = await fetch(`/api/encounters/${encounterId}/records/`, {
             method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken
+            },
             body: formData
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.error?.message || `API error: ${response.status}`);
+            console.error('Record creation failed:', error);
+            throw new Error(error.error?.message || JSON.stringify(error) || `API error: ${response.status}`);
         }
         return await response.json();
     }
@@ -732,6 +741,7 @@
                 window.location.href = `/records/${record.id}/`;
             }, 1000);
         } catch (error) {
+            console.error(error);
             showSubmitStatus('Error: ' + error.message, true);
             button.disabled = false;
             button.innerHTML = `
