@@ -15,13 +15,13 @@ class ValuesetTests(CleanupAPITestCase):
         self.collection, _ = Collection.objects.get_or_create(short_name="TEST", defaults={"full_name": "Test Collection"})
         self.collection2, _ = Collection.objects.get_or_create(short_name="TEST2", defaults={"full_name": "Test Collection 2"})
 
-        # Record types
-        self.rt_lateral, _ = Coding.objects.get_or_create(system=SYSTEM_RECORD_TYPE, code='lateral', defaults={'display': 'Lateral'})
-        self.rt_pa, _ = Coding.objects.get_or_create(system=SYSTEM_RECORD_TYPE, code='pa', defaults={'display': 'PA'})
+        # Record types (using SNOMED codes from migration)
+        self.rt_lateral, _ = Coding.objects.get_or_create(system=SYSTEM_RECORD_TYPE, code='201456002', defaults={'display': 'Cephalogram'})
+        self.rt_pa, _ = Coding.objects.get_or_create(system=SYSTEM_RECORD_TYPE, code='268425006', defaults={'display': 'Pelvis X-ray'})
 
-        # Orientations
-        self.orient_left, _ = Coding.objects.get_or_create(system=SYSTEM_ORIENTATION, code='left', defaults={'display': 'Left'})
-        self.orient_right, _ = Coding.objects.get_or_create(system=SYSTEM_ORIENTATION, code='right', defaults={'display': 'Right'})
+        # Orientations (using SNOMED codes from migration)
+        self.orient_left, _ = Coding.objects.get_or_create(system=SYSTEM_ORIENTATION, code='399173006', defaults={'display': 'Left lateral projection'})
+        self.orient_right, _ = Coding.objects.get_or_create(system=SYSTEM_ORIENTATION, code='399198007', defaults={'display': 'Right lateral projection'})
 
         # Modalities
         self.mod_rg, _ = Coding.objects.get_or_create(system=SYSTEM_MODALITY, code='RG', defaults={'display': 'Radiography'})
@@ -96,10 +96,10 @@ class ValuesetTests(CleanupAPITestCase):
             self.assertIn('display', item)
             self.assertEqual(len(item), 2, "Should only have 'id' and 'display' fields")
 
-        # Verify expected values
+        # Verify expected values (SNOMED codes)
         ids = [item['id'] for item in response.data]
-        self.assertIn('lateral', ids)
-        self.assertIn('pa', ids)
+        self.assertIn('201456002', ids)  # Cephalogram
+        self.assertIn('268425006', ids)  # Pelvis X-ray
 
     def test_orientations(self):
         """Should return orientations with correct structure"""
@@ -113,10 +113,10 @@ class ValuesetTests(CleanupAPITestCase):
             self.assertIn('display', item)
             self.assertEqual(len(item), 2, "Should only have 'id' and 'display' fields")
 
-        # Verify expected values
+        # Verify expected values (SNOMED codes)
         ids = [item['id'] for item in response.data]
-        self.assertIn('left', ids)
-        self.assertIn('right', ids)
+        self.assertIn('399173006', ids)  # Left lateral projection
+        self.assertIn('399198007', ids)  # Right lateral projection
 
     def test_modalities(self):
         """Should return modalities with correct structure"""
