@@ -100,7 +100,7 @@
      * @returns {Promise<Object>} Response with { count, next, previous, results }
      */
     async function fetchSubjects({
-        search = "",
+        search = undefined,
         page = 1,
         page_size = 20,
     } = {}) {
@@ -108,11 +108,7 @@
             page: page.toString(),
             page_size: page_size.toString(),
         });
-
-        if (search) {
-            params.set("search", search);
-        }
-
+        
         const response = await fetch(`/api/subjects/?${params}`);
         if (!response.ok) {
             throw new Error(`API error: ${response.status}`);

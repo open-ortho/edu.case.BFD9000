@@ -226,8 +226,9 @@ class RecordViewSet(viewsets.ModelViewSet):
     """
     queryset = Record.objects.all()
     serializer_class = RecordSerializer
-    filterset_fields = ['encounter', 'encounter__subject__collection',
+    filterset_fields = ['encounter', 'encounter__subject', 'encounter__subject__collection',
                         'encounter__subject__collection__short_name']
+    search_fields = ['id', 'encounter__id', 'encounter__subject__id']
 
     def get_serializer_class(self) -> Type[serializers.Serializer]:
         """Return the appropriate serializer class based on the action."""

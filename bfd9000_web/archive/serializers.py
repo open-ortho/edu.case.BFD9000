@@ -134,10 +134,41 @@ class RecordSerializer(serializers.ModelSerializer):
     identifiers = IdentifierSerializer(many=True, read_only=True)
     record_type = CodingSerializer(read_only=True)
     physical_location = AddressSerializer(read_only=True)
-    
+
+    # Add nested encounter and subject data
+    encounter_id = serializers.IntegerField(source='encounter.id', read_only=True)
+    subject_id = serializers.IntegerField(source='encounter.subject.id', read_only=True)
+    encounter_date = serializers.DateField(source='encounter.encounter_date', read_only=True)
+    age_at_encounter = serializers.SerializerMethodField()
+
+    # Add imaging study fields for display
+    acquisition_date = serializers.SerializerMethodField()
+    file_size = serializers.IntegerField(source='imaging_study.source_file.size', read_only=True)
+    image_type = serializers.CharField(source='imaging_study.image_type', read_only=True)
+
     class Meta:
         model = Record
         fields = '__all__'
+
+    def get_age_at_encounter(self, obj):
+        """Get age at encounter in years."""
+        if obj.encounter and obj.encounter.procedure_occurrence_age:
+            days = obj.encounter.procedure_occurrence_age.days
+            return round(days / 365.25, 2)
+        return None
+
+    def get_acquisition_date(self, obj):
+        """Get acquisition date from imaging study, assuming EST timezone."""
+        if obj.imaging_study and obj.imaging_study.scan_datetime:
+            # Convert to date, assuming EST
+            from zoneinfo import ZoneInfo
+            dt = obj.imaging_study.scan_datetime
+            # If naive, assume UTC; otherwise convert to EST
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=ZoneInfo('UTC'))
+            est_dt = dt.astimezone(ZoneInfo('America/New_York'))
+            return est_dt.date()
+        return None
 
 class RecordUploadSerializer(serializers.ModelSerializer):
     """
