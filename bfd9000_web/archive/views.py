@@ -30,7 +30,7 @@ from .serializers import (
     RecordUploadSerializer
 )
 from .constants import (
-    SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE
+    SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE, SYSTEM_BODY_SITE
 )
 
 
@@ -85,6 +85,12 @@ class ValuesetViewSet(viewsets.ViewSet):
         elif valueset_type == 'modalities':
             # Modality codes from DICOM
             codings = Coding.objects.filter(system=SYSTEM_MODALITY)
+            data = [{'id': c.code, 'display': c.display} for c in codings]
+
+        elif valueset_type == 'body_sites':
+            # Body site codes from SNOMED
+            body_site_codes = ['69536005', '609617007', '731298009', '729875002', '1927002', '71889004', '210659002', '210562007']
+            codings = Coding.objects.filter(system=SYSTEM_BODY_SITE, code__in=body_site_codes)
             data = [{'id': c.code, 'display': c.display} for c in codings]
 
         elif valueset_type == 'procedures':

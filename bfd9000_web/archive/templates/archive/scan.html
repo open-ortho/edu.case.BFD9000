@@ -113,7 +113,7 @@
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-[18rem_1fr] gap-4">
-                <div class="grid grid-cols-[1fr_2rem] gap-2">
+                <div class="flex flex-col gap-2">
                     <style>
                         label {
                             min-width: 8rem;
@@ -128,8 +128,7 @@
                             <option value="">Loading...</option>
                         </select>
                     </div>
-                    <span id="ai-confidence"></span>
-    
+
                     <!-- Orientation -->
                     <div class="form-control">
                         <label class="label">
@@ -139,8 +138,7 @@
                             <option value="">Loading...</option>
                         </select>
                     </div>
-                    <span id="ai-confidence"></span>
-    
+
                     <!-- Modality -->
                     <div class="form-control">
                         <label class="label">
@@ -150,10 +148,9 @@
                             <option value="">Loading...</option>
                         </select>
                     </div>
-                    <span id="ai-confidence"></span>
-    
+
                     <!-- Operator -->
-                    <div class="form-control col-span-2">
+                    <div class="form-control">
                         <label class="label">
                             <span class="label-text">Operator</span>
                         </label>
@@ -164,9 +161,9 @@
                             class="input input-bordered input-sm"
                         />
                     </div>
-    
+
                     <!-- Acquisition Date -->
-                    <div class="form-control col-span-2">
+                    <div class="form-control">
                         <label class="label">
                             <span class="label-text">Acquisition Date</span>
                         </label>
@@ -183,36 +180,7 @@
                         <span id="no-image-text" class="text-base-content/60">No image uploaded.</span>
                     </div>
                     <script>
-                        // Display image preview if file is a PNG
-                        function updateImagePreview(file) {
-                            const img = document.getElementById('uploaded-image');
-                            const noImg = document.getElementById('no-image-text');
-                            if (file && file.type === 'image/png') {
-                                const reader = new FileReader();
-                                reader.onload = function(e) {
-                                    img.src = e.target.result;
-                                    img.classList.remove('hidden');
-                                    noImg.classList.add('hidden');
-                                };
-                                reader.readAsDataURL(file);
-                            } else {
-                                img.src = '';
-                                img.classList.add('hidden');
-                                noImg.classList.remove('hidden');
-                            }
-                        }
-                        // Hook into file upload event
-                        document.addEventListener('DOMContentLoaded', function() {
-                            const fileInput = document.getElementById('file-upload');
-                            fileInput.addEventListener('change', function(e) {
-                                updateImagePreview(e.target.files[0]);
-                            });
-                            // Also clear preview on reset
-                            const resetPreview = () => updateImagePreview(null);
-                            // When subject or encounter changes, clear preview
-                            document.getElementById('search-subject').addEventListener('click', resetPreview);
-                            document.getElementById('encounter-select').addEventListener('change', resetPreview);
-                        });
+
                     </script>
                 </div>
             </div>
@@ -326,6 +294,21 @@
         }
         const result = await resp.json();
         console.log(result);
+
+        const formData2 = new FormData();
+        formData2.append('image', file);
+
+        const resp2 = await fetch('https://wingate.case.edu/bfd9020/xray-class', {
+            method: 'POST',
+            body: formData2
+        });
+        if (!resp2.ok) {
+            const errorText = await resp2.text();
+            throw new Error(`AI service error: ${url} - ${resp2.status} - ${errorText}`);
+        }
+        const r = await resp2.json();
+        console.log(r);
+
         return result;
     }
 
@@ -391,6 +374,23 @@
         document.getElementById('file-size').textContent = formatFileSize(file.size);
         document.getElementById('file-type').textContent = file.type || 'Unknown';
         document.getElementById('file-preview').classList.remove('hidden');
+
+        const url = URL.createObjectURL(file);
+        const img = document.getElementById('uploaded-image');
+        const noImg = document.getElementById('no-image-text');
+        if (file && file.type === 'image/png') {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                img.src = e.target.result;
+                img.classList.remove('hidden');
+                noImg.classList.add('hidden');
+            };
+            reader.readAsDataURL(file);
+        } else {
+            img.src = '';
+            img.classList.add('hidden');
+            noImg.classList.remove('hidden');
+        }
     }
 
     function populateSelect(selectId, options) {
@@ -463,65 +463,41 @@
     // ========================================
     // IMAGE MANIPULATION FUNCTIONS
     // ========================================
-
-    async function flipImage() {
+    
+    // modify image by rotating / flipping
+    async function modifyImage(degrees, flip = false) {
         if (!state.file) return;
-        
+
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const img = new Image();
-        
-        return new Promise((resolve, reject) => {
-            img.onload = () => {
-                canvas.width = img.width;
-                canvas.height = img.height;
-                
-                // Flip horizontally
-                ctx.translate(canvas.width, 0);
-                ctx.scale(-1, 1);
-                ctx.drawImage(img, 0, 0);
-                
-                canvas.toBlob((blob) => {
-                    if (blob) {
-                        const newFile = new File([blob], state.file.name, { type: 'image/png' });
-                        state.file = newFile;
-                        showFilePreview(newFile);
-                        resolve();
-                    } else {
-                        reject(new Error('Failed to create flipped image'));
-                    }
-                }, 'image/png');
-            };
-            
-            img.onerror = () => reject(new Error('Failed to load image'));
-            img.src = URL.createObjectURL(state.file);
-            console.log(state.file);
-        });
-    }
 
-    async function rotateImage(degrees) {
-        if (!state.file) return;
-        
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        
         return new Promise((resolve, reject) => {
             img.onload = () => {
-                // For 90 or 270 degree rotation, swap width and height
-                if (degrees === 90 || degrees === 270) {
+                // For 90 or -90 degree rotation, swap width and height
+                const radians = (degrees * Math.PI) / 180;
+
+                if (Math.abs(degrees) === 90 || Math.abs(degrees) === 270) {
                     canvas.width = img.height;
                     canvas.height = img.width;
                 } else {
                     canvas.width = img.width;
                     canvas.height = img.height;
                 }
-                
-                // Translate to center, rotate, then translate back
+
+                // Clear canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Move to center of canvas, rotate, then draw image centered
+                ctx.save();
                 ctx.translate(canvas.width / 2, canvas.height / 2);
-                ctx.rotate((degrees * Math.PI) / 180);
+                ctx.rotate(radians);
+                if (flip) {
+                    ctx.scale(-1, 1);
+                }
                 ctx.drawImage(img, -img.width / 2, -img.height / 2);
-                
+                ctx.restore();
+
                 canvas.toBlob((blob) => {
                     if (blob) {
                         const newFile = new File([blob], state.file.name, { type: 'image/png' });
@@ -533,7 +509,7 @@
                     }
                 }, 'image/png');
             };
-            
+
             img.onerror = () => reject(new Error('Failed to load image'));
             img.src = URL.createObjectURL(state.file);
         });
@@ -641,9 +617,9 @@
     async function handleFlip() {
         const button = document.getElementById('flip-button');
         button.disabled = true;
-        
+
         try {
-            await flipImage();
+            await modifyImage(0, true);
         } catch (error) {
             alert('Failed to flip image: ' + error.message);
         } finally {
@@ -654,9 +630,9 @@
     async function handleRotateLeft() {
         const button = document.getElementById('rotate-left-button');
         button.disabled = true;
-        
+
         try {
-            await rotateImage(-90);
+            await modifyImage(-90, false);
         } catch (error) {
             alert('Failed to rotate image: ' + error.message);
         } finally {
@@ -667,9 +643,9 @@
     async function handleRotateRight() {
         const button = document.getElementById('rotate-right-button');
         button.disabled = true;
-        
+
         try {
-            await rotateImage(90);
+            await modifyImage(90, false);
         } catch (error) {
             alert('Failed to rotate image: ' + error.message);
         } finally {
@@ -688,43 +664,31 @@
             const result = await queryAI(state.file);
 
             // Map AI type_prediction to record_type select value
-            if (result.record_type) {
+            if (result.type_prediction) {
                 const recordTypeSelect = document.getElementById('record-type');
-                // Try to find a matching option (case-insensitive)
-                const option = Array.from(recordTypeSelect.options).find(
-                    opt => opt.value.toLowerCase() === result.record_type.toLowerCase() ||
-                           opt.textContent.toLowerCase() === result.record_type.toLowerCase()
-                );
-                if (option) {
-                    recordTypeSelect.value = option.value;
+                recordTypeSelect.value = {
+                    'Lateral': '201456002', // 'Cephalogram'
+                    'Hip & Pelvis': '268425006', // 'Pelvis X-ray'
+                    'Foot & Ankle': '1597004', // 'Skeletal X-ray of ankle and foot'
+                    'Hand & Wrist': '39714003', // 'Skeletal X-ray of wrist and hand'
+                    // 'Elbow': '1927002', // 'Entire left elbow region'
+                    // 'Elbow': '71889004', // 'Entire right elbow region'
+                    // 'Knee': '210659002', // 'Entire left knee'
+                    // 'Knee': '210562007', // 'Entire right knee'
+                    // 'Frontal'
+                    // 'Chest & Shoulder'
+                }[result.type_prediction]; // TODO: what the hell?
+            }
+            
+            if (result.flip || result.rotation) {
+                try {
+                    await modifyImage(result.rotation || 0, result.flip || false);
+                } catch (error) {
+                    alert('Failed to transform image: ' + error.message);
                 }
             }
 
-            // Map AI orientation prediction if available
-            if (result.orientation) {
-                const orientationSelect = document.getElementById('orientation');
-                const option = Array.from(orientationSelect.options).find(
-                    opt => opt.value.toLowerCase() === result.orientation.toLowerCase() ||
-                           opt.textContent.toLowerCase() === result.orientation.toLowerCase()
-                );
-                if (option) {
-                    orientationSelect.value = option.value;
-                }
-            }
-
-            // Set modality to RG (Radiography) for X-ray images
-            if (result.modality) {
-                const modalitySelect = document.getElementById('modality');
-                const option = Array.from(modalitySelect.options).find(
-                    opt => opt.value.toLowerCase() === result.modality.toLowerCase() ||
-                           opt.textContent.toLowerCase() === result.modality.toLowerCase()
-                );
-                if (option) {
-                    modalitySelect.value = option.value;
-                }
-            }
-
-            showAIStatus('Fields populated from AI analysis');
+            showAIStatus(`Fields populated from AI analysis. Confidence: ${result.type_probability.toFixed(2)}`);
             updateSubmitButton();
         } catch (error) {
             showAIStatus('AI processing failed: ' + error.message, true);
@@ -831,6 +795,7 @@
             state.valuesets.record_types = recordTypes;
             state.valuesets.orientations = orientations;
             state.valuesets.modalities = modalities;
+            console.log(state.valuesets);
 
             populateSelect('record-type', recordTypes);
             populateSelect('orientation', orientations);
@@ -839,7 +804,6 @@
             console.error('Failed to load valuesets:', error);
             alert('Failed to load form options. Please refresh the page.');
         }
-        console.log(state);
 
         // Attach event listeners
         document.getElementById('search-subject').addEventListener('click', handleSearchSubject);

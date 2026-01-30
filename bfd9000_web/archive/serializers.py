@@ -18,7 +18,7 @@ from .models import (
     Encounter, Location, ImagingStudy, Record
 )
 from .constants import (
-    SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY
+    SYSTEM_BODY_SITE, SYSTEM_ORIENTATION, SYSTEM_MODALITY
 )
 
 class CodingSerializer(serializers.ModelSerializer):
@@ -184,7 +184,7 @@ class RecordUploadSerializer(serializers.ModelSerializer):
     # Use SlugRelatedField for idiomatic lookup by 'code'
     record_type = serializers.SlugRelatedField(
         slug_field='code',
-        queryset=Coding.objects.filter(system=SYSTEM_RECORD_TYPE),
+        queryset=Coding.objects.filter(system=SYSTEM_BODY_SITE),
         write_only=True
     )
     orientation = serializers.SlugRelatedField(
