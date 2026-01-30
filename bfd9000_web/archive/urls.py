@@ -45,6 +45,7 @@ urlpatterns = [
     path('encounters/create/', views.encounter_create, name='encounter_create'),
     path('records/', views.records, name='records'),
     path('records/<str:record_id>/', views.record_detail, name='record_detail'),
+    path('scan/', views.scan, name='scan'),
     # API routes
     path('api/', include(router.urls)),
     path('api/', include(subjects_router.urls)),

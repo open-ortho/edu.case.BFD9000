@@ -1,0 +1,703 @@
+{% extends 'archive/base_index.html' %}
+
+{% block content %}
+<div class="flex-[1_1_0] flex flex-col overflow-auto p-6 gap-6">
+    <!-- Subject & Encounter Selection -->
+    <div class="card bg-base-200 shadow">
+        <div class="card-body">
+            <h2 class="card-title text-lg">Subject & Encounter</h2>
+            <div class="grid grid-cols-1 gap-4">
+                <!-- Subject Selection -->
+                <div class="form-control flex flex-row items-center">
+                    <div class="join mr-4">
+                        <input
+                            type="text"
+                            id="subject-id"
+                            placeholder="Enter subject ID..."
+                            class="input input-bordered input-sm join-item flex-1"
+                        />
+                        <button id="search-subject" class="btn btn-sm btn-primary join-item">
+                            Search
+                        </button>
+                    </div>
+                    <div id="subject-info" class="text-sm text-base-content/70 hidden !mt-0">
+                        <div class="alert alert-info !p-1">
+                            <strong>Collection:</strong> <span id="subject-collection"></span>
+                            <strong>Sex:</strong> <span id="subject-sex"></span>
+                            <strong>Encounters:</strong> <span id="subject-encounters"></span>
+                        </div>
+                    </div>
+                    <div id="subject-error" class="mt-2 text-sm text-error hidden"></div>
+                </div>
+
+                <!-- Encounter Selection -->
+                <div class="form-control flex flex-row items-center">
+                    <div class="mr-4 min-w-64">
+                        <select id="encounter-select" class="select select-bordered select-sm w-full" disabled>
+                            <option value="">Select subject first...</option>
+                        </select>
+                    </div>
+                    <div id="encounter-info" class="text-sm text-base-content/70 hidden !mt-0">
+                        <div class="alert alert-info !p-1">
+                            <strong>Date:</strong> <span id="encounter-date"></span>
+                            <strong>Age:</strong> <span id="encounter-age"></span>
+                            <strong>Records:</strong> <span id="encounter-records"></span>
+                        </div>
+                    </div>
+                    <div id="encounter-error" class="text-sm text-error hidden"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Upload -->
+    <div class="card bg-base-200 shadow">
+        <div class="card-body">
+            <h2 class="card-title text-lg">Scan File</h2>
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Upload Image (PNG or STL)</span>
+                </label>
+                <input
+                    type="file"
+                    id="file-upload"
+                    accept=".png,.stl"
+                    class="file-input file-input-bordered file-input-sm w-full"
+                />
+                <label class="label">
+                    <span class="label-text-alt">Maximum file size: 100MB</span>
+                </label>
+            </div>
+            <div id="file-preview" class="mt-2 hidden">
+                <div class="alert py-2 px-3">
+                    <div>
+                        <div><strong>File:</strong> <span id="file-name"></span></div>
+                        <div><strong>Size:</strong> <span id="file-size"></span></div>
+                        <div><strong>Type:</strong> <span id="file-type"></span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Record Metadata -->
+    <div class="card bg-base-200 shadow">
+        <div class="card-body">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="card-title text-lg">Record Metadata</h2>
+                <button id="ai-fill-button" class="btn btn-sm btn-secondary" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+                    </svg>
+                    Classify with AI
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-[18rem_1fr] gap-4">
+                <div class="grid grid-cols-[1fr_2rem] gap-2">
+                    <!-- Record Type -->
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Record Type <span class="text-error">*</span></span>
+                        </label>
+                        <select id="record-type" class="select select-bordered select-sm">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    <span id="ai-confidence"></span>
+    
+                    <!-- Orientation -->
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Orientation <span class="text-error">*</span></span>
+                        </label>
+                        <select id="orientation" class="select select-bordered select-sm">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    <span id="ai-confidence"></span>
+    
+                    <!-- Modality -->
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Modality <span class="text-error">*</span></span>
+                        </label>
+                        <select id="modality" class="select select-bordered select-sm">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    <span id="ai-confidence"></span>
+    
+                    <!-- Operator -->
+                    <div class="form-control col-span-2">
+                        <label class="label">
+                            <span class="label-text">Operator</span>
+                        </label>
+                        <input
+                            type="text"
+                            id="operator"
+                            placeholder="Defaults to current user"
+                            class="input input-bordered input-sm"
+                        />
+                    </div>
+    
+                    <!-- Acquisition Date -->
+                    <div class="form-control col-span-2">
+                        <label class="label">
+                            <span class="label-text">Acquisition Date</span>
+                        </label>
+                        <input
+                            type="date"
+                            id="acquisition-date"
+                            class="input input-bordered input-sm"
+                        />
+                    </div>
+                </div>
+                <div>
+                    tjaesogjsaldkgjalk
+                </div>
+            </div>
+
+            <!-- AI Status Message -->
+            <div id="ai-status" class="mt-4 hidden"></div>
+        </div>
+    </div>
+
+    <!-- Submit Button -->
+    <div class="card bg-base-200 shadow">
+        <div class="card-body">
+            <div class="flex justify-between items-center">
+                <div id="submit-status" class="text-sm"></div>
+                <button id="submit-button" class="btn btn-primary" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                    </svg>
+                    Submit Record
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block head %}
+{{ block.super }}
+<script>
+    // ========================================
+    // STATE MANAGEMENT
+    // ========================================
+    const state = {
+        subject: null,
+        encounter: null,
+        file: null,
+        valuesets: {
+            record_types: [],
+            orientations: [],
+            modalities: []
+        }
+    };
+
+    // ========================================
+    // API FUNCTIONS
+    // ========================================
+
+    async function fetchSubject(subjectId) {
+        const response = await fetch(`/api/subjects/${subjectId}/`);
+        if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error('Subject not found');
+            }
+            throw new Error(`API error: ${response.status}`);
+        }
+        return await response.json();
+    }
+
+    async function fetchEncounter(encounterId) {
+        const response = await fetch(`/api/encounters/${encounterId}/`);
+        if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error('Encounter not found');
+            }
+            throw new Error(`API error: ${response.status}`);
+        }
+        return await response.json();
+    }
+
+    async function fetchEncountersForSubject(subjectId) {
+        const response = await fetch(`/api/encounters/?subject=${subjectId}`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch encounters: ${response.status}`);
+        }
+        const data = await response.json();
+        return data.results || [];
+    }
+
+    async function fetchValueset(type) {
+        const response = await fetch(`/api/valuesets/?type=${type}`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch valueset: ${type}`);
+        }
+        return await response.json();
+    }
+
+    async function createRecord(encounterId, formData) {
+        const response = await fetch(`/api/encounters/${encounterId}/records/`, {
+            method: 'POST',
+            body: formData
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error?.message || `API error: ${response.status}`);
+        }
+        return await response.json();
+    }
+
+    async function queryAI(file) {
+        // Call four BFD9020 AI endpoints to classify the X-ray image
+        const formData = new FormData();
+        formData.append('image', file);
+
+        // Helper to fetch and parse JSON, throw on error
+        async function fetchAI(url) {
+            const resp = await fetch(url, {
+                method: 'POST',
+                body: formData
+            });
+            if (!resp.ok) {
+                const errorText = await resp.text();
+                throw new Error(`AI service error: ${url} - ${resp.status} - ${errorText}`);
+            }
+            return await resp.json();
+        }
+
+        // Endpoints to call
+        const endpoints = [
+            'https://wingate.case.edu/bfd9020/xray-info',
+            'https://wingate.case.edu/bfd9020/xray-class',
+            'https://wingate.case.edu/bfd9020/lateral-fliprot',
+            'https://wingate.case.edu/bfd9020/frontal-fliprot'
+        ];
+
+        // Fetch all in parallel
+        const result = await Promise.all(
+            endpoints.map(fetchAI)
+        );
+        console.log(result);
+        return result;
+    }
+
+    // ========================================
+    // UI UPDATE FUNCTIONS
+    // ========================================
+
+    function showSubjectInfo(subject) {
+        document.getElementById('subject-collection').textContent = subject.collection || '-';
+        document.getElementById('subject-sex').textContent = subject.gender || '-';
+        document.getElementById('subject-encounters').textContent = subject.encounter_count || 0;
+        document.getElementById('subject-info').classList.remove('hidden');
+        document.getElementById('subject-error').classList.add('hidden');
+    }
+
+    function showSubjectError(message) {
+        document.getElementById('subject-error').textContent = message;
+        document.getElementById('subject-error').classList.remove('hidden');
+        document.getElementById('subject-info').classList.add('hidden');
+    }
+
+    function showEncounterInfo(encounter) {
+        document.getElementById('encounter-date').textContent = encounter.actual_period_start || '-';
+        document.getElementById('encounter-age').textContent = encounter.procedure_occurrence_age
+            ? `${encounter.procedure_occurrence_age} years`
+            : '-';
+        document.getElementById('encounter-records').textContent = encounter.record_count || 0;
+        document.getElementById('encounter-info').classList.remove('hidden');
+        document.getElementById('encounter-error').classList.add('hidden');
+    }
+
+    function showEncounterError(message) {
+        document.getElementById('encounter-error').textContent = message;
+        document.getElementById('encounter-error').classList.remove('hidden');
+        document.getElementById('encounter-info').classList.add('hidden');
+    }
+
+    function populateEncounterSelect(encounters) {
+        const select = document.getElementById('encounter-select');
+        select.innerHTML = '';
+
+        if (encounters.length === 0) {
+            select.innerHTML = '<option value="">No encounters found</option>';
+            select.disabled = true;
+            return;
+        }
+
+        select.innerHTML = '<option value="">Select encounter...</option>';
+        encounters.forEach(enc => {
+            const option = document.createElement('option');
+            option.value = enc.id;
+            const date = enc.actual_period_start || 'No date';
+            const age = enc.procedure_occurrence_age ? `${enc.procedure_occurrence_age}y` : '';
+            const records = enc.record_count ? `${enc.record_count} records` : '0 records';
+            option.textContent = `Encounter ${enc.id} - ${date} ${age ? `(${age})` : ''} - ${records}`;
+            select.appendChild(option);
+        });
+        select.disabled = false;
+    }
+
+    function showFilePreview(file) {
+        document.getElementById('file-name').textContent = file.name;
+        document.getElementById('file-size').textContent = formatFileSize(file.size);
+        document.getElementById('file-type').textContent = file.type || 'Unknown';
+        document.getElementById('file-preview').classList.remove('hidden');
+    }
+
+    function populateSelect(selectId, options) {
+        const select = document.getElementById(selectId);
+        select.innerHTML = '<option value="">Select...</option>';
+        options.forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt.id;
+            option.textContent = opt.display;
+            select.appendChild(option);
+        });
+    }
+
+    function clearFormFields() {
+        document.getElementById('record-type').value = '';
+        document.getElementById('orientation').value = '';
+        document.getElementById('modality').value = '';
+        document.getElementById('operator').value = '';
+        // Reset acquisition date to today
+        document.getElementById('acquisition-date').valueAsDate = new Date();
+        // Hide AI status
+        document.getElementById('ai-status').classList.add('hidden');
+    }
+
+    function updateSubmitButton() {
+        const hasSubject = state.subject !== null;
+        const hasEncounter = state.encounter !== null;
+        const hasFile = state.file !== null;
+        const hasRecordType = document.getElementById('record-type').value !== '';
+        const hasOrientation = document.getElementById('orientation').value !== '';
+        const hasModality = document.getElementById('modality').value !== '';
+
+        const canSubmit = hasSubject && hasEncounter && hasFile && hasRecordType && hasOrientation && hasModality;
+        document.getElementById('submit-button').disabled = !canSubmit;
+
+        // Update AI button (needs file)
+        document.getElementById('ai-fill-button').disabled = !hasFile;
+    }
+
+    function showAIStatus(message, isError = false) {
+        const statusDiv = document.getElementById('ai-status');
+        statusDiv.className = `alert ${isError ? 'alert-error' : 'alert-success'} py-2 px-3`;
+        statusDiv.textContent = message;
+        statusDiv.classList.remove('hidden');
+        setTimeout(() => statusDiv.classList.add('hidden'), 3000);
+    }
+
+    function showSubmitStatus(message, isError = false) {
+        const statusDiv = document.getElementById('submit-status');
+        statusDiv.className = `text-sm ${isError ? 'text-error' : 'text-success'}`;
+        statusDiv.textContent = message;
+    }
+
+    // ========================================
+    // UTILITY FUNCTIONS
+    // ========================================
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    // ========================================
+    // EVENT HANDLERS
+    // ========================================
+
+    async function handleSearchSubject() {
+        const subjectId = document.getElementById('subject-id').value.trim();
+        if (!subjectId) {
+            showSubjectError('Please enter a subject ID');
+            return;
+        }
+
+        try {
+            const subject = await fetchSubject(subjectId);
+            state.subject = subject;
+            showSubjectInfo(subject);
+
+            // Load encounters for this subject
+            const encounters = await fetchEncountersForSubject(subjectId);
+            populateEncounterSelect(encounters);
+
+            // Reset encounter selection
+            state.encounter = null;
+            document.getElementById('encounter-info').classList.add('hidden');
+            document.getElementById('encounter-error').classList.add('hidden');
+
+            updateSubmitButton();
+        } catch (error) {
+            state.subject = null;
+            state.encounter = null;
+            showSubjectError(error.message);
+
+            // Reset encounter dropdown
+            const select = document.getElementById('encounter-select');
+            select.innerHTML = '<option value="">Select subject first...</option>';
+            select.disabled = true;
+
+            updateSubmitButton();
+        }
+    }
+
+    async function handleEncounterSelect() {
+        const encounterId = document.getElementById('encounter-select').value;
+        if (!encounterId) {
+            state.encounter = null;
+            document.getElementById('encounter-info').classList.add('hidden');
+            document.getElementById('encounter-error').classList.add('hidden');
+            updateSubmitButton();
+            return;
+        }
+
+        try {
+            const encounter = await fetchEncounter(encounterId);
+            state.encounter = encounter;
+            showEncounterInfo(encounter);
+            updateSubmitButton();
+        } catch (error) {
+            state.encounter = null;
+            showEncounterError(error.message);
+            updateSubmitButton();
+        }
+    }
+
+    function handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) {
+            state.file = null;
+            document.getElementById('file-preview').classList.add('hidden');
+            clearFormFields();
+            updateSubmitButton();
+            return;
+        }
+
+        // Validate file size (100MB)
+        if (file.size > 100 * 1024 * 1024) {
+            alert('File size exceeds 100MB limit');
+            event.target.value = '';
+            state.file = null;
+            clearFormFields();
+            updateSubmitButton();
+            return;
+        }
+
+        // Validate file type
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (ext !== 'png' && ext !== 'stl') {
+            alert('Only PNG and STL files are supported');
+            event.target.value = '';
+            state.file = null;
+            clearFormFields();
+            updateSubmitButton();
+            return;
+        }
+
+        state.file = file;
+        showFilePreview(file);
+        clearFormFields();
+        updateSubmitButton();
+    }
+
+    async function handleAIFill() {
+        if (!state.file) return;
+
+        const button = document.getElementById('ai-fill-button');
+        button.disabled = true;
+        button.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Processing...';
+
+        try {
+            const result = await queryAI(state.file);
+
+            // Map AI type_prediction to record_type select value
+            if (result.record_type) {
+                const recordTypeSelect = document.getElementById('record-type');
+                // Try to find a matching option (case-insensitive)
+                const option = Array.from(recordTypeSelect.options).find(
+                    opt => opt.value.toLowerCase() === result.record_type.toLowerCase() ||
+                           opt.textContent.toLowerCase() === result.record_type.toLowerCase()
+                );
+                if (option) {
+                    recordTypeSelect.value = option.value;
+                }
+            }
+
+            // Map AI orientation prediction if available
+            if (result.orientation) {
+                const orientationSelect = document.getElementById('orientation');
+                const option = Array.from(orientationSelect.options).find(
+                    opt => opt.value.toLowerCase() === result.orientation.toLowerCase() ||
+                           opt.textContent.toLowerCase() === result.orientation.toLowerCase()
+                );
+                if (option) {
+                    orientationSelect.value = option.value;
+                }
+            }
+
+            // Set modality to RG (Radiography) for X-ray images
+            if (result.modality) {
+                const modalitySelect = document.getElementById('modality');
+                const option = Array.from(modalitySelect.options).find(
+                    opt => opt.value.toLowerCase() === result.modality.toLowerCase() ||
+                           opt.textContent.toLowerCase() === result.modality.toLowerCase()
+                );
+                if (option) {
+                    modalitySelect.value = option.value;
+                }
+            }
+
+            showAIStatus('Fields populated from AI analysis');
+            updateSubmitButton();
+        } catch (error) {
+            showAIStatus('AI processing failed: ' + error.message, true);
+        } finally {
+            button.disabled = false;
+            button.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+                </svg>
+                Classify with AI
+            `;
+        }
+    }
+
+    async function handleSubmit() {
+        if (!state.encounter || !state.file) return;
+
+        const button = document.getElementById('submit-button');
+        button.disabled = true;
+        button.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Submitting...';
+        showSubmitStatus('Uploading record...');
+
+        try {
+            const formData = new FormData();
+            formData.append('file', state.file);
+            formData.append('record_type', document.getElementById('record-type').value);
+            formData.append('orientation', document.getElementById('orientation').value);
+            formData.append('modality', document.getElementById('modality').value);
+
+            const operator = document.getElementById('operator').value.trim();
+            if (operator) {
+                formData.append('operator', operator);
+            }
+
+            const acquisitionDate = document.getElementById('acquisition-date').value;
+            if (acquisitionDate) {
+                formData.append('acquisition_date', acquisitionDate);
+            }
+
+            const record = await createRecord(state.encounter.id, formData);
+
+            showSubmitStatus('Record created successfully!');
+
+            // Redirect to record detail page after 1 second
+            setTimeout(() => {
+                window.location.href = `/records/${record.id}/`;
+            }, 1000);
+        } catch (error) {
+            showSubmitStatus('Error: ' + error.message, true);
+            button.disabled = false;
+            button.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                </svg>
+                Submit Record
+            `;
+        }
+    }
+
+    // ========================================
+    // INITIALIZATION
+    // ========================================
+
+    function resetPageState() {
+        // Clear subject
+        state.subject = null;
+        document.getElementById('subject-id').value = '';
+        document.getElementById('subject-info').classList.add('hidden');
+        document.getElementById('subject-error').classList.add('hidden');
+
+        // Clear encounter
+        state.encounter = null;
+        const encounterSelect = document.getElementById('encounter-select');
+        encounterSelect.innerHTML = '<option value="">Select subject first...</option>';
+        encounterSelect.disabled = true;
+        document.getElementById('encounter-info').classList.add('hidden');
+        document.getElementById('encounter-error').classList.add('hidden');
+
+        // Clear file
+        state.file = null;
+        document.getElementById('file-upload').value = '';
+        document.getElementById('file-preview').classList.add('hidden');
+
+        // Clear form fields
+        clearFormFields();
+
+        // Clear submit status
+        document.getElementById('submit-status').textContent = '';
+
+        // Update button states
+        updateSubmitButton();
+    }
+
+    async function init() {
+        // Reset all state on page load
+        resetPageState();
+
+        // Set today's date as default
+        document.getElementById('acquisition-date').valueAsDate = new Date();
+
+        // Load valuesets
+        try {
+            const [recordTypes, orientations, modalities] = await Promise.all([
+                fetchValueset('record_types'),
+                fetchValueset('orientations'),
+                fetchValueset('modalities')
+            ]);
+
+            state.valuesets.record_types = recordTypes;
+            state.valuesets.orientations = orientations;
+            state.valuesets.modalities = modalities;
+
+            populateSelect('record-type', recordTypes);
+            populateSelect('orientation', orientations);
+            populateSelect('modality', modalities);
+        } catch (error) {
+            console.error('Failed to load valuesets:', error);
+            alert('Failed to load form options. Please refresh the page.');
+        }
+
+        // Attach event listeners
+        document.getElementById('search-subject').addEventListener('click', handleSearchSubject);
+        document.getElementById('encounter-select').addEventListener('change', handleEncounterSelect);
+        document.getElementById('file-upload').addEventListener('change', handleFileUpload);
+        document.getElementById('ai-fill-button').addEventListener('click', handleAIFill);
+        document.getElementById('submit-button').addEventListener('click', handleSubmit);
+
+        // Enable Enter key for subject search
+        document.getElementById('subject-id').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleSearchSubject();
+        });
+
+        // Watch form fields for changes
+        ['record-type', 'orientation', 'modality'].forEach(id => {
+            document.getElementById(id).addEventListener('change', updateSubmitButton);
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+</script>
+{% endblock %}

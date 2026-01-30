@@ -228,8 +228,8 @@ class RecordViewSet(viewsets.ModelViewSet):
     """
     queryset = Record.objects.all()
     serializer_class = RecordSerializer
-    filterset_fields = ['encounter', 'encounter__subject', 'encounter__subject__collection',
-                        'encounter__subject__collection__short_name']
+    filterset_fields = ['encounter__id', 'encounter__subject', 'encounter__subject__collection',
+                        'encounter__subject__collection__short_name', 'encounter']
     search_fields = ['id', 'encounter__id', 'encounter__subject__id']
 
     def get_serializer_class(self) -> Type[serializers.Serializer]:
@@ -374,3 +374,7 @@ def records(request):
 @login_required
 def record_detail(request, record_id):
     return render(request, "archive/record_detail.html", {"record_id": record_id})
+
+@login_required
+def scan(request):
+    return render(request, "archive/scan.html")
