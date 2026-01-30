@@ -172,7 +172,9 @@ class EncounterViewSet(viewsets.ModelViewSet):
 
     Manages clinical encounters or visits.
     """
-    queryset = Encounter.objects.all()
+    queryset = Encounter.objects.annotate(
+        record_count=Count('records', distinct=True)
+    ).all()
     serializer_class = EncounterSerializer
     filterset_fields = ['subject', 'actual_period_start']
 

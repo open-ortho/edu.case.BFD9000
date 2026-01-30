@@ -68,92 +68,44 @@
 </div>
 {% endblock %} {% block head %} {{ block.super }}
 <script>
-    // ========================================
-    // DATA LAYER - Replace this section when connecting to real API
-    // ========================================
-
-    // Dummy data for development
-    const DUMMY_ENCOUNTERS = [
-        { id: "E001", subject_id: "B1234", records: 3, date: "2024-01-15" },
-        { id: "E002", subject_id: "B1234", records: 2, date: "2024-02-20" },
-        { id: "E003", subject_id: "B5678", records: 1, date: "2024-01-10" },
-        { id: "E004", subject_id: "B5678", records: 2, date: "2024-03-05" },
-        { id: "E005", subject_id: "B9101", records: 4, date: "2024-01-25" },
-        { id: "E006", subject_id: "B9101", records: 1, date: "2024-02-15" },
-        { id: "E007", subject_id: "B1123", records: 2, date: "2024-01-30" },
-        { id: "E008", subject_id: "B1415", records: 1, date: "2024-02-10" },
-        { id: "E009", subject_id: "B1617", records: 3, date: "2024-01-20" },
-        { id: "E010", subject_id: "B1617", records: 2, date: "2024-03-01" },
-        { id: "E011", subject_id: "B1819", records: 1, date: "2024-02-05" },
-        { id: "E012", subject_id: "B2021", records: 2, date: "2024-01-12" },
-        { id: "E013", subject_id: "B2223", records: 3, date: "2024-02-25" },
-        { id: "E014", subject_id: "B2425", records: 1, date: "2024-01-08" },
-        { id: "E015", subject_id: "B2627", records: 2, date: "2024-03-10" },
-        { id: "E016", subject_id: "B2829", records: 1, date: "2024-02-18" },
-        { id: "E017", subject_id: "B3031", records: 2, date: "2024-01-22" },
-        { id: "E018", subject_id: "B3233", records: 3, date: "2024-02-28" },
-        { id: "E019", subject_id: "B3435", records: 1, date: "2024-01-05" },
-        { id: "E020", subject_id: "B3637", records: 4, date: "2024-03-15" },
-        { id: "E021", subject_id: "B3839", records: 1, date: "2024-02-12" },
-        { id: "E022", subject_id: "B4041", records: 2, date: "2024-01-18" },
-        { id: "E023", subject_id: "B4243", records: 3, date: "2024-03-20" },
-        { id: "E024", subject_id: "B4445", records: 1, date: "2024-02-08" },
-        { id: "E025", subject_id: "B4647", records: 2, date: "2024-01-28" },
-        { id: "E026", subject_id: "B4849", records: 1, date: "2024-02-22" },
-        { id: "E027", subject_id: "B5051", records: 2, date: "2024-01-14" },
-        { id: "E028", subject_id: "B5253", records: 3, date: "2024-03-08" },
-        { id: "E029", subject_id: "B5455", records: 1, date: "2024-02-16" },
-        { id: "E030", subject_id: "B5657", records: 4, date: "2024-01-26" },
-        { id: "E031", subject_id: "B5859", records: 1, date: "2024-03-12" },
-        { id: "E032", subject_id: "B6061", records: 2, date: "2024-02-14" },
-        { id: "E033", subject_id: "B6263", records: 3, date: "2024-01-11" },
-        { id: "E034", subject_id: "B6465", records: 1, date: "2024-03-18" },
-        { id: "E035", subject_id: "B6667", records: 2, date: "2024-02-24" },
-        { id: "E036", subject_id: "B6869", records: 1, date: "2024-01-16" },
-    ];
-
     /**
      * Fetch encounters from the API
      * @param {Object} params - Query parameters
      * @param {string} params.search - Search query for subject identifier
+     * @param {string} params.subject - Search query for subject identifier
      * @param {number} params.page - Page number (1-indexed)
      * @param {number} params.page_size - Number of items per page
      * @returns {Promise<Object>} Response with { count, next, previous, results }
      *
      * TO SWITCH TO REAL API:
      * Replace the body of this function with:
-     * const queryParams = new URLSearchParams({ search, page, page_size });
+     * const queryParams = new URLSearchParams({ search, subject, page, page_size });
      * const response = await fetch(`/api/encounters/?${queryParams}`);
      * return await response.json();
      */
     async function fetchEncounters({
         search = "",
+        subject = "",
         page = 1,
         page_size = 20,
     } = {}) {
-        // Simulate API delay
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        const params = new URLSearchParams({
+            page: page.toString(),
+            page_size: page_size.toString(),
+        });
 
-        // Filter encounters based on search query (searches subject_id)
-        let filtered = DUMMY_ENCOUNTERS;
         if (search) {
-            const searchLower = search.toLowerCase();
-            filtered = DUMMY_ENCOUNTERS.filter((e) =>
-                e.subject_id.toLowerCase().includes(searchLower)
-            );
+            params.set("search", search);
+        }
+        if (subject) {
+            params.set("subject", subject);
         }
 
-        // Paginate results
-        const start = (page - 1) * page_size;
-        const end = start + page_size;
-        const results = filtered.slice(start, end);
-
-        return {
-            count: filtered.length,
-            next: end < filtered.length ? page + 1 : null,
-            previous: page > 1 ? page - 1 : null,
-            results: results,
-        };
+        const response = await fetch(`/api/encounters/?${params}`);
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+        return await response.json();
     }
 
     // ========================================
@@ -174,25 +126,25 @@
                 encounterBtn.className = "btn btn-soft btn-xs";
                 encounterBtn.textContent = encounter.id;
                 encounterBtn.onclick = () =>
-                    (window.location.href = `/records?search=${encounter.id}`);
+                    (window.location.href = `/records?encounter=${encounter.id}`);
                 encounterId.appendChild(encounterBtn);
 
                 // Subject ID column with primary button
                 const subject = document.createElement("td");
                 const subjectBtn = document.createElement("button");
                 subjectBtn.className = "btn btn-soft btn-xs";
-                subjectBtn.textContent = encounter.subject_id;
+                subjectBtn.textContent = 'B000' + encounter.subject;
                 subjectBtn.onclick = () =>
-                    (window.location.href = `/encounters?search=${encounter.subject_id}`);
+                    (window.location.href = `/encounters?subject=${encounter.subject}`);
                 subject.appendChild(subjectBtn);
 
                 // Records column with default button
                 const records = document.createElement("td");
                 const recordsBtn = document.createElement("button");
                 recordsBtn.className = "btn btn-soft btn-xs";
-                recordsBtn.textContent = encounter.records || 0;
+                recordsBtn.textContent = encounter.record_count;
                 recordsBtn.onclick = () =>
-                    (window.location.href = `/records?search=${encounter.id}`);
+                    (window.location.href = `/records?encounter=${encounter.id}`);
                 records.appendChild(recordsBtn);
 
                 // Date column (plain text)

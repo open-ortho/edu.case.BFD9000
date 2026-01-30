@@ -128,7 +128,6 @@
     const tableManager = new PaginatedTableManager({
         tableBodyId: "record_table_body",
         columnCount: 6,
-        queryParams: ["subject", "encounter"],
         fetchData: fetchRecords,
         renderRows: (records) => {
             return records.map((record) => {

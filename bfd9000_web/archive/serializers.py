@@ -83,6 +83,8 @@ class EncounterSerializer(serializers.ModelSerializer):
     age_at_encounter = serializers.FloatField(required=False)
     subject = serializers.PrimaryKeyRelatedField(queryset=Subject.objects.all(), required=False)
     
+    record_count = serializers.IntegerField(read_only=True)
+    
     class Meta:
         model = Encounter
         fields = '__all__'

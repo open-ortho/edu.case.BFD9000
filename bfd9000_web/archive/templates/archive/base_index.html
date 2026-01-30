@@ -118,7 +118,6 @@ class PaginatedTableManager {
      * @param {Function} [config.getEmptyStateMessage] - Optional function that returns empty state message. Receives hasSearch boolean, returns string
      * @param {Function} [config.renderEmptyState] - Optional custom empty state renderer (overrides getEmptyStateMessage)
      * @param {Function} [config.renderLoadingState] - Optional custom loading state renderer
-     * @param {Array<string>} [config.queryParams=[]] - Additional query parameters to track in URL
      * @param {Function} [config.onRowClick] - Optional callback when a row is clicked, receives the item data
      */
     constructor(config) {
@@ -139,7 +138,6 @@ class PaginatedTableManager {
         this.getEmptyStateMessage = config.getEmptyStateMessage || this._defaultGetEmptyStateMessage.bind(this);
         this.renderEmptyState = config.renderEmptyState || this._defaultRenderEmptyState.bind(this);
         this.renderLoadingState = config.renderLoadingState || this._defaultRenderLoadingState.bind(this);
-        this.queryParams = config.queryParams || [];
         this.onRowClick = config.onRowClick || null;
 
         // State
@@ -321,9 +319,9 @@ class PaginatedTableManager {
         };
 
         // Extract custom parameters
-        for (const param of this.queryParams) {
+        for (const param in Object.keys(this.customParams)) {
             const value = params.get(param);
-            if (value !== null) {
+            if (value !== null && value !== 'search' && value !== 'page') {
                 state.customParams[param] = value;
             }
         }
