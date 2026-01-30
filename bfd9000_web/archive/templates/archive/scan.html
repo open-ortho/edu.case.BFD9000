@@ -85,16 +85,41 @@
         <div class="card-body">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="card-title text-lg">Record Metadata</h2>
-                <button id="ai-fill-button" class="btn btn-sm btn-secondary" disabled>
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
-                    </svg>
-                    Classify with AI
-                </button>
+                <div class="flex gap-2">
+                    <!-- Image manipulation buttons -->
+                    <button id="flip-button" class="btn btn-sm btn-ghost" disabled title="Flip horizontally">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                        </svg>
+                        Flip
+                    </button>
+                    <button id="rotate-left-button" class="btn btn-sm btn-ghost" disabled title="Rotate 90° counter-clockwise">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+                        </svg>
+                        Rotate L
+                    </button>
+                    <button id="rotate-right-button" class="btn btn-sm btn-ghost" disabled title="Rotate 90° clockwise">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m15 15 6-6m0 0-6-6m6 6H9a6 6 0 0 0 0 12h3" />
+                        </svg>
+                        Rotate R
+                    </button>
+                    <div class="divider divider-horizontal mx-0"></div>
+                    <button id="ai-fill-button" class="btn btn-sm btn-secondary" disabled>
+                        </svg>
+                        Classify with AI
+                    </button>
+                </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-[18rem_1fr] gap-4">
+            <div class="grid grid-cols-1 lg:grid-cols-[18rem_1fr] gap-4">
                 <div class="grid grid-cols-[1fr_2rem] gap-2">
+                    <style>
+                        label {
+                            min-width: 8rem;
+                        }
+                    </style>
                     <!-- Record Type -->
                     <div class="form-control">
                         <label class="label">
@@ -153,8 +178,43 @@
                         />
                     </div>
                 </div>
-                <div>
-                    tjaesogjsaldkgjalk
+                <div class="flex flex-col">
+                    <div id="image-preview" class="w-full grow bg-base-100 border rounded flex flex-col items-center justify-center">
+                        <img id="uploaded-image" src="" alt="Uploaded Image Preview" class="max-w-full max-h-80 object-contain" />
+                        <span id="no-image-text" class="text-base-content/60">No image uploaded.</span>
+                    </div>
+                    <script>
+                        // Display image preview if file is a PNG
+                        function updateImagePreview(file) {
+                            const img = document.getElementById('uploaded-image');
+                            const noImg = document.getElementById('no-image-text');
+                            if (file && file.type === 'image/png') {
+                                const reader = new FileReader();
+                                reader.onload = function(e) {
+                                    img.src = e.target.result;
+                                    img.classList.remove('hidden');
+                                    noImg.classList.add('hidden');
+                                };
+                                reader.readAsDataURL(file);
+                            } else {
+                                img.src = '';
+                                img.classList.add('hidden');
+                                noImg.classList.remove('hidden');
+                            }
+                        }
+                        // Hook into file upload event
+                        document.addEventListener('DOMContentLoaded', function() {
+                            const fileInput = document.getElementById('file-upload');
+                            fileInput.addEventListener('change', function(e) {
+                                updateImagePreview(e.target.files[0]);
+                            });
+                            // Also clear preview on reset
+                            const resetPreview = () => updateImagePreview(null);
+                            // When subject or encounter changes, clear preview
+                            document.getElementById('search-subject').addEventListener('click', resetPreview);
+                            document.getElementById('encounter-select').addEventListener('change', resetPreview);
+                        });
+                    </script>
                 </div>
             </div>
 
@@ -257,31 +317,15 @@
         const formData = new FormData();
         formData.append('image', file);
 
-        // Helper to fetch and parse JSON, throw on error
-        async function fetchAI(url) {
-            const resp = await fetch(url, {
-                method: 'POST',
-                body: formData
-            });
-            if (!resp.ok) {
-                const errorText = await resp.text();
-                throw new Error(`AI service error: ${url} - ${resp.status} - ${errorText}`);
-            }
-            return await resp.json();
+        const resp = await fetch('https://wingate.case.edu/bfd9020/xray-info', {
+            method: 'POST',
+            body: formData
+        });
+        if (!resp.ok) {
+            const errorText = await resp.text();
+            throw new Error(`AI service error: ${url} - ${resp.status} - ${errorText}`);
         }
-
-        // Endpoints to call
-        const endpoints = [
-            'https://wingate.case.edu/bfd9020/xray-info',
-            'https://wingate.case.edu/bfd9020/xray-class',
-            'https://wingate.case.edu/bfd9020/lateral-fliprot',
-            'https://wingate.case.edu/bfd9020/frontal-fliprot'
-        ];
-
-        // Fetch all in parallel
-        const result = await Promise.all(
-            endpoints.map(fetchAI)
-        );
+        const result = await resp.json();
         console.log(result);
         return result;
     }
@@ -383,8 +427,12 @@
         const canSubmit = hasSubject && hasEncounter && hasFile && hasRecordType && hasOrientation && hasModality;
         document.getElementById('submit-button').disabled = !canSubmit;
 
-        // Update AI button (needs file)
-        document.getElementById('ai-fill-button').disabled = !hasFile;
+        // Update AI and image manipulation buttons (need file and must be PNG)
+        const isPNG = hasFile && state.file.name.toLowerCase().endsWith('.png');
+        document.getElementById('ai-fill-button').disabled = !isPNG;
+        document.getElementById('flip-button').disabled = !isPNG;
+        document.getElementById('rotate-left-button').disabled = !isPNG;
+        document.getElementById('rotate-right-button').disabled = !isPNG;
     }
 
     function showAIStatus(message, isError = false) {
@@ -411,6 +459,84 @@
         const sizes = ['Bytes', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    // ========================================
+    // IMAGE MANIPULATION FUNCTIONS
+    // ========================================
+
+    async function flipImage() {
+        if (!state.file) return;
+        
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        return new Promise((resolve, reject) => {
+            img.onload = () => {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                
+                // Flip horizontally
+                ctx.translate(canvas.width, 0);
+                ctx.scale(-1, 1);
+                ctx.drawImage(img, 0, 0);
+                
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        const newFile = new File([blob], state.file.name, { type: 'image/png' });
+                        state.file = newFile;
+                        showFilePreview(newFile);
+                        resolve();
+                    } else {
+                        reject(new Error('Failed to create flipped image'));
+                    }
+                }, 'image/png');
+            };
+            
+            img.onerror = () => reject(new Error('Failed to load image'));
+            img.src = URL.createObjectURL(state.file);
+        });
+    }
+
+    async function rotateImage(degrees) {
+        if (!state.file) return;
+        
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        return new Promise((resolve, reject) => {
+            img.onload = () => {
+                // For 90 or 270 degree rotation, swap width and height
+                if (degrees === 90 || degrees === 270) {
+                    canvas.width = img.height;
+                    canvas.height = img.width;
+                } else {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                }
+                
+                // Translate to center, rotate, then translate back
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+                ctx.rotate((degrees * Math.PI) / 180);
+                ctx.drawImage(img, -img.width / 2, -img.height / 2);
+                
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        const newFile = new File([blob], state.file.name, { type: 'image/png' });
+                        state.file = newFile;
+                        showFilePreview(newFile);
+                        resolve();
+                    } else {
+                        reject(new Error('Failed to create rotated image'));
+                    }
+                }, 'image/png');
+            };
+            
+            img.onerror = () => reject(new Error('Failed to load image'));
+            img.src = URL.createObjectURL(state.file);
+        });
     }
 
     // ========================================
@@ -510,6 +636,45 @@
         showFilePreview(file);
         clearFormFields();
         updateSubmitButton();
+    }
+
+    async function handleFlip() {
+        const button = document.getElementById('flip-button');
+        button.disabled = true;
+        
+        try {
+            await flipImage();
+        } catch (error) {
+            alert('Failed to flip image: ' + error.message);
+        } finally {
+            updateSubmitButton();
+        }
+    }
+
+    async function handleRotateLeft() {
+        const button = document.getElementById('rotate-left-button');
+        button.disabled = true;
+        
+        try {
+            await rotateImage(-90);
+        } catch (error) {
+            alert('Failed to rotate image: ' + error.message);
+        } finally {
+            updateSubmitButton();
+        }
+    }
+
+    async function handleRotateRight() {
+        const button = document.getElementById('rotate-right-button');
+        button.disabled = true;
+        
+        try {
+            await rotateImage(90);
+        } catch (error) {
+            alert('Failed to rotate image: ' + error.message);
+        } finally {
+            updateSubmitButton();
+        }
     }
 
     async function handleAIFill() {
@@ -679,11 +844,15 @@
             console.error('Failed to load valuesets:', error);
             alert('Failed to load form options. Please refresh the page.');
         }
+        console.log(state);
 
         // Attach event listeners
         document.getElementById('search-subject').addEventListener('click', handleSearchSubject);
         document.getElementById('encounter-select').addEventListener('change', handleEncounterSelect);
         document.getElementById('file-upload').addEventListener('change', handleFileUpload);
+        document.getElementById('flip-button').addEventListener('click', handleFlip);
+        document.getElementById('rotate-left-button').addEventListener('click', handleRotateLeft);
+        document.getElementById('rotate-right-button').addEventListener('click', handleRotateRight);
         document.getElementById('ai-fill-button').addEventListener('click', handleAIFill);
         document.getElementById('submit-button').addEventListener('click', handleSubmit);
 
