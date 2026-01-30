@@ -71,19 +71,29 @@ class ValuesetViewSet(viewsets.ViewSet):
                     for c in colls]
 
         elif valueset_type == 'record_types':
-            codings = Coding.objects.filter(system=SYSTEM_RECORD_TYPE)
+            # Record type codes from SNOMED
+            record_type_codes = ['201456002', '268425006', '39714003', '1597004', '302189007']
+            codings = Coding.objects.filter(system=SYSTEM_RECORD_TYPE, code__in=record_type_codes)
             data = [{'id': c.code, 'display': c.display} for c in codings]
 
         elif valueset_type == 'orientations':
-            codings = Coding.objects.filter(system=SYSTEM_ORIENTATION)
+            # Orientation codes from SNOMED
+            orientation_codes = ['399198007', '399173006', '272479007', '399348003', '7771000', '24028007']
+            codings = Coding.objects.filter(system=SYSTEM_ORIENTATION, code__in=orientation_codes)
             data = [{'id': c.code, 'display': c.display} for c in codings]
 
         elif valueset_type == 'modalities':
+            # Modality codes from DICOM
             codings = Coding.objects.filter(system=SYSTEM_MODALITY)
             data = [{'id': c.code, 'display': c.display} for c in codings]
 
         elif valueset_type == 'procedures':
-            codings = Coding.objects.filter(system=SYSTEM_PROCEDURE)
+            # Procedure codes from SNOMED (currently empty but filtered separately)
+            body_site_codes = ['69536005', '609617007', '731298009', '729875002', '1927002', '71889004', '210659002', '210562007']
+            record_type_codes = ['201456002', '268425006', '39714003', '1597004', '302189007']
+            orientation_codes = ['399198007', '399173006', '272479007', '399348003', '7771000', '24028007']
+            exclude_codes = body_site_codes + record_type_codes + orientation_codes
+            codings = Coding.objects.filter(system=SYSTEM_PROCEDURE).exclude(code__in=exclude_codes)
             data = [{'id': c.code, 'display': c.display} for c in codings]
 
         else:
