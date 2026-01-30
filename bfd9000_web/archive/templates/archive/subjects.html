@@ -74,264 +74,22 @@
 {% endblock %} {% block head %} {{ block.super }}
 <script>
     // ========================================
-    // DATA LAYER - Replace this section when connecting to real API
+    // DATA LAYER - Real API Implementation
     // ========================================
 
-    // Dummy data for development
-    const DUMMY_SUBJECTS = [
-        {
-            id: "B1234",
-            encounters: 5,
-            records: 7,
-            dental_classification: "XYZ",
-            collection: "Collection B",
-        },
-        {
-            id: "B5678",
-            encounters: 2,
-            records: 3,
-            dental_classification: "DEF",
-            collection: "Collection A",
-        },
-        {
-            id: "B9101",
-            encounters: 4,
-            records: 6,
-            dental_classification: "ABC",
-            collection: "Collection C",
-        },
-        {
-            id: "B1123",
-            encounters: 3,
-            records: 5,
-            dental_classification: "GHI",
-            collection: "Collection B",
-        },
-        {
-            id: "B1415",
-            encounters: 1,
-            records: 2,
-            dental_classification: "JKL",
-            collection: "Collection A",
-        },
-        {
-            id: "B1617",
-            encounters: 6,
-            records: 8,
-            dental_classification: "MNO",
-            collection: "Collection C",
-        },
-        {
-            id: "B1819",
-            encounters: 2,
-            records: 4,
-            dental_classification: "PQR",
-            collection: "Collection B",
-        },
-        {
-            id: "B2021",
-            encounters: 3,
-            records: 5,
-            dental_classification: "STU",
-            collection: "Collection A",
-        },
-        {
-            id: "B2223",
-            encounters: 4,
-            records: 7,
-            dental_classification: "VWX",
-            collection: "Collection C",
-        },
-        {
-            id: "B2425",
-            encounters: 1,
-            records: 3,
-            dental_classification: "YZA",
-            collection: "Collection B",
-        },
-        {
-            id: "B2627",
-            encounters: 5,
-            records: 6,
-            dental_classification: "BCD",
-            collection: "Collection A",
-        },
-        {
-            id: "B2829",
-            encounters: 2,
-            records: 4,
-            dental_classification: "EFG",
-            collection: "Collection C",
-        },
-        {
-            id: "B3031",
-            encounters: 3,
-            records: 5,
-            dental_classification: "HIJ",
-            collection: "Collection B",
-        },
-        {
-            id: "B3233",
-            encounters: 4,
-            records: 6,
-            dental_classification: "KLM",
-            collection: "Collection A",
-        },
-        {
-            id: "B3435",
-            encounters: 1,
-            records: 2,
-            dental_classification: "NOP",
-            collection: "Collection C",
-        },
-        {
-            id: "B3637",
-            encounters: 6,
-            records: 8,
-            dental_classification: "QRS",
-            collection: "Collection B",
-        },
-        {
-            id: "B3839",
-            encounters: 2,
-            records: 3,
-            dental_classification: "TUV",
-            collection: "Collection A",
-        },
-        {
-            id: "B4041",
-            encounters: 3,
-            records: 5,
-            dental_classification: "WXY",
-            collection: "Collection C",
-        },
-        {
-            id: "B4243",
-            encounters: 4,
-            records: 7,
-            dental_classification: "ZAB",
-            collection: "Collection B",
-        },
-        {
-            id: "B4445",
-            encounters: 1,
-            records: 3,
-            dental_classification: "CDE",
-            collection: "Collection A",
-        },
-        {
-            id: "B4647",
-            encounters: 5,
-            records: 6,
-            dental_classification: "FGH",
-            collection: "Collection C",
-        },
-        {
-            id: "B4849",
-            encounters: 2,
-            records: 4,
-            dental_classification: "IJK",
-            collection: "Collection B",
-        },
-        {
-            id: "B5051",
-            encounters: 3,
-            records: 5,
-            dental_classification: "LMN",
-            collection: "Collection A",
-        },
-        {
-            id: "B5253",
-            encounters: 4,
-            records: 6,
-            dental_classification: "OPQ",
-            collection: "Collection C",
-        },
-        {
-            id: "B5455",
-            encounters: 1,
-            records: 2,
-            dental_classification: "RST",
-            collection: "Collection B",
-        },
-        {
-            id: "B5657",
-            encounters: 6,
-            records: 8,
-            dental_classification: "UVW",
-            collection: "Collection A",
-        },
-        {
-            id: "B5859",
-            encounters: 2,
-            records: 3,
-            dental_classification: "XYZ",
-            collection: "Collection C",
-        },
-        {
-            id: "B6061",
-            encounters: 3,
-            records: 5,
-            dental_classification: "ABC",
-            collection: "Collection B",
-        },
-        {
-            id: "B6263",
-            encounters: 4,
-            records: 7,
-            dental_classification: "DEF",
-            collection: "Collection A",
-        },
-        {
-            id: "B6465",
-            encounters: 1,
-            records: 3,
-            dental_classification: "GHI",
-            collection: "Collection C",
-        },
-        {
-            id: "B6667",
-            encounters: 5,
-            records: 6,
-            dental_classification: "JKL",
-            collection: "Collection B",
-        },
-        {
-            id: "B6869",
-            encounters: 2,
-            records: 4,
-            dental_classification: "MNO",
-            collection: "Collection A",
-        },
-        {
-            id: "B7071",
-            encounters: 3,
-            records: 5,
-            dental_classification: "PQR",
-            collection: "Collection C",
-        },
-        {
-            id: "B7273",
-            encounters: 4,
-            records: 6,
-            dental_classification: "STU",
-            collection: "Collection B",
-        },
-        {
-            id: "B7475",
-            encounters: 1,
-            records: 2,
-            dental_classification: "VWX",
-            collection: "Collection A",
-        },
-        {
-            id: "B7677",
-            encounters: 6,
-            records: 8,
-            dental_classification: "YZA",
-            collection: "Collection C",
-        },
-    ];
+    /**
+     * Helper to get dental classification display
+     */
+    function getDentalClassification(subject) {
+        if (subject.skeletal_pattern) {
+            return (
+                subject.skeletal_pattern.display ||
+                subject.skeletal_pattern.code ||
+                "-"
+            );
+        }
+        return "-";
+    }
 
     /**
      * Fetch subjects from the API
@@ -340,41 +98,26 @@
      * @param {number} params.page - Page number (1-indexed)
      * @param {number} params.page_size - Number of items per page
      * @returns {Promise<Object>} Response with { count, next, previous, results }
-     *
-     * TO SWITCH TO REAL API:
-     * Replace the body of this function with:
-     * const queryParams = new URLSearchParams({ search, page, page_size });
-     * const response = await fetch(`/api/subjects/?${queryParams}`);
-     * return await response.json();
      */
     async function fetchSubjects({
         search = "",
         page = 1,
         page_size = 20,
     } = {}) {
-        // Simulate API delay
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        const params = new URLSearchParams({
+            page: page.toString(),
+            page_size: page_size.toString(),
+        });
 
-        // Filter subjects based on search query
-        let filtered = DUMMY_SUBJECTS;
         if (search) {
-            const searchLower = search.toLowerCase();
-            filtered = DUMMY_SUBJECTS.filter((s) =>
-                s.id.toLowerCase().includes(searchLower)
-            );
+            params.set("search", search);
         }
 
-        // Paginate results
-        const start = (page - 1) * page_size;
-        const end = start + page_size;
-        const results = filtered.slice(start, end);
-
-        return {
-            count: filtered.length,
-            next: end < filtered.length ? page + 1 : null,
-            previous: page > 1 ? page - 1 : null,
-            results: results,
-        };
+        const response = await fetch(`/api/subjects/?${params}`);
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+        return await response.json();
     }
 
     // ========================================
@@ -393,10 +136,9 @@
                 const identifier = document.createElement("td");
                 const subjectBtn = document.createElement("button");
                 subjectBtn.className = "btn btn-soft btn-primary btn-xs";
-                subjectBtn.textContent = subject.id;
+                subjectBtn.textContent = "B000" + subject.id; // FIXME
                 subjectBtn.onclick = () => {
-                    // TODO: Navigate to subject detail page
-                    console.log("Navigate to subject:", subject.id);
+                    window.location.href = `/encounters/?subject=${subject.id}`;
                 };
                 identifier.appendChild(subjectBtn);
 
@@ -404,24 +146,24 @@
                 const encounters = document.createElement("td");
                 const encountersBtn = document.createElement("button");
                 encountersBtn.className = "btn btn-soft btn-xs";
-                encountersBtn.textContent = subject.encounters || 0;
+                encountersBtn.textContent = subject.encounter_count || 0;
                 encountersBtn.onclick = () =>
-                    (window.location.href = `/encounters?search=${subject.id}`);
+                    (window.location.href = `/encounters/?subject=${subject.id}`);
                 encounters.appendChild(encountersBtn);
 
                 // Records column with default button
                 const records = document.createElement("td");
                 const recordsBtn = document.createElement("button");
                 recordsBtn.className = "btn btn-soft btn-xs";
-                recordsBtn.textContent = subject.records || 0;
+                recordsBtn.textContent = subject.record_count || 0;
                 recordsBtn.onclick = () =>
-                    (window.location.href = `/records?search=${subject.id}`);
+                    (window.location.href = `/records/?subject=${subject.id}`);
                 records.appendChild(recordsBtn);
 
                 // Dental Classification column (no button)
                 const dentalClassification = document.createElement("td");
                 dentalClassification.textContent =
-                    subject.dental_classification || "-";
+                    getDentalClassification(subject);
 
                 // Collection column (no button)
                 const collection = document.createElement("td");
