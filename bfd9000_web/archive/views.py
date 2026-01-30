@@ -155,14 +155,14 @@ class SubjectViewSet(viewsets.ModelViewSet):
     ).all()
     serializer_class = SubjectSerializer
     filterset_fields = {
-        'identifiers__value': ['exact', 'icontains'],
-        'gender': ['exact'],
-        'ethnicity__code': ['exact'],
-        'skeletal_pattern__code': ['exact'],
-        'palatal_cleft__code': ['exact'],
-        'collection__short_name': ['exact'],
+        'identifiers__value',
+        'gender',
+        'ethnicity__code',
+        'skeletal_pattern__code',
+        'palatal_cleft__code',
+        'collection__short_name',
     }
-    search_fields = ['identifiers__value',
+    search_fields = ['identifiers__value', 'pk',
                      'humanname_family', 'humanname_given']
 
 

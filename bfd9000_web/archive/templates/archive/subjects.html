@@ -108,7 +108,11 @@
             page: page.toString(),
             page_size: page_size.toString(),
         });
-        
+
+        if (search && search.trim().length > 0) {
+            params.set("search", search.trim());
+        }
+
         const response = await fetch(`/api/subjects/?${params}`);
         if (!response.ok) {
             throw new Error(`API error: ${response.status}`);
