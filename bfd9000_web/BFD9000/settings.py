@@ -181,7 +181,7 @@ SPECTACULAR_SETTINGS = {
 }
 
 # Authentication
-LOGIN_REDIRECT_URL = '/api/'
+LOGIN_REDIRECT_URL = '/'
 LOGIN_URL = 'login'
 
 # CORS Configuration
