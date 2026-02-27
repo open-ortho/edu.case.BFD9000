@@ -291,8 +291,8 @@ class RecordUploadSerializer(serializers.ModelSerializer):
 
         # Validate file extension
         ext = value.name.split('.')[-1].lower()
-        if ext not in ['png', 'stl']:
-            raise serializers.ValidationError("Only PNG and STL files are allowed")
+        if ext not in ['png', 'stl', 'tif', 'tiff']:
+            raise serializers.ValidationError("Only PNG, TIFF, and STL files are allowed")
 
         # Validate MIME type if python-magic is available
         if magic:
@@ -302,6 +302,8 @@ class RecordUploadSerializer(serializers.ModelSerializer):
                 # Validate MIME type matches extension
                 if ext == 'png' and mime != 'image/png':
                     raise serializers.ValidationError(f"Invalid MIME type for PNG: {mime}")
+                if ext in ['tif', 'tiff'] and mime != 'image/tiff':
+                    raise serializers.ValidationError(f"Invalid MIME type for TIFF: {mime}")
                 if ext == 'stl' and mime not in ['application/octet-stream', 'model/stl', 'text/plain']:
                     # STL can be binary (octet-stream/model/stl) or ASCII (text/plain)
                     raise serializers.ValidationError(f"Invalid MIME type for STL: {mime}")

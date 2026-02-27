@@ -20,8 +20,9 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, QuerySet
-from django.http import FileResponse, HttpResponse
+from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.views.decorators.http import require_POST
 from .models import (
     Coding, Identifier, Address, Collection, Subject,
     Encounter, Location, ImagingStudy, Record, ValueSet
@@ -472,3 +473,76 @@ def record_detail(request, record_id):
 def scan(request):
     """Render the scan workflow page."""
     return render(request, "archive/scan.html")
+
+
+def _get_bits_per_sample(img: Image.Image) -> Optional[int]:
+    """Best-effort extraction of TIFF bits-per-sample."""
+    tag_v2 = getattr(img, "tag_v2", None)
+    if tag_v2 is None:
+        return None
+
+    bits = tag_v2.get(258)
+    if bits is None:
+        return None
+    if isinstance(bits, tuple):
+        return int(max(bits))
+    return int(bits)
+
+
+def _resize_image_for_preview(img: Image.Image, max_dim: int = 1024) -> Image.Image:
+    """Resize while preserving aspect ratio for display/AI preview."""
+    width, height = img.size
+    largest = max(width, height)
+    if largest <= max_dim:
+        return img
+
+    scale = max_dim / float(largest)
+    new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
+    resample = Image.Resampling.NEAREST if img.mode.startswith("I;16") else Image.Resampling.LANCZOS
+    return img.resize(new_size, resample)
+
+
+def _convert_tiff_to_png_bytes(upload) -> bytes:
+    """Convert TIFF to PNG, preserving 16-bit grayscale when needed."""
+    with Image.open(upload) as img:
+        bits_per_sample = _get_bits_per_sample(img)
+        high_bit_gray = bits_per_sample in {12, 16} or img.mode in {"I;16", "I;16L", "I;16B"}
+
+        if high_bit_gray:
+            gray = img
+            if gray.mode == "I;16B":
+                gray = gray.convert("I")
+            elif gray.mode not in {"I;16", "I;16L", "I"}:
+                gray = gray.convert("I")
+
+            if bits_per_sample == 12:
+                if gray.mode != "I":
+                    gray = gray.convert("I")
+
+            png_image = gray.convert("I;16")
+            png_image = _resize_image_for_preview(png_image)
+        else:
+            png_image = _resize_image_for_preview(img.convert("RGB"))
+
+        buf = io.BytesIO()
+        png_image.save(buf, format="PNG", optimize=True)
+        return buf.getvalue()
+
+
+@login_required
+@require_POST
+def scan_tiff_preview(request):
+    """Convert TIFF upload into a PNG preview for browser rendering and AI."""
+    upload = request.FILES.get("file")
+    if not upload:
+        return JsonResponse({"error": "Missing file"}, status=400)
+
+    ext = os.path.splitext(upload.name)[1].lower()
+    if ext not in {".tif", ".tiff"}:
+        return JsonResponse({"error": "Only TIFF files are supported"}, status=400)
+
+    try:
+        png_bytes = _convert_tiff_to_png_bytes(upload)
+        return HttpResponse(png_bytes, content_type="image/png")
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        return JsonResponse({"error": f"Failed to convert TIFF: {exc}"}, status=400)

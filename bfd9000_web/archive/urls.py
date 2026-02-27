@@ -48,6 +48,7 @@ urlpatterns = [
     path('records/', views.records, name='records'),
     path('records/<str:record_id>/', views.record_detail, name='record_detail'),
     path('scan/', views.scan, name='scan'),
+    path('api/scan/tiff-preview/', views.scan_tiff_preview, name='scan_tiff_preview'),
     # API routes
     path('api/', include(router.urls)),
     path('api/', include(subjects_router.urls)),

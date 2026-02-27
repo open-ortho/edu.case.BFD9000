@@ -13,7 +13,7 @@
                         <input
                             type="text"
                             id="subject-id"
-                            placeholder="Enter subject ID..."
+                            placeholder="Enter official subject ID..."
                             class="input input-bordered input-sm join-item flex-1"
                         />
                         <button id="search-subject" class="btn btn-sm btn-primary join-item">
@@ -22,6 +22,7 @@
                     </div>
                     <div id="subject-info" class="text-sm text-base-content/70 hidden !mt-0">
                         <div class="alert alert-info !p-1">
+                            <strong>Subject ID:</strong> <span id="subject-official-id"></span>
                             <strong>Collection:</strong> <span id="subject-collection"></span>
                             <strong>Sex:</strong> <span id="subject-sex"></span>
                             <strong>Encounters:</strong> <span id="subject-encounters"></span>
@@ -56,12 +57,12 @@
             <h2 class="card-title text-lg">Scan File</h2>
             <div class="form-control">
                 <label class="label">
-                    <span class="label-text">Upload Image (PNG or STL)</span>
+                    <span class="label-text">Upload Image (PNG, TIFF, or STL)</span>
                 </label>
                 <input
                     type="file"
                     id="file-upload"
-                    accept=".png,.stl"
+                    accept=".png,.tif,.tiff,.stl"
                     class="file-input file-input-bordered file-input-sm w-full"
                 />
                 <label class="label">
@@ -217,6 +218,8 @@
         subject: null,
         encounter: null,
         file: null,
+        previewFile: null,
+        aiFile: null,
         valuesets: {
             record_types: [],
             orientations: [],
@@ -228,15 +231,17 @@
     // API FUNCTIONS
     // ========================================
 
-    async function fetchSubject(subjectId) {
-        const response = await fetch(`/api/subjects/${subjectId}/`);
+    async function searchSubjects(query) {
+        const params = new URLSearchParams({
+            search: query,
+            page_size: '20',
+        });
+        const response = await fetch(`/api/subjects/?${params}`);
         if (!response.ok) {
-            if (response.status === 404) {
-                throw new Error('Subject not found');
-            }
             throw new Error(`API error: ${response.status}`);
         }
-        return await response.json();
+        const data = await response.json();
+        return data.results || [];
     }
 
     async function fetchEncounter(encounterId) {
@@ -268,10 +273,7 @@
     }
 
     async function createRecord(encounterId, formData) {
-        // Get CSRF token from cookie
-        const csrftoken = document.cookie.split('; ')
-            .find(row => row.startsWith('csrftoken='))
-            ?.split('=')[1];
+        const csrftoken = getCsrfToken();
         
         const response = await fetch(`/api/encounters/${encounterId}/records/`, {
             method: 'POST',
@@ -286,6 +288,42 @@
             throw new Error(error.error?.message || JSON.stringify(error) || `API error: ${response.status}`);
         }
         return await response.json();
+    }
+
+    function getCsrfToken() {
+        return document.cookie.split('; ')
+            .find(row => row.startsWith('csrftoken='))
+            ?.split('=')[1];
+    }
+
+    async function convertTiffToPng(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/scan/tiff-preview/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            let detail = `API error: ${response.status}`;
+            try {
+                const err = await response.json();
+                if (err.error) {
+                    detail = err.error;
+                }
+            } catch (e) {
+                // ignore non-json errors
+            }
+            throw new Error(detail);
+        }
+
+        const blob = await response.blob();
+        const baseName = file.name.replace(/\.(tif|tiff)$/i, '');
+        return new File([blob], `${baseName}.png`, { type: 'image/png' });
     }
 
     async function queryAI(file) {
@@ -326,6 +364,7 @@
     // ========================================
 
     function showSubjectInfo(subject) {
+        document.getElementById('subject-official-id').textContent = subject.subject_identifier || subject.id || '-';
         document.getElementById('subject-collection').textContent = subject.collection || '-';
         document.getElementById('subject-sex').textContent = subject.gender || '-';
         document.getElementById('subject-encounters').textContent = subject.encounter_count || 0;
@@ -378,23 +417,22 @@
         select.disabled = false;
     }
 
-    function showFilePreview(file) {
+    function showFilePreview(file, previewFile = file) {
         document.getElementById('file-name').textContent = file.name;
         document.getElementById('file-size').textContent = formatFileSize(file.size);
         document.getElementById('file-type').textContent = file.type || 'Unknown';
         document.getElementById('file-preview').classList.remove('hidden');
 
-        const url = URL.createObjectURL(file);
         const img = document.getElementById('uploaded-image');
         const noImg = document.getElementById('no-image-text');
-        if (file && file.type === 'image/png') {
+        if (previewFile && previewFile.type === 'image/png') {
             const reader = new FileReader();
             reader.onload = function(e) {
                 img.src = e.target.result;
                 img.classList.remove('hidden');
                 noImg.classList.add('hidden');
             };
-            reader.readAsDataURL(file);
+            reader.readAsDataURL(previewFile);
         } else {
             img.src = '';
             img.classList.add('hidden');
@@ -436,11 +474,11 @@
         document.getElementById('submit-button').disabled = !canSubmit;
 
         // Update AI and image manipulation buttons (need file and must be PNG)
-        const isPNG = hasFile && state.file.name.toLowerCase().endsWith('.png');
-        document.getElementById('ai-fill-button').disabled = !isPNG;
-        document.getElementById('flip-button').disabled = !isPNG;
-        document.getElementById('rotate-left-button').disabled = !isPNG;
-        document.getElementById('rotate-right-button').disabled = !isPNG;
+        const canProcessImage = state.aiFile !== null;
+        document.getElementById('ai-fill-button').disabled = !canProcessImage;
+        document.getElementById('flip-button').disabled = !canProcessImage;
+        document.getElementById('rotate-left-button').disabled = !canProcessImage;
+        document.getElementById('rotate-right-button').disabled = !canProcessImage;
     }
 
     function showAIStatus(message, isError = false) {
@@ -475,7 +513,7 @@
     
     // modify image by rotating / flipping
     async function modifyImage(degrees, flip = false) {
-        if (!state.file) return;
+        if (!state.aiFile) return;
 
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -509,9 +547,13 @@
 
                 canvas.toBlob((blob) => {
                     if (blob) {
-                        const newFile = new File([blob], state.file.name, { type: 'image/png' });
-                        state.file = newFile;
-                        showFilePreview(newFile);
+                        const newFile = new File([blob], 'preview.png', { type: 'image/png' });
+                        state.previewFile = newFile;
+                        state.aiFile = newFile;
+                        if (state.file && state.file.type === 'image/png') {
+                            state.file = newFile;
+                        }
+                        showFilePreview(state.file, state.previewFile);
                         resolve();
                     } else {
                         reject(new Error('Failed to create rotated image'));
@@ -520,7 +562,7 @@
             };
 
             img.onerror = () => reject(new Error('Failed to load image'));
-            img.src = URL.createObjectURL(state.file);
+            img.src = URL.createObjectURL(state.aiFile);
         });
     }
 
@@ -529,19 +571,30 @@
     // ========================================
 
     async function handleSearchSubject() {
-        const subjectId = document.getElementById('subject-id').value.trim();
-        if (!subjectId) {
+        const subjectQuery = document.getElementById('subject-id').value.trim();
+        if (!subjectQuery) {
             showSubjectError('Please enter a subject ID');
             return;
         }
 
         try {
-            const subject = await fetchSubject(subjectId);
+            const subjects = await searchSubjects(subjectQuery);
+            if (subjects.length === 0) {
+                throw new Error('Subject not found');
+            }
+
+            const normalizedQuery = subjectQuery.toLowerCase();
+            const exactMatch = subjects.find((subject) => {
+                const identifier = (subject.subject_identifier || '').toLowerCase();
+                return identifier === normalizedQuery;
+            });
+            const subject = exactMatch || subjects[0];
+
             state.subject = subject;
             showSubjectInfo(subject);
 
             // Load encounters for this subject
-            const encounters = await fetchEncountersForSubject(subjectId);
+            const encounters = await fetchEncountersForSubject(subject.id);
             populateEncounterSelect(encounters);
 
             // Reset encounter selection
@@ -586,10 +639,12 @@
         }
     }
 
-    function handleFileUpload(event) {
+    async function handleFileUpload(event) {
         const file = event.target.files[0];
         if (!file) {
             state.file = null;
+            state.previewFile = null;
+            state.aiFile = null;
             document.getElementById('file-preview').classList.add('hidden');
             clearFormFields();
             updateSubmitButton();
@@ -608,8 +663,8 @@
 
         // Validate file type
         const ext = file.name.split('.').pop().toLowerCase();
-        if (ext !== 'png' && ext !== 'stl') {
-            alert('Only PNG and STL files are supported');
+        if (ext !== 'png' && ext !== 'tif' && ext !== 'tiff' && ext !== 'stl') {
+            alert('Only PNG, TIFF, and STL files are supported');
             event.target.value = '';
             state.file = null;
             clearFormFields();
@@ -618,7 +673,29 @@
         }
 
         state.file = file;
-        showFilePreview(file);
+        if (ext === 'png') {
+            state.previewFile = file;
+            state.aiFile = file;
+            showFilePreview(file, state.previewFile);
+        } else if (ext === 'tif' || ext === 'tiff') {
+            try {
+                const pngPreview = await convertTiffToPng(file);
+                state.previewFile = pngPreview;
+                state.aiFile = pngPreview;
+                showFilePreview(file, state.previewFile);
+            } catch (error) {
+                state.previewFile = null;
+                state.aiFile = null;
+                showSubmitStatus(`TIFF conversion failed: ${error.message}`, true);
+                document.getElementById('uploaded-image').src = '';
+                document.getElementById('uploaded-image').classList.add('hidden');
+                document.getElementById('no-image-text').classList.remove('hidden');
+            }
+        } else {
+            state.previewFile = null;
+            state.aiFile = null;
+            showFilePreview(file, null);
+        }
         clearFormFields();
         updateSubmitButton();
     }
@@ -663,14 +740,14 @@
     }
 
     async function handleAIFill() {
-        if (!state.file) return;
+        if (!state.aiFile) return;
 
         const button = document.getElementById('ai-fill-button');
         button.disabled = true;
         button.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Processing...';
 
         try {
-            const result = await queryAI(state.file);
+            const result = await queryAI(state.aiFile);
 
             // Map AI type_prediction to record_type select value
             if (result.type_prediction) {
@@ -774,6 +851,8 @@
 
         // Clear file
         state.file = null;
+        state.previewFile = null;
+        state.aiFile = null;
         document.getElementById('file-upload').value = '';
         document.getElementById('file-preview').classList.add('hidden');
 

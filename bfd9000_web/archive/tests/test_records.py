@@ -1,11 +1,13 @@
 """API tests for record endpoints and uploads."""
 
 import datetime
+import io
 
 from django.contrib.auth.models import User, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from PIL import Image
 from rest_framework import status
 from archive.models import Subject, Encounter, Record, Coding, Collection
 from archive.constants import SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE, SYSTEM_BODY_SITE
@@ -79,6 +81,10 @@ class RecordTests(CleanupAPITestCase):
             b'\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
         )
 
+        tiff_buf = io.BytesIO()
+        Image.new('RGB', (1, 1), color=(255, 255, 255)).save(tiff_buf, format='TIFF')
+        self.tiff_content = tiff_buf.getvalue()
+
     def test_create_record_with_file(self):
         """Should create record with file upload"""
         url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
@@ -99,6 +105,22 @@ class RecordTests(CleanupAPITestCase):
         self.assertIn('id', response.data)
         # Verify record was created successfully
         self.assertIn('record_type', response.data)
+
+    def test_create_record_with_tiff_file(self):
+        """Should create record with TIFF upload."""
+        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile("test.tiff", self.tiff_content, content_type="image/tiff")
+
+        data = {
+            "file": file,
+            "record_type": self.rt_lateral.code,
+            "orientation": "left",
+            "modality": "RG",
+        }
+
+        response = self.client.post(url, data, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn('id', response.data)
 
     def test_create_record_missing_file(self):
         """Should return 400 if file is missing"""
