@@ -42,11 +42,20 @@ RECORD_TYPE_CODES = (
 )
 
 
-def _get_bolton_identifier(identifiers) -> Optional[str]:
+def _get_preferred_identifier(identifiers) -> Optional[str]:
+    official_identifier: Optional[str] = None
+    bolton_identifier: Optional[str] = None
+    first_identifier: Optional[str] = None
+
     for identifier in identifiers:
-        if identifier.system == SYSTEM_IDENTIFIER_BOLTON_SUBJECT:
-            return identifier.value
-    return None
+        if first_identifier is None:
+            first_identifier = identifier.value
+        if official_identifier is None and identifier.use == 'official':
+            official_identifier = identifier.value
+        if bolton_identifier is None and identifier.system == SYSTEM_IDENTIFIER_BOLTON_SUBJECT:
+            bolton_identifier = identifier.value
+
+    return official_identifier or bolton_identifier or first_identifier
 
 class CodingSerializer(serializers.ModelSerializer):
     """Serializer for Coding model."""
@@ -112,7 +121,7 @@ class SubjectSerializer(serializers.ModelSerializer):
 
     def get_subject_identifier(self, obj: Subject) -> Optional[str]:
         """Return the preferred identifier for subject display."""
-        return _get_bolton_identifier(obj.identifiers.all())
+        return _get_preferred_identifier(obj.identifiers.all())
 
 class EncounterSerializer(serializers.ModelSerializer):
     """Serializer for Encounter model."""
@@ -137,14 +146,19 @@ class EncounterSerializer(serializers.ModelSerializer):
         subject = getattr(obj, 'subject', None)
         if not subject:
             return None
-        return _get_bolton_identifier(subject.identifiers.all())
+        return _get_preferred_identifier(subject.identifiers.all())
 
     def to_representation(self, instance: Encounter) -> Dict[str, Any]:
         """Convert instance to dictionary representation."""
         ret = super().to_representation(instance)
+        subject = getattr(instance, 'subject', None)
+        birth_date = getattr(subject, 'birth_date', None)
         if instance.procedure_occurrence_age:
             # Convert duration to years (approx)
             days = instance.procedure_occurrence_age.days
+            ret['age_at_encounter'] = round(days / 365.25, 2)
+        elif instance.actual_period_start and birth_date:
+            days = (instance.actual_period_start - birth_date).days
             ret['age_at_encounter'] = round(days / 365.25, 2)
         else:
             ret['age_at_encounter'] = None
@@ -215,7 +229,7 @@ class RecordSerializer(serializers.ModelSerializer):
         subject = getattr(encounter, 'subject', None)
         if not subject:
             return None
-        return _get_bolton_identifier(subject.identifiers.all())
+        return _get_preferred_identifier(subject.identifiers.all())
 
     def get_acquisition_date(self, obj):
         """Get acquisition date from imaging study."""

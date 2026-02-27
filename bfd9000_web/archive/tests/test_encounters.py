@@ -4,8 +4,8 @@ from django.contrib.auth.models import User, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 from rest_framework import status
-from archive.models import Subject, Encounter, Coding
-from archive.constants import SYSTEM_PROCEDURE
+from archive.models import Subject, Encounter, Coding, Identifier
+from archive.constants import SYSTEM_PROCEDURE, SYSTEM_IDENTIFIER_LANCASTER_SUBJECT
 from .base import CleanupAPITestCase
 
 class EncounterTests(CleanupAPITestCase):
@@ -126,6 +126,48 @@ class EncounterTests(CleanupAPITestCase):
         self.assertGreaterEqual(len(response.data['results']), 2)
         self.assertEqual(response.data['results'][0]['actual_period_start'], '2021-01-01')
 
+    def test_encounter_subject_identifier_uses_official_identifier(self):
+        """Encounter response should expose official subject identifier."""
+        identifier, _ = Identifier.objects.get_or_create(
+            system=SYSTEM_IDENTIFIER_LANCASTER_SUBJECT,
+            value='L00004310',
+            defaults={'use': 'official'},
+        )
+        self.subject.identifiers.add(identifier)
+
+        url = reverse('archive:subject-encounters-list', kwargs={'subject_pk': self.subject.id})
+        create_response = self.client.post(url, {
+            "actual_period_start": "2020-01-01",
+            "procedure_code": self.procedure.id,
+        }, format='json')
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        list_response = self.client.get(reverse('archive:encounter-list'), {'subject': self.subject.id})
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(list_response.data['results']), 1)
+        self.assertEqual(list_response.data['results'][0]['subject_identifier'], 'L00004310')
+
+    def test_search_encounters_by_partial_subject_identifier(self):
+        """Search should match encounters by any part of subject identifier."""
+        identifier, _ = Identifier.objects.get_or_create(
+            system=SYSTEM_IDENTIFIER_LANCASTER_SUBJECT,
+            value='SUB-4310-ALPHA',
+            defaults={'use': 'official'},
+        )
+        self.subject.identifiers.add(identifier)
+
+        url = reverse('archive:subject-encounters-list', kwargs={'subject_pk': self.subject.id})
+        create_response = self.client.post(url, {
+            "actual_period_start": "2020-01-01",
+            "procedure_code": self.procedure.id,
+        }, format='json')
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        response = self.client.get(reverse('archive:encounter-list'), {'search': '4310'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data['results']), 1)
+        self.assertEqual(response.data['results'][0]['subject'], self.subject.id)
+
     def test_get_encounter_detail(self):
         """Should retrieve specific encounter details"""
         # Create encounter via API
@@ -242,3 +284,18 @@ class EncounterTests(CleanupAPITestCase):
         self.assertEqual(response.data['count'], 25)
         # Should have paginated results (max PAGE_SIZE=20)
         self.assertLessEqual(len(response.data['results']), 20)
+
+    def test_encounter_detail_computes_age_from_birthdate_when_duration_missing(self):
+        """Should derive age_at_encounter from subject birth_date and encounter date."""
+        encounter = Encounter.objects.create(
+            subject=self.subject,
+            actual_period_start="2020-06-15",
+            procedure_code=self.procedure,
+            procedure_occurrence_age=None,
+        )
+
+        url = reverse('archive:encounter-detail', kwargs={'pk': encounter.id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # 2000-01-01 to 2020-06-15 is about 20.45 years
+        self.assertAlmostEqual(response.data['age_at_encounter'], 20.45, delta=0.05)

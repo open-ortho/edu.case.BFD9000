@@ -252,6 +252,7 @@ class EncounterViewSet(viewsets.ModelViewSet):
     ).order_by('-actual_period_start', '-id')
     serializer_class = EncounterSerializer
     filterset_fields = ['subject', 'actual_period_start']
+    search_fields = ['subject__identifiers__value']
 
     def perform_create(self, serializer: serializers.ModelSerializer) -> None:
         """
