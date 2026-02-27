@@ -26,6 +26,10 @@ Subjects can have multiple identifiers across different systems. `Identifier.use
 
 ## Encounter API
 
+### Encounter date precision
+
+Historical imports may include partial or uncertain encounter dates. Encounters still require a concrete `actual_period_start` for age calculations, so partial dates are mapped to a **midpoint** of their uncertainty window (e.g., mid-month for month/year, mid-year for year-only). The original token is preserved in `actual_period_start_raw`, along with `actual_period_start_precision` (`day|month|year|unknown`) and `actual_period_start_uncertain` to indicate inferred dates. Dates can be retained long-term to support historical context or environmental correlation.
+
 ### Spec vs Implementation
 
 | Spec Field | Backend Field | Notes |

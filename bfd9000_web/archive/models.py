@@ -296,6 +296,12 @@ class Subject(TimestampedModel):
 
 class Encounter(TimestampedModel):
     """Visit/Contact"""
+    DATE_PRECISION_CHOICES = [
+        ("day", "Day"),
+        ("month", "Month"),
+        ("year", "Year"),
+        ("unknown", "Unknown"),
+    ]
     subject = models.ForeignKey(
         Subject,
         on_delete=models.CASCADE,
@@ -303,6 +309,21 @@ class Encounter(TimestampedModel):
     )
     actual_period_start = models.DateField(
         null=True, blank=True, help_text="Encounter start date")
+    actual_period_start_raw = models.CharField(
+        max_length=64,
+        blank=True,
+        help_text="Original encounter date token from import sources",
+    )
+    actual_period_start_precision = models.CharField(
+        max_length=16,
+        blank=True,
+        choices=DATE_PRECISION_CHOICES,
+        help_text="Precision of actual_period_start",
+    )
+    actual_period_start_uncertain = models.BooleanField(
+        default=False,
+        help_text="True when actual_period_start is inferred from partial data",
+    )
     actual_period_end = models.DateField(
         null=True, blank=True, help_text="Encounter end date")
     diagnosis = models.ForeignKey(

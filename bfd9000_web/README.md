@@ -70,16 +70,23 @@ Useful test options:
 
 **Note**: Tests automatically clean up uploaded media files. Test images are stored in a temporary directory that is deleted after tests complete, so they won't clutter your `media/uploads/` directory.
 
-## Import Bolton Subjects
+## Import Historical Subjects
 
-To import identifiers and subject demographics from `BoltonSubjects2.xlsx`:
+Use the unified importer entrypoint for historical datasets:
+
+```bash
+python bfd9000_web/manage.py import_subjects bolton --file BoltonSubjects2.xlsx
+python bfd9000_web/manage.py import_subjects lancaster --file LancasterDemographic.csv
+```
+
+Use `--dry-run` to validate without writing to the database. Use `--include-names` to populate
+first/last names when available (default is to leave names null).
+
+The legacy Bolton-only command still exists:
 
 ```bash
 python bfd9000_web/manage.py import_bolton_subjects --file BoltonSubjects2.xlsx
 ```
-
-Use `--dry-run` to validate without writing to the database. Override SNOMED codes with
-`--class-i-code`, `--class-ii-code`, and `--class-iii-code` if needed.
 
 ## Additional Information
 
