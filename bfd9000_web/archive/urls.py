@@ -34,6 +34,8 @@ encounters_router = routers.NestedDefaultRouter(
 encounters_router.register(
     r'records', views.RecordViewSet, basename='encounter-records')
 
+# Django expects `app_name` for namespacing URLs.
+# pylint: disable=invalid-name
 app_name = 'archive'
 
 urlpatterns = [

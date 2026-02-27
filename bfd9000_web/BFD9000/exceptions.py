@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def custom_exception_handler(exc: Exception, context: Dict[str, Any]) -> Optional[Response]:
     """
     Custom exception handler for DRF.
-    
+
     Standardizes the error response format to:
     {
         "error": {
@@ -28,7 +28,7 @@ def custom_exception_handler(exc: Exception, context: Dict[str, Any]) -> Optiona
     Args:
         exc: The exception raised.
         context: Dictionary containing context about the exception (view, args, etc).
-        
+
     Returns:
         Response: A DRF Response object with the standardized error format.
     """
@@ -41,7 +41,7 @@ def custom_exception_handler(exc: Exception, context: Dict[str, Any]) -> Optiona
     if response is None:
         # Log the exception for debugging
         logger.exception("Unhandled exception: %s", exc)
-        
+
         # Return a generic error response
         return Response({
             "error": {
@@ -77,14 +77,14 @@ def custom_exception_handler(exc: Exception, context: Dict[str, Any]) -> Optiona
         elif response.status_code == status.HTTP_409_CONFLICT:
             custom_data["error"]["code"] = "CONFLICT"
             custom_data["error"]["message"] = "Resource conflict."
-        
+
         # If response.data has a 'detail' key, use it as the message
         if isinstance(response.data, dict) and 'detail' in response.data:
             custom_data["error"]["message"] = response.data['detail']
             # Remove detail from details to avoid redundancy if it's the only thing
             if len(response.data) == 1:
                 custom_data["error"]["details"] = None
-        
+
         response.data = custom_data
 
     return response

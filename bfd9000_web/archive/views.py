@@ -5,20 +5,23 @@ This module defines the ViewSets for the API, handling CRUD operations
 for subjects, encounters, records, and related medical entities.
 It also includes custom actions for file serving and valueset retrieval.
 """
-from typing import Any, Dict, List, Optional, Type
-from rest_framework import viewsets, serializers
-from rest_framework.generics import get_object_or_404
-from rest_framework.response import Response
-from rest_framework.request import Request
-from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
-from drf_spectacular.utils import extend_schema
-from drf_spectacular.types import OpenApiTypes
-from django.http import FileResponse, HttpResponse
-from django.db.models import Count, QuerySet
 import io
 import os
+from typing import Any, Dict, List, Optional, Type
+
 from PIL import Image
+from rest_framework import viewsets, serializers
+from rest_framework.decorators import action
+from rest_framework.generics import get_object_or_404
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
+from django.contrib.auth.decorators import login_required
+from django.db.models import Count, QuerySet
+from django.http import FileResponse, HttpResponse
+from django.shortcuts import render
 from .models import (
     Coding, Identifier, Address, Collection, Subject,
     Encounter, Location, ImagingStudy, Record, ValueSet
@@ -72,13 +75,26 @@ class ValuesetViewSet(viewsets.ViewSet):
 
         elif valueset_type == 'record_types':
             # Record type codes from SNOMED
-            record_type_codes = ['201456002', '268425006', '39714003', '1597004', '302189007']
+            record_type_codes = [
+                '201456002',
+                '268425006',
+                '39714003',
+                '1597004',
+                '302189007',
+            ]
             codings = Coding.objects.filter(system=SYSTEM_RECORD_TYPE, code__in=record_type_codes)
             data = [{'id': c.code, 'display': c.display} for c in codings]
 
         elif valueset_type == 'orientations':
             # Orientation codes from SNOMED
-            orientation_codes = ['399198007', '399173006', '272479007', '399348003', '7771000', '24028007']
+            orientation_codes = [
+                '399198007',
+                '399173006',
+                '272479007',
+                '399348003',
+                '7771000',
+                '24028007',
+            ]
             codings = Coding.objects.filter(system=SYSTEM_ORIENTATION, code__in=orientation_codes)
             data = [{'id': c.code, 'display': c.display} for c in codings]
 
@@ -89,15 +105,46 @@ class ValuesetViewSet(viewsets.ViewSet):
 
         elif valueset_type == 'body_sites':
             # Body site codes from SNOMED
-            body_site_codes = ['69536005', '609617007', '731298009', '729875002', '1927002', '71889004', '210659002', '210562007']
+            body_site_codes = [
+                '69536005',
+                '609617007',
+                '731298009',
+                '729875002',
+                '1927002',
+                '71889004',
+                '210659002',
+                '210562007',
+            ]
             codings = Coding.objects.filter(system=SYSTEM_BODY_SITE, code__in=body_site_codes)
             data = [{'id': c.code, 'display': c.display} for c in codings]
 
         elif valueset_type == 'procedures':
             # Procedure codes from SNOMED (currently empty but filtered separately)
-            body_site_codes = ['69536005', '609617007', '731298009', '729875002', '1927002', '71889004', '210659002', '210562007']
-            record_type_codes = ['201456002', '268425006', '39714003', '1597004', '302189007']
-            orientation_codes = ['399198007', '399173006', '272479007', '399348003', '7771000', '24028007']
+            body_site_codes = [
+                '69536005',
+                '609617007',
+                '731298009',
+                '729875002',
+                '1927002',
+                '71889004',
+                '210659002',
+                '210562007',
+            ]
+            record_type_codes = [
+                '201456002',
+                '268425006',
+                '39714003',
+                '1597004',
+                '302189007',
+            ]
+            orientation_codes = [
+                '399198007',
+                '399173006',
+                '272479007',
+                '399348003',
+                '7771000',
+                '24028007',
+            ]
             exclude_codes = body_site_codes + record_type_codes + orientation_codes
             codings = Coding.objects.filter(system=SYSTEM_PROCEDURE).exclude(code__in=exclude_codes)
             data = [{'id': c.code, 'display': c.display} for c in codings]
@@ -260,8 +307,13 @@ class RecordViewSet(viewsets.ModelViewSet):
         'encounter__subject__identifiers'
     )
     serializer_class = RecordSerializer
-    filterset_fields = ['encounter__id', 'encounter__subject', 'encounter__subject__collection',
-                        'encounter__subject__collection__short_name', 'encounter']
+    filterset_fields = [
+        'encounter__id',
+        'encounter__subject',
+        'encounter__subject__collection',
+        'encounter__subject__collection__short_name',
+        'encounter',
+    ]
     search_fields = ['id', 'encounter__id', 'encounter__subject__id']
 
     def get_serializer_class(self) -> Type[serializers.Serializer]:
@@ -304,6 +356,8 @@ class RecordViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def image(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Response:
         """Serve the raw image file associated with the record."""
+        # DRF action signature requires request/pk/kwargs.
+        del request, pk, kwargs
         record = self.get_object()
         if not record.imaging_study or not record.imaging_study.source_file:
             return Response({"error": "No image file available"}, status=404)
@@ -318,6 +372,8 @@ class RecordViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def thumbnail(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Response:
         """Generate and serve a thumbnail for the record's image."""
+        # DRF action signature requires request/pk/kwargs.
+        del request, pk, kwargs
         record = self.get_object()
 
         if not record.imaging_study or not record.imaging_study.source_file:
@@ -358,55 +414,60 @@ class RecordViewSet(viewsets.ModelViewSet):
                 buf.seek(0)
 
                 return HttpResponse(buf, content_type='image/jpeg')
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             return Response({"error": f"Error generating thumbnail: {e}"}, status=500)
 
     @action(detail=True, methods=['get'])
     def dicom(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Response:
         """Serve the DICOM file (Not Implemented)."""
+        # DRF action signature requires request/pk/kwargs.
+        del request, pk, kwargs
         # Not implemented yet
         return Response({"error": "DICOM download not implemented"}, status=404)
 
 
-# Template Views for HTML Pages
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
-
-
 @login_required
 def index(request):
+    """Render the main archive dashboard."""
     return render(request, "archive/index.html")
 
 
 @login_required
 def subjects(request):
+    """Render the subject list page."""
     return render(request, "archive/subjects.html")
 
 
 @login_required
 def subject_create(request):
+    """Render the subject creation form."""
     return render(request, "archive/subject_create.html")
 
 
 @login_required
 def encounters(request):
+    """Render the encounter list page."""
     return render(request, "archive/encounters.html")
 
 
 @login_required
 def encounter_create(request):
+    """Render the encounter creation form."""
     return render(request, "archive/encounter_create.html")
 
 
 @login_required
 def records(request):
+    """Render the record list page."""
     return render(request, "archive/records.html")
 
 
 @login_required
 def record_detail(request, record_id):
+    """Render the record detail page."""
     return render(request, "archive/record_detail.html", {"record_id": record_id})
 
 @login_required
 def scan(request):
+    """Render the scan workflow page."""
     return render(request, "archive/scan.html")

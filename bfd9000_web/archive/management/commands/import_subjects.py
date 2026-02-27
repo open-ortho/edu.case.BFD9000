@@ -1,3 +1,5 @@
+"""Management command entrypoint for historical imports."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,6 +12,7 @@ from archive.management.importers.lancaster import LancasterImporter
 
 
 class Command(BaseCommand):
+    """Dispatch imports by dataset source."""
     help = "Import historical subjects from supported datasets"
 
     def add_arguments(self, parser) -> None:

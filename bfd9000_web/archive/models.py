@@ -57,6 +57,7 @@ class TimestampedModel(models.Model):
     )
 
     class Meta:
+        """Model metadata."""
         abstract = True
 
 
@@ -69,6 +70,7 @@ class Coding(TimestampedModel):
     meaning = models.TextField(blank=True, help_text="Extended description")
 
     class Meta:
+        """Model metadata."""
         constraints = [
             models.UniqueConstraint(
                 fields=['system', 'version', 'code'],
@@ -111,6 +113,7 @@ class ValueSet(TimestampedModel):
     )
 
     class Meta:
+        """Model metadata."""
         ordering = ['slug']
         indexes = [
             models.Index(fields=['slug']),
@@ -126,6 +129,7 @@ class ValueSetConcept(TimestampedModel):
     coding = models.ForeignKey(Coding, on_delete=models.CASCADE)
 
     class Meta:
+        """Model metadata."""
         constraints = [
             models.UniqueConstraint(
                 fields=['valueset', 'coding'],
@@ -157,6 +161,7 @@ class Identifier(TimestampedModel):
     value = models.CharField(max_length=128)
 
     class Meta:
+        """Model metadata."""
         constraints = [
             models.UniqueConstraint(
                 fields=['system', 'value'],
@@ -186,6 +191,7 @@ class Address(TimestampedModel):
         max_length=2, blank=True, help_text="ISO 3166-1 alpha-2 country code")
 
     class Meta:
+        """Model metadata."""
         verbose_name_plural = "Addresses"
         ordering = ['country', 'city']
 
@@ -209,6 +215,7 @@ class Collection(TimestampedModel):
         null=True, blank=True, help_text="Collection end date")
 
     class Meta:
+        """Model metadata."""
         ordering = ['short_name']
         indexes = [
             models.Index(fields=['short_name']),
@@ -273,6 +280,7 @@ class Subject(TimestampedModel):
     )
 
     class Meta:
+        """Model metadata."""
         ordering = ['humanname_family', 'humanname_given']
         indexes = [
             models.Index(fields=['birth_date']),
@@ -342,6 +350,7 @@ class Encounter(TimestampedModel):
     )
 
     class Meta:
+        """Model metadata."""
         ordering = ['-actual_period_start']
         indexes = [
             models.Index(fields=['subject', 'actual_period_start']),
@@ -366,6 +375,7 @@ class Location(TimestampedModel):
         Address, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
+        """Model metadata."""
         ordering = ['name']
 
     def __str__(self):
@@ -445,6 +455,7 @@ class ImagingStudy(TimestampedModel):
     )
 
     class Meta:
+        """Model metadata."""
         verbose_name_plural = "Imaging Studies"
         ordering = ['-scan_datetime']
         indexes = [
@@ -509,6 +520,7 @@ class Record(TimestampedModel):
         max_length=128, blank=True)
 
     class Meta:
+        """Model metadata."""
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['encounter']),

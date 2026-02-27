@@ -1,34 +1,71 @@
+"""API tests for valueset endpoints."""
+
+from django.contrib.auth.models import User
 from django.urls import reverse
 from rest_framework import status
-from django.contrib.auth.models import User
 from archive.models import Collection, Coding
 from archive.constants import SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE
 from .base import CleanupAPITestCase
 
 class ValuesetTests(CleanupAPITestCase):
+    """Validate valueset responses and filtering."""
     def setUp(self):
         # Create user for authentication
         self.user = User.objects.create_user(username='testuser', password='testpassword')
         self.client.force_authenticate(user=self.user)
 
         # Create test data with multiple codings per system for better testing
-        self.collection, _ = Collection.objects.get_or_create(short_name="TEST", defaults={"full_name": "Test Collection"})
-        self.collection2, _ = Collection.objects.get_or_create(short_name="TEST2", defaults={"full_name": "Test Collection 2"})
+        self.collection, _ = Collection.objects.get_or_create(
+            short_name="TEST",
+            defaults={"full_name": "Test Collection"},
+        )
+        self.collection2, _ = Collection.objects.get_or_create(
+            short_name="TEST2",
+            defaults={"full_name": "Test Collection 2"},
+        )
 
         # Record types (using SNOMED codes from migration)
-        self.rt_lateral, _ = Coding.objects.get_or_create(system=SYSTEM_RECORD_TYPE, code='201456002', defaults={'display': 'Cephalogram'})
-        self.rt_pa, _ = Coding.objects.get_or_create(system=SYSTEM_RECORD_TYPE, code='268425006', defaults={'display': 'Pelvis X-ray'})
+        self.rt_lateral, _ = Coding.objects.get_or_create(
+            system=SYSTEM_RECORD_TYPE,
+            code='201456002',
+            defaults={'display': 'Cephalogram'},
+        )
+        self.rt_pa, _ = Coding.objects.get_or_create(
+            system=SYSTEM_RECORD_TYPE,
+            code='268425006',
+            defaults={'display': 'Pelvis X-ray'},
+        )
 
         # Orientations (using SNOMED codes from migration)
-        self.orient_left, _ = Coding.objects.get_or_create(system=SYSTEM_ORIENTATION, code='399173006', defaults={'display': 'Left lateral projection'})
-        self.orient_right, _ = Coding.objects.get_or_create(system=SYSTEM_ORIENTATION, code='399198007', defaults={'display': 'Right lateral projection'})
+        self.orient_left, _ = Coding.objects.get_or_create(
+            system=SYSTEM_ORIENTATION,
+            code='399173006',
+            defaults={'display': 'Left lateral projection'},
+        )
+        self.orient_right, _ = Coding.objects.get_or_create(
+            system=SYSTEM_ORIENTATION,
+            code='399198007',
+            defaults={'display': 'Right lateral projection'},
+        )
 
         # Modalities
-        self.mod_rg, _ = Coding.objects.get_or_create(system=SYSTEM_MODALITY, code='RG', defaults={'display': 'Radiography'})
-        self.mod_m3d, _ = Coding.objects.get_or_create(system=SYSTEM_MODALITY, code='M3D', defaults={'display': '3D Model'})
+        self.mod_rg, _ = Coding.objects.get_or_create(
+            system=SYSTEM_MODALITY,
+            code='RG',
+            defaults={'display': 'Radiography'},
+        )
+        self.mod_m3d, _ = Coding.objects.get_or_create(
+            system=SYSTEM_MODALITY,
+            code='M3D',
+            defaults={'display': '3D Model'},
+        )
 
         # Procedures
-        self.proc_visit, _ = Coding.objects.get_or_create(system=SYSTEM_PROCEDURE, code='ortho-visit', defaults={'display': 'Orthodontic Visit'})
+        self.proc_visit, _ = Coding.objects.get_or_create(
+            system=SYSTEM_PROCEDURE,
+            code='ortho-visit',
+            defaults={'display': 'Orthodontic Visit'},
+        )
 
     def test_missing_type_parameter(self):
         """Should return 400 if 'type' parameter is missing"""

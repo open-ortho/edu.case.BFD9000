@@ -1,11 +1,12 @@
 [MASTER]
-ignore-patterns=^.*?/migrations/.*\.py$
+ignore-paths=.*/migrations/.*,.*/tests/.*
 
 [FORMAT]
 max-line-length=120
 
 [MESSAGES CONTROL]
 disable=
+    duplicate-code,
     no-member,
     protected-access,
     too-few-public-methods,
@@ -17,6 +18,7 @@ disable=
     too-many-branches,
     too-many-return-statements,
     unnecessary-pass,
+    unused-wildcard-import,
     wildcard-import,
     wrong-import-order,
     wrong-import-position

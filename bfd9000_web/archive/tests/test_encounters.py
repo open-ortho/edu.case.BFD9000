@@ -1,12 +1,15 @@
-from django.urls import reverse
-from rest_framework import status
+"""API tests for encounter endpoints."""
+
 from django.contrib.auth.models import User, Permission
 from django.contrib.contenttypes.models import ContentType
+from django.urls import reverse
+from rest_framework import status
 from archive.models import Subject, Encounter, Coding
 from archive.constants import SYSTEM_PROCEDURE
 from .base import CleanupAPITestCase
 
 class EncounterTests(CleanupAPITestCase):
+    """Validate encounter CRUD and derived fields."""
     def setUp(self):
         # Create user for authentication
         self.user = User.objects.create_user(username='testuser', password='testpassword')

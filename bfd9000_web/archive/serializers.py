@@ -7,6 +7,7 @@ It includes specialized logic for file uploads and validation.
 """
 import datetime
 from typing import Any, Dict, Optional
+from zoneinfo import ZoneInfo
 try:
     import magic
 except ImportError:
@@ -14,12 +15,21 @@ except ImportError:
 from django.db import transaction
 from rest_framework import serializers
 from .models import (
-    Coding, Identifier, Address, Collection, Subject, 
-    Encounter, Location, ImagingStudy, Record
+    Coding,
+    Identifier,
+    Address,
+    Collection,
+    Subject,
+    Encounter,
+    Location,
+    ImagingStudy,
+    Record,
 )
 from .constants import (
-    SYSTEM_BODY_SITE, SYSTEM_ORIENTATION, SYSTEM_MODALITY,
-    SYSTEM_IDENTIFIER_BOLTON_SUBJECT
+    SYSTEM_BODY_SITE,
+    SYSTEM_ORIENTATION,
+    SYSTEM_MODALITY,
+    SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
 )
 
 
@@ -32,34 +42,39 @@ def _get_bolton_identifier(identifiers) -> Optional[str]:
 class CodingSerializer(serializers.ModelSerializer):
     """Serializer for Coding model."""
     class Meta:
+        """Serializer metadata."""
         model = Coding
         fields = '__all__'
 
 class IdentifierSerializer(serializers.ModelSerializer):
     """Serializer for Identifier model."""
     class Meta:
+        """Serializer metadata."""
         model = Identifier
         fields = '__all__'
 
 class AddressSerializer(serializers.ModelSerializer):
     """Serializer for Address model."""
     class Meta:
+        """Serializer metadata."""
         model = Address
         fields = '__all__'
 
 class LocationSerializer(serializers.ModelSerializer):
     """Serializer for Location model."""
     address = AddressSerializer(read_only=True)
-    
+
     class Meta:
+        """Serializer metadata."""
         model = Location
         fields = '__all__'
 
 class CollectionSerializer(serializers.ModelSerializer):
     """Serializer for Collection model."""
     address = AddressSerializer(read_only=True)
-    
+
     class Meta:
+        """Serializer metadata."""
         model = Collection
         fields = '__all__'
 
@@ -77,15 +92,17 @@ class SubjectSerializer(serializers.ModelSerializer):
         allow_null=True,
         required=False
     )
-    
+
     encounter_count = serializers.IntegerField(read_only=True)
     record_count = serializers.IntegerField(read_only=True)
-    
+
     class Meta:
+        """Serializer metadata."""
         model = Subject
         fields = '__all__'
 
     def get_subject_identifier(self, obj: Subject) -> Optional[str]:
+        """Return the preferred identifier for subject display."""
         return _get_bolton_identifier(obj.identifiers.all())
 
 class EncounterSerializer(serializers.ModelSerializer):
@@ -95,10 +112,11 @@ class EncounterSerializer(serializers.ModelSerializer):
     age_at_encounter = serializers.FloatField(required=False)
     subject = serializers.PrimaryKeyRelatedField(queryset=Subject.objects.all(), required=False)
     subject_identifier = serializers.SerializerMethodField()
-    
+
     record_count = serializers.IntegerField(read_only=True)
-    
+
     class Meta:
+        """Serializer metadata."""
         model = Encounter
         fields = '__all__'
         extra_kwargs = {
@@ -106,6 +124,7 @@ class EncounterSerializer(serializers.ModelSerializer):
         }
 
     def get_subject_identifier(self, obj: Encounter) -> Optional[str]:
+        """Return the preferred identifier for the encounter subject."""
         if not obj.subject_id:
             return None
         return _get_bolton_identifier(obj.subject.identifiers.all())
@@ -144,8 +163,9 @@ class ImagingStudySerializer(serializers.ModelSerializer):
     laterality = CodingSerializer(read_only=True)
     series_modality = CodingSerializer(read_only=True)
     scan_location = LocationSerializer(read_only=True)
-    
+
     class Meta:
+        """Serializer metadata."""
         model = ImagingStudy
         fields = '__all__'
 
@@ -168,6 +188,7 @@ class RecordSerializer(serializers.ModelSerializer):
     image_type = serializers.CharField(source='imaging_study.image_type', read_only=True)
 
     class Meta:
+        """Serializer metadata."""
         model = Record
         fields = '__all__'
 
@@ -179,6 +200,7 @@ class RecordSerializer(serializers.ModelSerializer):
         return None
 
     def get_subject_identifier(self, obj: Record) -> Optional[str]:
+        """Return the preferred identifier for the record's subject."""
         if not obj.encounter_id or not obj.encounter.subject_id:
             return None
         return _get_bolton_identifier(obj.encounter.subject.identifiers.all())
@@ -187,7 +209,6 @@ class RecordSerializer(serializers.ModelSerializer):
         """Get acquisition date from imaging study, assuming EST timezone."""
         if obj.imaging_study and obj.imaging_study.scan_datetime:
             # Convert to date, assuming EST
-            from zoneinfo import ZoneInfo
             dt = obj.imaging_study.scan_datetime
             # If naive, assume UTC; otherwise convert to EST
             if dt.tzinfo is None:
@@ -199,12 +220,12 @@ class RecordSerializer(serializers.ModelSerializer):
 class RecordUploadSerializer(serializers.ModelSerializer):
     """
     Serializer for uploading records with files.
-    
+
     Handles file validation, metadata extraction, and creation of related
     ImagingStudy and Record objects within a transaction.
     """
     file = serializers.FileField(write_only=True)
-    
+
     # Use SlugRelatedField for idiomatic lookup by 'code'
     record_type = serializers.SlugRelatedField(
         slug_field='code',
@@ -221,17 +242,18 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         queryset=Coding.objects.filter(system=SYSTEM_MODALITY),
         write_only=True
     )
-    
+
     acquisition_date = serializers.DateField(required=False, write_only=True)
-    
+
     # Allow encounter to be passed in body (for flat endpoint) or context (for nested)
     encounter = serializers.PrimaryKeyRelatedField(
         queryset=Encounter.objects.all(),
         required=False,
         write_only=True
     )
-    
+
     class Meta:
+        """Serializer metadata."""
         model = Record
         fields = ['id', 'file', 'record_type', 'orientation', 'modality', 'acquisition_date', 'encounter']
 
@@ -243,28 +265,29 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         """Validate uploaded file size, extension, and MIME type."""
         if value.size > 100 * 1024 * 1024:
             raise serializers.ValidationError("File too large (max 100MB)")
-        
+
         initial_pos = value.tell()
         value.seek(0)
-        
+
         # Validate file extension
         ext = value.name.split('.')[-1].lower()
         if ext not in ['png', 'stl']:
             raise serializers.ValidationError("Only PNG and STL files are allowed")
-        
+
         # Validate MIME type if python-magic is available
         if magic:
             try:
                 mime = magic.from_buffer(value.read(2048), mime=True)
-                
+
                 # Validate MIME type matches extension
                 if ext == 'png' and mime != 'image/png':
                     raise serializers.ValidationError(f"Invalid MIME type for PNG: {mime}")
                 if ext == 'stl' and mime not in ['application/octet-stream', 'model/stl', 'text/plain']:
                     # STL can be binary (octet-stream/model/stl) or ASCII (text/plain)
                     raise serializers.ValidationError(f"Invalid MIME type for STL: {mime}")
-                    
-            except Exception as e:
+
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                # python-magic emits varied errors; fall back to extension-only validation.
                 # If validation fails explicitly, re-raise
                 if isinstance(e, serializers.ValidationError):
                     raise e
@@ -281,32 +304,32 @@ class RecordUploadSerializer(serializers.ModelSerializer):
     def create(self, validated_data: Dict[str, Any]) -> Record:
         """
         Create Record and associated ImagingStudy.
-        
+
         Wraps creation in a transaction to ensure data integrity.
         """
         file_obj = validated_data.pop('file')
-        
+
         # These are now Coding objects, not strings!
         rt_coding = validated_data.pop('record_type')
-        view_coding = validated_data.pop('orientation') # Maps to 'view'
-        mod_coding = validated_data.pop('modality')     # Maps to 'series_modality'
-        
+        view_coding = validated_data.pop('orientation')  # Maps to 'view'
+        mod_coding = validated_data.pop('modality')  # Maps to 'series_modality'
+
         acquisition_date = validated_data.pop('acquisition_date', datetime.date.today())
-        
+
         # Resolve encounter: check body first, then context
         encounter = validated_data.pop('encounter', None)
         if not encounter:
             encounter = self.context.get('encounter')
-            
+
         if not encounter:
             raise serializers.ValidationError({"encounter": "This field is required (either in URL or body)."})
-        
+
         # Try to get user from request
         request = self.context.get('request')
         scan_operator = None
         if request and request.user.is_authenticated:
             scan_operator = request.user
-        
+
         with transaction.atomic():
             subject = encounter.subject
             collection = getattr(subject, 'collection', None)
@@ -325,11 +348,11 @@ class RecordUploadSerializer(serializers.ModelSerializer):
                 source_file=file_obj,
                 scan_operator=scan_operator
             )
-            
+
             record = Record.objects.create(
                 encounter=encounter,
                 record_type=rt_coding,
                 imaging_study=study
             )
-            
+
             return record

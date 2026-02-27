@@ -1,3 +1,5 @@
+"""Legacy Bolton import command wrapper."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,6 +10,7 @@ from archive.management.importers.bolton import BoltonImporter
 
 
 class Command(BaseCommand):
+    """Run the Bolton importer with legacy command name."""
     help = "Import Bolton subjects and identifiers from BoltonSubjects2.xlsx"
 
     def add_arguments(self, parser) -> None:

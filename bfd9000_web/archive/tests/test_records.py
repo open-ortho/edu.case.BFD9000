@@ -1,13 +1,18 @@
-from django.urls import reverse
-from rest_framework import status
-from django.core.files.uploadedfile import SimpleUploadedFile
+"""API tests for record endpoints and uploads."""
+
+import datetime
+
 from django.contrib.auth.models import User, Permission
 from django.contrib.contenttypes.models import ContentType
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import reverse
+from rest_framework import status
 from archive.models import Subject, Encounter, Record, Coding, Collection
 from archive.constants import SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE
 from .base import CleanupAPITestCase
 
 class RecordTests(CleanupAPITestCase):
+    """Validate record creation, upload, and retrieval behavior."""
     def setUp(self):
         # Create user for authentication
         self.user = User.objects.create_user(username='testuser', password='testpassword')
@@ -42,7 +47,6 @@ class RecordTests(CleanupAPITestCase):
         )
 
         # Create encounter via API
-        import datetime
         self.encounter = Encounter.objects.create(
             subject=self.subject,
             actual_period_start="2020-01-01",
@@ -68,7 +72,12 @@ class RecordTests(CleanupAPITestCase):
         )
 
         # Create a valid PNG image
-        self.image_content = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
+        self.image_content = (
+            b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01'
+            b'\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89'
+            b'\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01'
+            b'\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
+        )
 
     def test_create_record_with_file(self):
         """Should create record with file upload"""

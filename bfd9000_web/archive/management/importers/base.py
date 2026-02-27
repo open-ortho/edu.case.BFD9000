@@ -1,3 +1,5 @@
+"""Shared helpers for dataset importers."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,6 +13,7 @@ from archive.models import Collection, Identifier, Subject
 
 @dataclass
 class ImportStats:
+    """Basic counters for import progress reporting."""
     subjects_created: int = 0
     subjects_updated: int = 0
     identifiers_created: int = 0
@@ -19,6 +22,7 @@ class ImportStats:
 
 
 class BaseImporter:
+    """Common helper methods used across dataset importers."""
     def __init__(self, *, dry_run: bool, include_names: bool, stdout, stderr) -> None:
         self.dry_run = dry_run
         self.include_names = include_names

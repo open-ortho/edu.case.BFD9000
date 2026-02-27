@@ -1,3 +1,5 @@
+"""Importer for the Bolton subject spreadsheet."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,13 +16,17 @@ from archive.models import Coding, Subject
 
 @dataclass
 class BoltonStats(ImportStats):
+    """Import counters specific to the Bolton dataset."""
     skeletal_missing: int = 0
 
 
 class BoltonImporter(BaseImporter):
+    """Import Bolton subjects and related identifiers/codings."""
     def run(self, file_path: Path) -> None:
+        """Execute the Bolton import from the provided workbook path."""
         try:
-            import openpyxl
+            # Import locally to provide a clear error when missing.
+            import openpyxl  # pylint: disable=import-outside-toplevel
         except ImportError as exc:
             raise CommandError("openpyxl is required to read .xlsx files") from exc
 

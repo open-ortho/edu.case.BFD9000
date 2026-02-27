@@ -1,3 +1,5 @@
+"""Shared code systems and identifier system URLs."""
+
 SYSTEM_RECORD_TYPE = 'http://snomed.info/sct'
 SYSTEM_ORIENTATION = 'http://snomed.info/sct'
 SYSTEM_MODALITY = 'http://dicom.nema.org/resources/ontology/DCM'

@@ -1,3 +1,5 @@
+"""Importer for the Lancaster demographic CSV."""
+
 from __future__ import annotations
 
 import csv
@@ -17,6 +19,7 @@ from archive.models import Coding, Encounter, Subject
 
 @dataclass
 class LancasterStats(ImportStats):
+    """Import counters specific to the Lancaster dataset."""
     encounters_created: int = 0
     encounters_skipped: int = 0
     partial_dates: int = 0
@@ -24,6 +27,7 @@ class LancasterStats(ImportStats):
 
 
 class LancasterImporter(BaseImporter):
+    """Import Lancaster subjects and derived encounters from CSV data."""
     DATE_COLUMNS = (7, 9, 11, 13, 15, 17)
 
     def __init__(
@@ -47,6 +51,7 @@ class LancasterImporter(BaseImporter):
         self.collection_full_name = collection_full_name
 
     def run(self, file_path: Path) -> None:
+        """Execute the Lancaster import from the provided CSV path."""
         if not file_path.exists():
             raise CommandError(f"File not found: {file_path}")
 

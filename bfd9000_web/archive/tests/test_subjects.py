@@ -1,11 +1,14 @@
-from django.urls import reverse
-from rest_framework import status
+"""API tests for subject endpoints."""
+
 from django.contrib.auth.models import User, Permission
 from django.contrib.contenttypes.models import ContentType
+from django.urls import reverse
+from rest_framework import status
 from archive.models import Subject, Collection
 from .base import CleanupAPITestCase
 
 class SubjectTests(CleanupAPITestCase):
+    """Validate subject CRUD and search behavior."""
     def setUp(self):
         # Create user for authentication
         self.user = User.objects.create_user(username='testuser', password='testpassword')

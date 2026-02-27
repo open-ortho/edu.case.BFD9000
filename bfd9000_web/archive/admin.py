@@ -1,3 +1,5 @@
+"""Admin configuration for archive models."""
+
 from django.contrib import admin
 
 from .models import (
@@ -54,6 +56,7 @@ class TimestampedAdmin(admin.ModelAdmin):
 
 @admin.register(Coding)
 class CodingAdmin(TimestampedAdmin):
+    """Admin settings for Coding entries."""
     list_display = ("system", "code", "display", "version", "created_at")
     list_filter = ("system",)
     search_fields = ("system", "code", "display", "meaning")
@@ -64,6 +67,7 @@ class CodingAdmin(TimestampedAdmin):
 
 @admin.register(Identifier)
 class IdentifierAdmin(TimestampedAdmin):
+    """Admin settings for Identifier entries."""
     list_display = ("system", "value", "use", "created_at")
     list_filter = ("use",)
     search_fields = ("system", "value")
@@ -72,6 +76,7 @@ class IdentifierAdmin(TimestampedAdmin):
 
 @admin.register(Address)
 class AddressAdmin(TimestampedAdmin):
+    """Admin settings for Address entries."""
     list_display = ("line1", "city", "state", "country", "postal_code")
     list_filter = ("country", "state")
     search_fields = ("line1", "line2", "city", "state", "postal_code")
@@ -96,6 +101,7 @@ class AddressAdmin(TimestampedAdmin):
 
 @admin.register(Collection)
 class CollectionAdmin(TimestampedAdmin):
+    """Admin settings for collections/datasets."""
     list_display = (
         "short_name",
         "full_name",
@@ -115,6 +121,7 @@ class CollectionAdmin(TimestampedAdmin):
 
 @admin.register(Subject)
 class SubjectAdmin(TimestampedAdmin):
+    """Admin settings for subjects/patients."""
     list_display = (
         "humanname_family",
         "humanname_given",
@@ -141,6 +148,7 @@ class SubjectAdmin(TimestampedAdmin):
 
 @admin.register(Encounter)
 class EncounterAdmin(TimestampedAdmin):
+    """Admin settings for encounters/visits."""
     list_display = (
         "subject",
         "actual_period_start",
@@ -170,6 +178,7 @@ class EncounterAdmin(TimestampedAdmin):
 
 @admin.register(Location)
 class LocationAdmin(TimestampedAdmin):
+    """Admin settings for scan locations."""
     list_display = ("name", "address", "created_at")
     search_fields = ("name",)
     fieldsets = ((None, {"fields": ("name", "address")}),)
@@ -177,6 +186,7 @@ class LocationAdmin(TimestampedAdmin):
 
 @admin.register(ImagingStudy)
 class ImagingStudyAdmin(TimestampedAdmin):
+    """Admin settings for imaging studies."""
     list_display = (
         "encounter",
         "collection",
@@ -230,6 +240,7 @@ class ImagingStudyAdmin(TimestampedAdmin):
 
 @admin.register(Record)
 class RecordAdmin(TimestampedAdmin):
+    """Admin settings for records and linked imaging studies."""
     list_display = (
         "encounter",
         "record_type",
