@@ -4,7 +4,13 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from rest_framework import status
 from archive.models import Collection, Coding
-from archive.constants import SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE
+from archive.constants import (
+    SYSTEM_RECORD_TYPE,
+    SYSTEM_ORIENTATION,
+    SYSTEM_MODALITY,
+    SYSTEM_PROCEDURE,
+    SYSTEM_IDENTIFIER_IMAGE_TYPE,
+)
 from .base import CleanupAPITestCase
 
 class ValuesetTests(CleanupAPITestCase):
@@ -65,6 +71,12 @@ class ValuesetTests(CleanupAPITestCase):
             system=SYSTEM_PROCEDURE,
             code='ortho-visit',
             defaults={'display': 'Orthodontic Visit'},
+        )
+
+        self.image_type_l, _ = Coding.objects.get_or_create(
+            system=SYSTEM_IDENTIFIER_IMAGE_TYPE,
+            code='L',
+            defaults={'display': 'Lateral'},
         )
 
     def test_missing_type_parameter(self):
@@ -187,6 +199,20 @@ class ValuesetTests(CleanupAPITestCase):
         # Verify expected values
         ids = [item['id'] for item in response.data]
         self.assertIn('ortho-visit', ids)
+
+    def test_image_types(self):
+        """Should return image types with correct structure."""
+        url = reverse('archive:valuesets-list') + '?type=image_types'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        for item in response.data:
+            self.assertIn('id', item)
+            self.assertIn('display', item)
+            self.assertEqual(len(item), 2)
+
+        ids = [item['id'] for item in response.data]
+        self.assertIn('L', ids)
 
     def test_cross_contamination_orientations_vs_collections(self):
         """Orientations should not contain collection codes"""

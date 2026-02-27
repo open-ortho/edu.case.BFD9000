@@ -189,3 +189,6 @@ CORS_ALLOWED_ORIGINS = os.environ.get(
     'CORS_ALLOWED_ORIGINS',
     "http://localhost:5173,http://127.0.0.1:5173"
 ).split(',')
+
+SCANNER_API_BASE = os.environ.get('SCANNER_API_BASE', 'http://localhost:5000')
+SCANNER_DEVICE_ID = os.environ.get('SCANNER_DEVICE_ID', 'scanner-001')

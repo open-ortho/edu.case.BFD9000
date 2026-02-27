@@ -18,6 +18,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, QuerySet
 from django.http import FileResponse, HttpResponse, JsonResponse
@@ -366,13 +367,33 @@ class RecordViewSet(viewsets.ModelViewSet):
 
         source_file = record.imaging_study.source_file
         ext = os.path.splitext(source_file.name)[1].lower()
+        transform_ops = record.image_transform_ops or []
         if ext in {'.tif', '.tiff'}:
             try:
                 source_file.open('rb')
                 png_bytes = _convert_tiff_to_png_bytes(source_file)
+                if transform_ops:
+                    with Image.open(io.BytesIO(png_bytes)) as img:
+                        transformed = _apply_transform_ops(img, transform_ops)
+                        out = io.BytesIO()
+                        transformed.save(out, format='PNG', optimize=True)
+                        png_bytes = out.getvalue()
                 return HttpResponse(png_bytes, content_type='image/png')
             except Exception as e:  # pylint: disable=broad-exception-caught
                 return Response({"error": f"Error converting TIFF: {e}"}, status=500)
+            finally:
+                source_file.close()
+
+        if transform_ops and ext != '.stl':
+            try:
+                source_file.open('rb')
+                with Image.open(source_file) as img:
+                    transformed = _apply_transform_ops(img, transform_ops)
+                    out = io.BytesIO()
+                    transformed.save(out, format='PNG', optimize=True)
+                    return HttpResponse(out.getvalue(), content_type='image/png')
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                return Response({"error": f"Error transforming image: {e}"}, status=500)
             finally:
                 source_file.close()
 
@@ -409,17 +430,31 @@ class RecordViewSet(viewsets.ModelViewSet):
             return HttpResponse(buf, content_type='image/jpeg')
 
         try:
+            if ext in {'.tif', '.tiff'}:
+                source_file.open('rb')
+                png_bytes = _convert_tiff_to_png_bytes(source_file)
+                source_file.close()
+                image_stream = io.BytesIO(png_bytes)
+            else:
+                image_stream = source_file
+
             # Open image using a context manager
-            with Image.open(source_file) as img:
+            with Image.open(image_stream) as img:
                 # Use a separate variable for any processed version of the image
                 processed_img = img
 
+                if record.image_transform_ops:
+                    processed_img = _apply_transform_ops(processed_img, record.image_transform_ops)
+
                 # Convert to RGB if RGBA (PNG) or LA
-                if img.mode in ('RGBA', 'LA'):
+                if processed_img.mode in ('RGBA', 'LA'):
                     background = Image.new(
-                        img.mode[:-1], img.size, (255, 255, 255))
-                    background.paste(img, img.split()[-1])
+                        processed_img.mode[:-1], processed_img.size, (255, 255, 255))
+                    background.paste(processed_img, processed_img.split()[-1])
                     processed_img = background
+
+                if processed_img.mode not in ('RGB', 'RGBA', 'LA', 'L'):
+                    processed_img = processed_img.convert('RGB')
 
                 processed_img.thumbnail((300, 300))
 
@@ -495,7 +530,15 @@ def scan(request):
         operator_display = f"{full_name} ({request.user.username})"
     else:
         operator_display = request.user.username
-    return render(request, "archive/scan.html", {"operator_display": operator_display})
+    return render(
+        request,
+        "archive/scan.html",
+        {
+            "operator_display": operator_display,
+            "scanner_api_base": settings.SCANNER_API_BASE,
+            "scanner_device_id": settings.SCANNER_DEVICE_ID,
+        },
+    )
 
 
 def _get_bits_per_sample(img: Image.Image) -> Optional[int]:
@@ -523,6 +566,18 @@ def _resize_image_for_preview(img: Image.Image, max_dim: int = 1024) -> Image.Im
     new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
     resample = Image.Resampling.NEAREST if img.mode.startswith("I;16") else Image.Resampling.LANCZOS
     return img.resize(new_size, resample)
+
+
+def _apply_transform_ops(img: Image.Image, ops: List[Dict[str, Any]]) -> Image.Image:
+    """Apply ordered rotate/flip operations stored on Record."""
+    transformed = img.copy()
+    for op in ops:
+        degrees = int(op.get('rotation', 0)) % 360
+        if degrees:
+            transformed = transformed.rotate(-degrees, expand=True)
+        if bool(op.get('flip', False)):
+            transformed = transformed.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    return transformed
 
 
 def _convert_tiff_to_png_bytes(upload) -> bytes:

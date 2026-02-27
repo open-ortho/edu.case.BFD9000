@@ -509,6 +509,28 @@ class Record(TimestampedModel):
         blank=True,
         related_name='record'
     )
+    image_type = models.ForeignKey(
+        Coding,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='records_image_type'
+    )
+    patient_orientation = models.CharField(
+        max_length=16,
+        blank=True,
+        help_text='DICOM PatientOrientation (0020,0020), encoded as A\\F'
+    )
+    sop_class_uid = models.CharField(
+        max_length=64,
+        blank=True,
+        help_text='DICOM SOP Class UID'
+    )
+    image_transform_ops = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Ordered list of transform ops applied to preview image'
+    )
     identifiers = models.ManyToManyField(
         Identifier, blank=True, related_name='records')
 

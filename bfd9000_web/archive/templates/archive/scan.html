@@ -69,6 +69,25 @@
                     <span class="label-text-alt">Maximum file size: 100MB</span>
                 </label>
             </div>
+            <div class="flex flex-wrap items-center gap-2 mt-2">
+                <button id="scan-button" class="btn btn-sm btn-outline">
+                    Scan from Scanner
+                </button>
+                <button id="device-info-button" class="btn btn-sm btn-ghost">
+                    Device Info
+                </button>
+                <button id="calibrate-button" class="btn btn-sm btn-ghost">
+                    Calibrate
+                </button>
+                <button id="eject-button" class="btn btn-sm btn-ghost">
+                    Eject Film
+                </button>
+                <span id="scan-status" class="text-sm text-base-content/70"></span>
+            </div>
+            <div class="text-sm text-base-content/70 mt-2">
+                <span class="font-semibold">Scanner:</span>
+                <span id="scanner-model">Detecting device...</span>
+            </div>
             <div id="file-preview" class="mt-2 hidden">
                 <div class="alert py-2 px-3">
                     <div>
@@ -206,6 +225,22 @@
             </div>
         </div>
     </div>
+
+    <dialog id="device-info-modal" class="modal">
+        <div class="modal-box max-w-3xl">
+            <h3 class="font-bold text-lg mb-2">Scanner Device Info</h3>
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <tbody id="device-info-body"></tbody>
+                </table>
+            </div>
+            <div class="modal-action">
+                <form method="dialog">
+                    <button class="btn">Close</button>
+                </form>
+            </div>
+        </div>
+    </dialog>
 </div>
 {% endblock %}
 
@@ -221,6 +256,10 @@
         file: null,
         previewFile: null,
         aiFile: null,
+        requiresServerTransform: false,
+        transformOps: [],
+        aiImageTypeCode: null,
+        aiPatientOrientation: null,
         valuesets: {
             record_types: [],
             orientations: [],
@@ -228,6 +267,8 @@
         }
     };
     const defaultOperatorDisplay = "{{ operator_display|default:''|escapejs }}";
+    const SCANNER_API_BASE = "{{ scanner_api_base|default:'http://localhost:5000'|escapejs }}";
+    const SCANNER_DEVICE_ID = "{{ scanner_device_id|default:'scanner-001'|escapejs }}";
 
     // ========================================
     // API FUNCTIONS
@@ -359,6 +400,222 @@
         console.log(r);
 
         return result;
+    }
+
+    async function performScannerScan() {
+        const button = document.getElementById('scan-button');
+        button.disabled = true;
+        showScanStatus('Starting scan...');
+
+        try {
+            const response = await fetch(`${SCANNER_API_BASE}/Device/${SCANNER_DEVICE_ID}/$scan`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/fhir+json',
+                    'Content-Type': 'application/fhir+json',
+                }
+            });
+
+            const bundle = await response.json();
+
+            if (!response.ok) {
+                const outcome = bundle.entry?.find(
+                    entry => entry.resource?.resourceType === 'OperationOutcome'
+                );
+                const message = outcome?.resource?.issue?.[0]?.details?.text || 'Scan failed';
+                throw new Error(message);
+            }
+
+            const binaryEntry = bundle.entry?.find(
+                entry => entry.resource?.resourceType === 'Binary'
+            );
+
+            if (!binaryEntry || !binaryEntry.resource?.data) {
+                throw new Error('No image data returned from scanner');
+            }
+
+            const binary = binaryEntry.resource;
+            const contentType = binary.contentType || 'image/png';
+            const file = binaryToFile(binary.data, contentType, 'scanner');
+            applyScannedFile(file);
+            showScanStatus('Scan completed');
+        } catch (error) {
+            showScanStatus(`Scan error: ${error.message}`, true);
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async function fetchScannerDeviceInfo() {
+        const response = await fetch(`${SCANNER_API_BASE}/Device/${SCANNER_DEVICE_ID}`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/fhir+json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`Device info failed: ${response.status}`);
+        }
+
+        return await response.json();
+    }
+
+    function buildDeviceInfoHtml(device) {
+        const rows = [];
+        rows.push(`<tr><td class="font-semibold">Manufacturer</td><td>${device.manufacturer || 'N/A'}</td></tr>`);
+        rows.push(`<tr><td class="font-semibold">Model</td><td>${device.modelNumber || 'N/A'}</td></tr>`);
+        rows.push(`<tr><td class="font-semibold">Serial</td><td>${device.serialNumber || 'N/A'}</td></tr>`);
+
+        if (device.version && device.version.length > 0) {
+            device.version.forEach((ver) => {
+                const label = ver.type?.text || 'Version';
+                const value = ver.value || 'N/A';
+                rows.push(`<tr><td class="font-semibold">${label}</td><td>${value}</td></tr>`);
+            });
+        }
+
+        if (device.property && device.property.length > 0) {
+            rows.push('<tr><td colspan="2" class="font-semibold">Properties</td></tr>');
+            device.property.forEach((prop) => {
+                const name = prop.type?.text || 'Property';
+                let value = 'N/A';
+                if (prop.valueQuantity) {
+                    value = `${prop.valueQuantity.value} ${prop.valueQuantity.unit || ''}`;
+                } else if (prop.valueCodeableConcept) {
+                    value = prop.valueCodeableConcept.text || 'N/A';
+                }
+                rows.push(`<tr><td class="font-semibold">${name}</td><td>${value}</td></tr>`);
+            });
+        }
+
+        return rows.join('');
+    }
+
+    async function handleDeviceInfo() {
+        const button = document.getElementById('device-info-button');
+        button.disabled = true;
+        showScanStatus('Fetching device info...');
+
+        try {
+            const device = await fetchScannerDeviceInfo();
+            const modalBody = document.getElementById('device-info-body');
+            modalBody.innerHTML = buildDeviceInfoHtml(device);
+            document.getElementById('device-info-modal').showModal();
+            showScanStatus('Device info loaded');
+        } catch (error) {
+            showScanStatus(`Device info error: ${error.message}`, true);
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async function handleCalibrate() {
+        const button = document.getElementById('calibrate-button');
+        button.disabled = true;
+        showScanStatus('Calibration started...');
+
+        try {
+            const response = await fetch(`${SCANNER_API_BASE}/Device/${SCANNER_DEVICE_ID}/$calibrate`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/fhir+json',
+                    'Content-Type': 'application/fhir+json',
+                },
+            });
+            const outcome = await response.json();
+            const message = outcome.issue?.[0]?.details?.text || 'Calibration complete';
+            const isError = outcome.issue?.[0]?.severity === 'error';
+            showScanStatus(message, isError);
+        } catch (error) {
+            showScanStatus(`Calibration error: ${error.message}`, true);
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async function handleEject() {
+        const button = document.getElementById('eject-button');
+        button.disabled = true;
+        showScanStatus('Ejecting film...');
+
+        try {
+            const response = await fetch(`${SCANNER_API_BASE}/Device/${SCANNER_DEVICE_ID}/$eject`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/fhir+json',
+                    'Content-Type': 'application/fhir+json',
+                },
+            });
+            const outcome = await response.json();
+            const message = outcome.issue?.[0]?.details?.text || 'Eject complete';
+            const isError = outcome.issue?.[0]?.severity === 'error';
+            showScanStatus(message, isError);
+        } catch (error) {
+            showScanStatus(`Eject error: ${error.message}`, true);
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async function loadScannerModel() {
+        try {
+            const device = await fetchScannerDeviceInfo();
+            const model = device.modelNumber || device.deviceName?.[0]?.name || 'Unknown model';
+            document.getElementById('scanner-model').textContent = model;
+        } catch (error) {
+            document.getElementById('scanner-model').textContent = 'Scanner not connected';
+        }
+    }
+
+    function binaryToFile(base64Data, contentType, baseName) {
+        const byteChars = atob(base64Data);
+        const byteNumbers = new Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i += 1) {
+            byteNumbers[i] = byteChars.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: contentType });
+        const ext = contentType === 'image/png' ? 'png' : 'bin';
+        return new File([blob], `${baseName}.${ext}`, { type: contentType });
+    }
+
+    function applyScannedFile(file) {
+        state.file = file;
+        state.previewFile = file;
+        state.aiFile = file;
+        state.requiresServerTransform = false;
+        state.transformOps = [];
+        state.aiImageTypeCode = null;
+        state.aiPatientOrientation = null;
+        showFilePreview(file, file);
+        updateSubmitButton();
+    }
+
+    function mapAIType(typePrediction) {
+        const mapping = {
+            'Lateral': {
+                recordType: '201456002',
+                imageType: 'L',
+                patientOrientation: ['A', 'F'],
+            },
+            'Hip & Pelvis': {
+                recordType: '268425006',
+                imageType: 'P',
+                patientOrientation: null,
+            },
+            'Foot & Ankle': {
+                recordType: '1597004',
+                imageType: 'FA',
+                patientOrientation: null,
+            },
+            'Hand & Wrist': {
+                recordType: '39714003',
+                imageType: 'H',
+                patientOrientation: null,
+            },
+        };
+        return mapping[typePrediction] || null;
     }
 
     // ========================================
@@ -497,6 +754,12 @@
         statusDiv.textContent = message;
     }
 
+    function showScanStatus(message, isError = false) {
+        const status = document.getElementById('scan-status');
+        status.className = `text-sm ${isError ? 'text-error' : 'text-base-content/70'}`;
+        status.textContent = message;
+    }
+
     // ========================================
     // UTILITY FUNCTIONS
     // ========================================
@@ -516,6 +779,11 @@
     // modify image by rotating / flipping
     async function modifyImage(degrees, flip = false) {
         if (!state.aiFile) return;
+
+        state.transformOps.push({
+            rotation: ((degrees % 360) + 360) % 360,
+            flip: !!flip,
+        });
 
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -647,6 +915,10 @@
             state.file = null;
             state.previewFile = null;
             state.aiFile = null;
+            state.requiresServerTransform = false;
+            state.transformOps = [];
+            state.aiImageTypeCode = null;
+            state.aiPatientOrientation = null;
             document.getElementById('file-preview').classList.add('hidden');
             clearFormFields();
             updateSubmitButton();
@@ -675,11 +947,16 @@
         }
 
         state.file = file;
+        state.transformOps = [];
+        state.aiImageTypeCode = null;
+        state.aiPatientOrientation = null;
         if (ext === 'png') {
+            state.requiresServerTransform = false;
             state.previewFile = file;
             state.aiFile = file;
             showFilePreview(file, state.previewFile);
         } else if (ext === 'tif' || ext === 'tiff') {
+            state.requiresServerTransform = true;
             try {
                 const pngPreview = await convertTiffToPng(file);
                 state.previewFile = pngPreview;
@@ -694,6 +971,7 @@
                 document.getElementById('no-image-text').classList.remove('hidden');
             }
         } else {
+            state.requiresServerTransform = false;
             state.previewFile = null;
             state.aiFile = null;
             showFilePreview(file, null);
@@ -753,19 +1031,13 @@
 
             // Map AI type_prediction to record_type select value
             if (result.type_prediction) {
+                const mapped = mapAIType(result.type_prediction);
                 const recordTypeSelect = document.getElementById('record-type');
-                recordTypeSelect.value = {
-                    'Lateral': '201456002', // 'Cephalogram'
-                    'Hip & Pelvis': '268425006', // 'Pelvis X-ray'
-                    'Foot & Ankle': '1597004', // 'Skeletal X-ray of ankle and foot'
-                    'Hand & Wrist': '39714003', // 'Skeletal X-ray of wrist and hand'
-                    // 'Elbow': '1927002', // 'Entire left elbow region'
-                    // 'Elbow': '71889004', // 'Entire right elbow region'
-                    // 'Knee': '210659002', // 'Entire left knee'
-                    // 'Knee': '210562007', // 'Entire right knee'
-                    // 'Frontal'
-                    // 'Chest & Shoulder'
-                }[result.type_prediction]; // TODO: what the hell?
+                if (mapped && mapped.recordType) {
+                    recordTypeSelect.value = mapped.recordType;
+                    state.aiImageTypeCode = mapped.imageType;
+                    state.aiPatientOrientation = mapped.patientOrientation;
+                }
             }
             
             if (result.flip || result.rotation) {
@@ -800,6 +1072,17 @@
             formData.append('record_type', document.getElementById('record-type').value);
             formData.append('orientation', document.getElementById('orientation').value);
             formData.append('modality', document.getElementById('modality').value);
+
+            if (state.aiImageTypeCode) {
+                formData.append('image_type', state.aiImageTypeCode);
+            }
+            if (state.aiPatientOrientation && state.aiPatientOrientation.length === 2) {
+                formData.append('patient_orientation', state.aiPatientOrientation[0]);
+                formData.append('patient_orientation', state.aiPatientOrientation[1]);
+            }
+            if (state.requiresServerTransform && state.transformOps.length > 0) {
+                formData.append('image_transform_ops', JSON.stringify(state.transformOps));
+            }
 
             const operator = document.getElementById('operator').value.trim();
             if (operator) {
@@ -855,8 +1138,13 @@
         state.file = null;
         state.previewFile = null;
         state.aiFile = null;
+        state.requiresServerTransform = false;
+        state.transformOps = [];
+        state.aiImageTypeCode = null;
+        state.aiPatientOrientation = null;
         document.getElementById('file-upload').value = '';
         document.getElementById('file-preview').classList.add('hidden');
+        document.getElementById('scan-status').textContent = '';
 
         // Clear form fields
         clearFormFields();
@@ -900,6 +1188,10 @@
         document.getElementById('search-subject').addEventListener('click', handleSearchSubject);
         document.getElementById('encounter-select').addEventListener('change', handleEncounterSelect);
         document.getElementById('file-upload').addEventListener('change', handleFileUpload);
+        document.getElementById('scan-button').addEventListener('click', performScannerScan);
+        document.getElementById('device-info-button').addEventListener('click', handleDeviceInfo);
+        document.getElementById('calibrate-button').addEventListener('click', handleCalibrate);
+        document.getElementById('eject-button').addEventListener('click', handleEject);
         document.getElementById('flip-button').addEventListener('click', handleFlip);
         document.getElementById('rotate-left-button').addEventListener('click', handleRotateLeft);
         document.getElementById('rotate-right-button').addEventListener('click', handleRotateRight);
@@ -915,6 +1207,8 @@
         ['record-type', 'orientation', 'modality'].forEach(id => {
             document.getElementById(id).addEventListener('change', updateSubmitButton);
         });
+
+        await loadScannerModel();
     }
 
     document.addEventListener('DOMContentLoaded', init);

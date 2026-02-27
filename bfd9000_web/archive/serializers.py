@@ -7,6 +7,7 @@ It includes specialized logic for file uploads and validation.
 """
 import datetime
 import importlib
+import json
 from typing import Any, Dict, Optional, cast
 try:
     magic = importlib.import_module('magic')
@@ -30,6 +31,7 @@ from .constants import (
     SYSTEM_MODALITY,
     SYSTEM_RECORD_TYPE,
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
+    SYSTEM_IDENTIFIER_IMAGE_TYPE,
 )
 
 
@@ -40,6 +42,20 @@ RECORD_TYPE_CODES = (
     '1597004',
     '302189007',
 )
+
+LATERAL_IMAGE_TYPE_CODE = 'L'
+
+
+def _encode_patient_orientation(value: Optional[list[str]]) -> str:
+    if not value:
+        return ''
+    return '\\'.join(value)
+
+
+def _decode_patient_orientation(value: str) -> list[str]:
+    if not value:
+        return []
+    return [part for part in value.split('\\') if part]
 
 
 def _get_preferred_identifier(identifiers) -> Optional[str]:
@@ -225,11 +241,12 @@ class RecordSerializer(serializers.ModelSerializer):
     actual_period_start_precision = serializers.CharField(source='encounter.actual_period_start_precision', read_only=True)
     actual_period_start_uncertain = serializers.BooleanField(source='encounter.actual_period_start_uncertain', read_only=True)
     age_at_encounter = serializers.SerializerMethodField()
+    patient_orientation = serializers.SerializerMethodField()
 
     # Add imaging study fields for display
     acquisition_date = serializers.SerializerMethodField()
     file_size = serializers.IntegerField(source='imaging_study.source_file.size', read_only=True)
-    image_type = serializers.CharField(source='imaging_study.image_type', read_only=True)
+    image_type = CodingSerializer(read_only=True)
 
     class Meta:
         """Serializer metadata."""
@@ -264,6 +281,9 @@ class RecordSerializer(serializers.ModelSerializer):
             return obj.imaging_study.scan_datetime.date()
         return None
 
+    def get_patient_orientation(self, obj: Record) -> list[str]:
+        return _decode_patient_orientation(str(getattr(obj, 'patient_orientation', '') or ''))
+
 class RecordUploadSerializer(serializers.ModelSerializer):
     """
     Serializer for uploading records with files.
@@ -291,6 +311,21 @@ class RecordUploadSerializer(serializers.ModelSerializer):
     )
 
     acquisition_date = serializers.DateField(required=False, write_only=True)
+    image_type = serializers.SlugRelatedField(
+        slug_field='code',
+        queryset=Coding.objects.filter(system=SYSTEM_IDENTIFIER_IMAGE_TYPE),
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
+    patient_orientation = serializers.ListField(
+        child=serializers.CharField(max_length=1),
+        min_length=2,
+        max_length=2,
+        required=False,
+        write_only=True,
+    )
+    image_transform_ops = serializers.JSONField(required=False, write_only=True)
 
     # Allow encounter to be passed in body (for flat endpoint) or context (for nested)
     encounter = serializers.PrimaryKeyRelatedField(
@@ -302,7 +337,49 @@ class RecordUploadSerializer(serializers.ModelSerializer):
     class Meta:
         """Serializer metadata."""
         model = Record
-        fields = ['id', 'file', 'record_type', 'orientation', 'modality', 'acquisition_date', 'encounter']
+        fields = [
+            'id',
+            'file',
+            'record_type',
+            'orientation',
+            'modality',
+            'acquisition_date',
+            'encounter',
+            'image_type',
+            'patient_orientation',
+            'image_transform_ops',
+        ]
+
+    def validate_patient_orientation(self, value: Any) -> Any:
+        valid = {'A', 'P', 'R', 'L', 'H', 'F'}
+        upper = [str(v).upper() for v in value]
+        if any(v not in valid for v in upper):
+            raise serializers.ValidationError('patient_orientation values must be one of A, P, R, L, H, F')
+        return upper
+
+    def validate_image_transform_ops(self, value: Any) -> Any:
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise serializers.ValidationError('image_transform_ops must be valid JSON') from exc
+
+        if not isinstance(value, list):
+            raise serializers.ValidationError('image_transform_ops must be a list')
+
+        normalized = []
+        for op in value:
+            if not isinstance(op, dict):
+                raise serializers.ValidationError('each transform op must be an object')
+
+            rotation = int(op.get('rotation', 0))
+            rotation = rotation % 360
+            if rotation not in {0, 90, 180, 270}:
+                raise serializers.ValidationError('rotation must be one of 0, 90, 180, 270')
+            flip = bool(op.get('flip', False))
+            normalized.append({'rotation': rotation, 'flip': flip})
+
+        return normalized
 
     def to_representation(self, instance: Record) -> Dict[str, Any]:
         """Use standard RecordSerializer for response."""
@@ -364,6 +441,9 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         mod_coding = validated_data.pop('modality')  # Maps to 'series_modality'
 
         acquisition_date = validated_data.pop('acquisition_date', datetime.date.today())
+        image_type = validated_data.pop('image_type', None)
+        patient_orientation = validated_data.pop('patient_orientation', None)
+        transform_ops = validated_data.pop('image_transform_ops', [])
 
         # Resolve encounter: check body first, then context
         encounter = validated_data.pop('encounter', None)
@@ -378,6 +458,9 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         scan_operator = None
         if request and request.user.is_authenticated:
             scan_operator = request.user
+
+        if patient_orientation is None and image_type and image_type.code == LATERAL_IMAGE_TYPE_CODE:
+            patient_orientation = ['A', 'F']
 
         with transaction.atomic():
             subject = encounter.subject
@@ -405,7 +488,10 @@ class RecordUploadSerializer(serializers.ModelSerializer):
             record = Record.objects.create(
                 encounter=encounter,
                 record_type=rt_coding,
-                imaging_study=study
+                imaging_study=study,
+                image_type=image_type,
+                patient_orientation=_encode_patient_orientation(patient_orientation),
+                image_transform_ops=transform_ops,
             )
 
             return record

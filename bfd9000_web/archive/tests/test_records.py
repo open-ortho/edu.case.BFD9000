@@ -10,7 +10,14 @@ from django.urls import reverse
 from PIL import Image
 from rest_framework import status
 from archive.models import Subject, Encounter, Record, Coding, Collection, ImagingStudy
-from archive.constants import SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE, SYSTEM_BODY_SITE
+from archive.constants import (
+    SYSTEM_RECORD_TYPE,
+    SYSTEM_ORIENTATION,
+    SYSTEM_MODALITY,
+    SYSTEM_PROCEDURE,
+    SYSTEM_BODY_SITE,
+    SYSTEM_IDENTIFIER_IMAGE_TYPE,
+)
 from .base import CleanupAPITestCase
 
 class RecordTests(CleanupAPITestCase):
@@ -76,6 +83,11 @@ class RecordTests(CleanupAPITestCase):
             system=SYSTEM_MODALITY,
             code='RG',
             defaults={'display': 'Radiography'}
+        )
+        self.image_type_lateral, _ = Coding.objects.get_or_create(
+            system=SYSTEM_IDENTIFIER_IMAGE_TYPE,
+            code='L',
+            defaults={'display': 'Lateral'},
         )
 
         # Create a valid PNG image
@@ -296,6 +308,53 @@ class RecordTests(CleanupAPITestCase):
         response = self.client.get(image_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response['Content-Type'], 'image/png')
+
+    def test_create_record_sets_default_patient_orientation_for_lateral_image_type(self):
+        """Lateral image type should default PatientOrientation to A\\F."""
+        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile("test.tiff", self.tiff_content, content_type="image/tiff")
+        data = {
+            "file": file,
+            "record_type": self.rt_lateral.code,
+            "orientation": "left",
+            "modality": "RG",
+            "image_type": "L",
+        }
+
+        create_response = self.client.post(url, data, format='multipart')
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_response.data['patient_orientation'], ['A', 'F'])
+
+        record = Record.objects.get(pk=create_response.data['id'])
+        self.assertEqual(record.patient_orientation, 'A\\F')
+
+    def test_record_image_applies_saved_transform_ops(self):
+        """Image endpoint should apply persisted transform operations."""
+        img = Image.new('RGB', (2, 1), color=(255, 255, 255))
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        png_content = buf.getvalue()
+
+        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile("test.png", png_content, content_type="image/png")
+        data = {
+            "file": file,
+            "record_type": self.rt_lateral.code,
+            "orientation": "left",
+            "modality": "RG",
+            "image_transform_ops": '[{"rotation":90,"flip":false}]',
+        }
+
+        create_response = self.client.post(url, data, format='multipart')
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        image_url = reverse('archive:record-image', kwargs={'pk': create_response.data['id']})
+        response = self.client.get(image_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response['Content-Type'], 'image/png')
+
+        transformed = Image.open(io.BytesIO(response.content))
+        self.assertEqual(transformed.size, (1, 2))
 
     def test_get_record_thumbnail(self):
         """Should serve record thumbnail"""
