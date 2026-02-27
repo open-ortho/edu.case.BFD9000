@@ -142,3 +142,5 @@ daisyui.mjs
 daisyui-theme.mjs
 tailwindcss
 tailwindcss.exe
+
+.direnv/
