@@ -144,3 +144,4 @@ tailwindcss
 tailwindcss.exe
 
 .direnv/
+tmp/
