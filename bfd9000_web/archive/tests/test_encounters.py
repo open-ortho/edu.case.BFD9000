@@ -91,6 +91,41 @@ class EncounterTests(CleanupAPITestCase):
         self.assertIn('results', response.data)
         self.assertEqual(len(response.data['results']), 2)
 
+    def test_list_encounters_sorted_by_date_desc(self):
+        """Encounter list should be deterministically ordered newest-first."""
+        url = reverse('archive:subject-encounters-list', kwargs={'subject_pk': self.subject.id})
+        self.client.post(url, {
+            "actual_period_start": "2020-01-01",
+            "procedure_code": self.procedure.id,
+        }, format='json')
+        self.client.post(url, {
+            "actual_period_start": "2021-01-01",
+            "procedure_code": self.procedure.id,
+        }, format='json')
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['results'][0]['actual_period_start'], '2021-01-01')
+        self.assertEqual(response.data['results'][1]['actual_period_start'], '2020-01-01')
+
+    def test_global_encounter_list_with_subject_filter_is_ordered(self):
+        """Global encounters endpoint should be ordered when paginated."""
+        nested_url = reverse('archive:subject-encounters-list', kwargs={'subject_pk': self.subject.id})
+        self.client.post(nested_url, {
+            "actual_period_start": "2020-01-01",
+            "procedure_code": self.procedure.id,
+        }, format='json')
+        self.client.post(nested_url, {
+            "actual_period_start": "2021-01-01",
+            "procedure_code": self.procedure.id,
+        }, format='json')
+
+        url = reverse('archive:encounter-list')
+        response = self.client.get(url, {'subject': self.subject.id, 'page': 1, 'page_size': 20})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data['results']), 2)
+        self.assertEqual(response.data['results'][0]['actual_period_start'], '2021-01-01')
+
     def test_get_encounter_detail(self):
         """Should retrieve specific encounter details"""
         # Create encounter via API

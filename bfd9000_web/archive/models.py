@@ -294,8 +294,8 @@ class Subject(TimestampedModel):
 
     def get_collections(self):
         """Return the subject's assigned collection, if any"""
-        if self.collection_id:
-            return Collection.objects.filter(pk=self.collection_id)
+        if self.collection is not None:
+            return Collection.objects.filter(pk=self.collection.pk)
         return Collection.objects.none()
 
     def __str__(self):

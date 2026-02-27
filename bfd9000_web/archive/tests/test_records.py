@@ -324,6 +324,21 @@ class RecordTests(CleanupAPITestCase):
         for field in expected_fields:
             self.assertIn(field, response.data)
 
+    def test_record_includes_encounter_date(self):
+        """Should expose encounter date in record response."""
+        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        data = {
+            "file": file,
+            "record_type": self.rt_lateral.code,
+            "orientation": "left",
+            "modality": "RG",
+        }
+
+        response = self.client.post(url, data, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(str(response.data['encounter_date']), '2020-01-01')
+
     def test_upload_preserves_acquisition_date(self):
         """Should return the same acquisition date submitted on upload."""
         url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})

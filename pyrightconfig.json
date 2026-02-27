@@ -5,7 +5,14 @@
   "reportUnknownParameterType": "warning",
   "reportUnknownVariableType": "none",
   "reportMissingTypeStubs": "warning",
+  "reportIncompatibleVariableOverride": "none",
+  "extraPaths": [
+    "bfd9000_web"
+  ],
   "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
     "**/migrations/**",
     "**/tests/**"
   ]

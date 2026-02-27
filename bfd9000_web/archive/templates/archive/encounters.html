@@ -149,7 +149,7 @@
 
                 // Date column (plain text)
                 const date = document.createElement("td");
-                date.textContent = encounter.date || "-";
+                date.textContent = encounter.actual_period_start || encounter.encounter_date || "-";
 
                 row.replaceChildren(encounterId, subject, records, date);
                 return row;

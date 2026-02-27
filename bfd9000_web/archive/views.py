@@ -249,7 +249,7 @@ class EncounterViewSet(viewsets.ModelViewSet):
         'subject__identifiers'
     ).annotate(
         record_count=Count('records', distinct=True)
-    ).all()
+    ).order_by('-actual_period_start', '-id')
     serializer_class = EncounterSerializer
     filterset_fields = ['subject', 'actual_period_start']
 

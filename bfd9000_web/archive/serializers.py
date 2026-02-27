@@ -189,7 +189,7 @@ class RecordSerializer(serializers.ModelSerializer):
     encounter_id = serializers.IntegerField(source='encounter.id', read_only=True)
     subject_id = serializers.IntegerField(source='encounter.subject.id', read_only=True)
     subject_identifier = serializers.SerializerMethodField()
-    encounter_date = serializers.DateField(source='encounter.encounter_date', read_only=True)
+    encounter_date = serializers.DateField(source='encounter.actual_period_start', read_only=True)
     age_at_encounter = serializers.SerializerMethodField()
 
     # Add imaging study fields for display

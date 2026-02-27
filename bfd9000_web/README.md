@@ -82,12 +82,6 @@ python bfd9000_web/manage.py import_subjects lancaster --file LancasterDemograph
 Use `--dry-run` to validate without writing to the database. Use `--include-names` to populate
 first/last names when available (default is to leave names null).
 
-The legacy Bolton-only command still exists:
-
-```bash
-python bfd9000_web/manage.py import_bolton_subjects --file BoltonSubjects2.xlsx
-```
-
 ## Additional Information
 
 - The application settings can be found in `bfd9000/settings.py`.

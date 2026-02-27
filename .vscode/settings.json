@@ -8,6 +8,12 @@
     ],
     "python.analysis.extraPaths": [
         "${workspaceFolder}/bbc2dcm/",
+        "${workspaceFolder}/bfd9000_web",
+        "/nix/store/pf158yf5ad9jja3yc43r3jxmjjnbhxyp-python3.11-django-4.2.25/lib/python3.11/site-packages",
+        "/nix/store/xyqil8lf2y2wpvczmnkx81i3xx0g9miz-python3.11-django-stubs-5.1.3/lib/python3.11/site-packages",
+        "/nix/store/kh6bvjai91glf3wkq1zhwr8wqv0mrbn3-python3.11-django-stubs-ext-5.1.3/lib/python3.11/site-packages",
+        "/nix/store/dzalm9yv07l5wk6fm35c5fwrm2zla8v9-python3.11-djangorestframework-stubs-3.15.3/lib/python3.11/site-packages",
+        "/nix/store/apnmqg6v4adrr8ggwad87nwkmca4v5ai-python3.11-djangorestframework-3.16.0/lib/python3.11/site-packages"
     ],
     "python.testing.pytestEnabled": false,
     "python.testing.unittestEnabled": true,
