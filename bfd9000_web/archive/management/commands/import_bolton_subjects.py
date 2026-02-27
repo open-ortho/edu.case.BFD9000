@@ -285,10 +285,17 @@ class Command(BaseCommand):
     def _normalize_date(self, value) -> date:
         if isinstance(value, datetime):
             return value.date()
+        if isinstance(value, date):
+            return value
         if hasattr(value, "date"):
             return value.date()
+        raw = str(value).strip()
         try:
-            return datetime.strptime(str(value), "%Y-%m-%d").date()
+            return datetime.fromisoformat(raw).date()
+        except ValueError:
+            pass
+        try:
+            return date.fromisoformat(raw)
         except ValueError as exc:
             raise CommandError(f"Invalid date format: {value}") from exc
 
