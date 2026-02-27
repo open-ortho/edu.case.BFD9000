@@ -151,9 +151,7 @@
         document.getElementById('subject-id').textContent = record.subject_identifier || record.subject_id || '-';
         document.getElementById('encounter-id').textContent = record.encounter_id || '-';
         document.getElementById('encounter-date').textContent = record.encounter_date || '-';
-        document.getElementById('age-at-encounter').textContent = record.age_at_encounter 
-            ? `${record.age_at_encounter} years`
-            : '-';
+        document.getElementById('age-at-encounter').textContent = formatAge(record);
 
         // Record Details
         document.getElementById('record-type').textContent = record.record_type?.display || '-';
@@ -176,6 +174,36 @@
                 })
                 .catch(err => console.error('Error loading imaging study:', err));
         }
+    }
+
+    function formatAge(record) {
+        const ageYears = record.age_at_encounter;
+        if (ageYears === null || ageYears === undefined) {
+            return '-';
+        }
+
+        const wholeYears = Math.floor(ageYears);
+        let months = Math.round((ageYears - wholeYears) * 12);
+        let years = wholeYears;
+        if (months === 12) {
+            years += 1;
+            months = 0;
+        }
+
+        let ageText = `${years}y ${months}m`;
+
+        if (record.actual_period_start_uncertain) {
+            const precision = record.actual_period_start_precision;
+            if (precision === 'month') {
+                ageText += ' +/- 1m';
+            } else if (precision === 'year') {
+                ageText += ' +/- 1y';
+            } else {
+                ageText += ' +/-';
+            }
+        }
+
+        return ageText;
     }
 
     document.addEventListener('DOMContentLoaded', loadRecord);

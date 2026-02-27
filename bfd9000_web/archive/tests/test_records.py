@@ -361,6 +361,32 @@ class RecordTests(CleanupAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(str(response.data['encounter_date']), '2020-01-01')
 
+    def test_record_age_falls_back_to_birthdate_when_duration_missing(self):
+        """Should derive record age from encounter date and subject birth date."""
+        encounter = Encounter.objects.create(
+            subject=self.subject,
+            actual_period_start="2020-06-15",
+            procedure_code=self.procedure,
+            procedure_occurrence_age=None,
+        )
+        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': encounter.id})
+        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        data = {
+            "file": file,
+            "record_type": self.rt_lateral.code,
+            "orientation": "left",
+            "modality": "RG",
+        }
+
+        create_response = self.client.post(url, data, format='multipart')
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertAlmostEqual(create_response.data['age_at_encounter'], 20.45, delta=0.05)
+
+        detail_url = reverse('archive:record-detail', kwargs={'pk': create_response.data['id']})
+        detail_response = self.client.get(detail_url)
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertAlmostEqual(detail_response.data['age_at_encounter'], 20.45, delta=0.05)
+
     def test_upload_preserves_acquisition_date(self):
         """Should return the same acquisition date submitted on upload."""
         url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})

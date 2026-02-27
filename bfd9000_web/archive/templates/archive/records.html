@@ -26,7 +26,7 @@
                     <th>Record ID</th>
                     <th>Encounter</th>
                     <th>Subject</th>
-                    <th>Date</th>
+                    <th>Age</th>
                     <th>File Size</th>
                     <th>Image Type</th>
                 </tr>
@@ -125,6 +125,36 @@
     // TABLE SETUP USING PaginatedTableManager
     // ========================================
 
+    function formatAge(record) {
+        const ageYears = record.age_at_encounter;
+        if (ageYears === null || ageYears === undefined) {
+            return "-";
+        }
+
+        const wholeYears = Math.floor(ageYears);
+        let months = Math.round((ageYears - wholeYears) * 12);
+        let years = wholeYears;
+        if (months === 12) {
+            years += 1;
+            months = 0;
+        }
+
+        let ageText = `${years}y ${months}m`;
+
+        if (record.actual_period_start_uncertain) {
+            const precision = record.actual_period_start_precision;
+            if (precision === "month") {
+                ageText += " +/- 1m";
+            } else if (precision === "year") {
+                ageText += " +/- 1y";
+            } else {
+                ageText += " +/-";
+            }
+        }
+
+        return ageText;
+    }
+
     const tableManager = new PaginatedTableManager({
         tableBodyId: "record_table_body",
         columnCount: 6,
@@ -162,9 +192,9 @@
                     (window.location.href = `/encounters/?subject=${record.subject_id}`);
                 subject.appendChild(subjectBtn);
 
-                // Date column (plain text)
-                const date = document.createElement("td");
-                date.textContent = record.acquisition_date || "-";
+                // Age column (years/months with uncertainty when applicable)
+                const age = document.createElement("td");
+                age.textContent = formatAge(record);
 
                 // File size column (plain text)
                 const fileSize = document.createElement("td");
@@ -178,7 +208,7 @@
                     recordId,
                     encounter,
                     subject,
-                    date,
+                    age,
                     fileSize,
                     imageType
                 );

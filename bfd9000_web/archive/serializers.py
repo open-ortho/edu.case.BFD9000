@@ -204,6 +204,8 @@ class RecordSerializer(serializers.ModelSerializer):
     subject_id = serializers.IntegerField(source='encounter.subject.id', read_only=True)
     subject_identifier = serializers.SerializerMethodField()
     encounter_date = serializers.DateField(source='encounter.actual_period_start', read_only=True)
+    actual_period_start_precision = serializers.CharField(source='encounter.actual_period_start_precision', read_only=True)
+    actual_period_start_uncertain = serializers.BooleanField(source='encounter.actual_period_start_uncertain', read_only=True)
     age_at_encounter = serializers.SerializerMethodField()
 
     # Add imaging study fields for display
@@ -218,8 +220,15 @@ class RecordSerializer(serializers.ModelSerializer):
 
     def get_age_at_encounter(self, obj):
         """Get age at encounter in years."""
-        if obj.encounter and obj.encounter.procedure_occurrence_age:
-            days = obj.encounter.procedure_occurrence_age.days
+        encounter = getattr(obj, 'encounter', None)
+        subject = getattr(encounter, 'subject', None)
+        birth_date = getattr(subject, 'birth_date', None)
+
+        if encounter and encounter.procedure_occurrence_age:
+            days = encounter.procedure_occurrence_age.days
+            return round(days / 365.25, 2)
+        if encounter and encounter.actual_period_start and birth_date:
+            days = (encounter.actual_period_start - birth_date).days
             return round(days / 365.25, 2)
         return None
 
