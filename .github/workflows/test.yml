@@ -25,4 +25,4 @@ jobs:
 
       - name: Run Django tests
         run: |
-          nix develop --command bash -c "cd bfd9000_web && python manage.py test --verbosity=2"
+          nix develop --command python bfd9000_web/manage.py test --verbosity=2

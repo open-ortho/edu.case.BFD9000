@@ -269,6 +269,7 @@
     const defaultOperatorDisplay = "{{ operator_display|default:''|escapejs }}";
     const SCANNER_API_BASE = "{{ scanner_api_base|default:'http://localhost:5000'|escapejs }}";
     const SCANNER_DEVICE_ID = "{{ scanner_device_id|default:'scanner-001'|escapejs }}";
+    const AI_BASE_URL = "{{ ai_base_url|default:'https://wingate.case.edu/bfd9020'|escapejs }}";
 
     // ========================================
     // API FUNCTIONS
@@ -374,13 +375,14 @@
         const formData = new FormData();
         formData.append('image', file);
 
-        const resp = await fetch('https://wingate.case.edu/bfd9020/xray-info', {
+        const aiInfoUrl = `${AI_BASE_URL}/xray-info`;
+        const resp = await fetch(aiInfoUrl, {
             method: 'POST',
             body: formData
         });
         if (!resp.ok) {
             const errorText = await resp.text();
-            throw new Error(`AI service error: ${url} - ${resp.status} - ${errorText}`);
+            throw new Error(`AI service error: ${aiInfoUrl} - ${resp.status} - ${errorText}`);
         }
         const result = await resp.json();
         console.log(result);
@@ -388,13 +390,14 @@
         const formData2 = new FormData();
         formData2.append('image', file);
 
-        const resp2 = await fetch('https://wingate.case.edu/bfd9020/xray-class', {
+        const aiClassUrl = `${AI_BASE_URL}/xray-class`;
+        const resp2 = await fetch(aiClassUrl, {
             method: 'POST',
             body: formData2
         });
         if (!resp2.ok) {
             const errorText = await resp2.text();
-            throw new Error(`AI service error: ${url} - ${resp2.status} - ${errorText}`);
+            throw new Error(`AI service error: ${aiClassUrl} - ${resp2.status} - ${errorText}`);
         }
         const r = await resp2.json();
         console.log(r);
@@ -461,16 +464,22 @@
         return await response.json();
     }
 
+    function escapeHtml(value) {
+        const div = document.createElement('div');
+        div.textContent = String(value ?? 'N/A');
+        return div.innerHTML;
+    }
+
     function buildDeviceInfoHtml(device) {
         const rows = [];
-        rows.push(`<tr><td class="font-semibold">Manufacturer</td><td>${device.manufacturer || 'N/A'}</td></tr>`);
-        rows.push(`<tr><td class="font-semibold">Model</td><td>${device.modelNumber || 'N/A'}</td></tr>`);
-        rows.push(`<tr><td class="font-semibold">Serial</td><td>${device.serialNumber || 'N/A'}</td></tr>`);
+        rows.push(`<tr><td class="font-semibold">Manufacturer</td><td>${escapeHtml(device.manufacturer)}</td></tr>`);
+        rows.push(`<tr><td class="font-semibold">Model</td><td>${escapeHtml(device.modelNumber)}</td></tr>`);
+        rows.push(`<tr><td class="font-semibold">Serial</td><td>${escapeHtml(device.serialNumber)}</td></tr>`);
 
         if (device.version && device.version.length > 0) {
             device.version.forEach((ver) => {
-                const label = ver.type?.text || 'Version';
-                const value = ver.value || 'N/A';
+                const label = escapeHtml(ver.type?.text || 'Version');
+                const value = escapeHtml(ver.value);
                 rows.push(`<tr><td class="font-semibold">${label}</td><td>${value}</td></tr>`);
             });
         }
@@ -478,14 +487,14 @@
         if (device.property && device.property.length > 0) {
             rows.push('<tr><td colspan="2" class="font-semibold">Properties</td></tr>');
             device.property.forEach((prop) => {
-                const name = prop.type?.text || 'Property';
+                const name = escapeHtml(prop.type?.text || 'Property');
                 let value = 'N/A';
                 if (prop.valueQuantity) {
-                    value = `${prop.valueQuantity.value} ${prop.valueQuantity.unit || ''}`;
+                    value = `${prop.valueQuantity.value} ${prop.valueQuantity.unit || ''}`.trim();
                 } else if (prop.valueCodeableConcept) {
                     value = prop.valueCodeableConcept.text || 'N/A';
                 }
-                rows.push(`<tr><td class="font-semibold">${name}</td><td>${value}</td></tr>`);
+                rows.push(`<tr><td class="font-semibold">${name}</td><td>${escapeHtml(value)}</td></tr>`);
             });
         }
 

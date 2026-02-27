@@ -121,7 +121,7 @@
 {% block head %}
 {{ block.super }}
 <script>
-    const recordId = {{ record_id }};
+    const recordId = "{{ record_id|escapejs }}";
 
     async function loadRecord() {
         try {

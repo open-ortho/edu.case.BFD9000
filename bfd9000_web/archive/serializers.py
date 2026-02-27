@@ -268,7 +268,7 @@ class RecordSerializer(serializers.ModelSerializer):
 
     # Add imaging study fields for display
     acquisition_date = serializers.SerializerMethodField()
-    file_size = serializers.IntegerField(source='imaging_study.source_file.size', read_only=True)
+    file_size = serializers.SerializerMethodField()
     image_type = CodingSerializer(read_only=True)
 
     class Meta:
@@ -302,6 +302,12 @@ class RecordSerializer(serializers.ModelSerializer):
         """Get acquisition date from imaging study."""
         if obj.imaging_study and obj.imaging_study.scan_datetime:
             return obj.imaging_study.scan_datetime.date()
+        return None
+
+    def get_file_size(self, obj: Record) -> Optional[int]:
+        study = getattr(obj, 'imaging_study', None)
+        if study and getattr(study, 'source_file', None):
+            return study.source_file.size
         return None
 
     def get_patient_orientation(self, obj: Record) -> list[str]:
