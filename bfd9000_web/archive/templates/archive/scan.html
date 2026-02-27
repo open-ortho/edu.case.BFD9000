@@ -158,7 +158,8 @@
                         <input
                             type="text"
                             id="operator"
-                            placeholder="Defaults to current user"
+                            value="{{ operator_display|default:''|escape }}"
+                            readonly
                             class="input input-bordered input-sm"
                         />
                     </div>
@@ -226,6 +227,7 @@
             modalities: []
         }
     };
+    const defaultOperatorDisplay = "{{ operator_display|default:''|escapejs }}";
 
     // ========================================
     // API FUNCTIONS
@@ -455,7 +457,7 @@
         document.getElementById('record-type').value = '';
         document.getElementById('orientation').value = '';
         document.getElementById('modality').value = '';
-        document.getElementById('operator').value = '';
+        document.getElementById('operator').value = defaultOperatorDisplay;
         // Reset acquisition date to today
         document.getElementById('acquisition-date').valueAsDate = new Date();
         // Hide AI status

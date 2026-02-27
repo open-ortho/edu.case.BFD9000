@@ -472,7 +472,12 @@ def record_detail(request, record_id):
 @login_required
 def scan(request):
     """Render the scan workflow page."""
-    return render(request, "archive/scan.html")
+    full_name = request.user.get_full_name().strip()
+    if full_name:
+        operator_display = f"{full_name} ({request.user.username})"
+    else:
+        operator_display = request.user.username
+    return render(request, "archive/scan.html", {"operator_display": operator_display})
 
 
 def _get_bits_per_sample(img: Image.Image) -> Optional[int]:

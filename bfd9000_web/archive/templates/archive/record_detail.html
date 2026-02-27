@@ -169,7 +169,7 @@
                     document.getElementById('scan-date').textContent = study.scan_datetime 
                         ? new Date(study.scan_datetime).toLocaleString()
                         : '-';
-                    document.getElementById('operator').textContent = study.scan_operator || '-';
+                    document.getElementById('operator').textContent = study.scan_operator_display || study.scan_operator_username || '-';
                     document.getElementById('collection').textContent = study.collection || '-';
                 })
                 .catch(err => console.error('Error loading imaging study:', err));

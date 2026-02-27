@@ -9,7 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from PIL import Image
 from rest_framework import status
-from archive.models import Subject, Encounter, Record, Coding, Collection
+from archive.models import Subject, Encounter, Record, Coding, Collection, ImagingStudy
 from archive.constants import SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE, SYSTEM_BODY_SITE
 from .base import CleanupAPITestCase
 
@@ -17,10 +17,15 @@ class RecordTests(CleanupAPITestCase):
     """Validate record creation, upload, and retrieval behavior."""
     def setUp(self):
         # Create user for authentication
-        self.user = User.objects.create_user(username='testuser', password='testpassword')
+        self.user = User.objects.create_user(
+            username='testuser',
+            password='testpassword',
+            first_name='Test',
+            last_name='User',
+        )
 
         # Add necessary permissions
-        for model in [Subject, Encounter, Record]:
+        for model in [Subject, Encounter, Record, ImagingStudy]:
             content_type = ContentType.objects.get_for_model(model)
             permissions = Permission.objects.filter(content_type=content_type)
             self.user.user_permissions.add(*permissions)
@@ -424,3 +429,23 @@ class RecordTests(CleanupAPITestCase):
         response = self.client.post(url, data, format='multipart')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('record_type', response.data['error']['details'])
+
+    def test_imaging_study_operator_display_fields(self):
+        """Imaging study API should expose username and full display for operator."""
+        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        data = {
+            "file": file,
+            "record_type": self.rt_lateral.code,
+            "orientation": "left",
+            "modality": "RG",
+        }
+
+        create_response = self.client.post(url, data, format='multipart')
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        study_url = reverse('archive:imagingstudy-detail', kwargs={'pk': create_response.data['imaging_study']})
+        study_response = self.client.get(study_url)
+        self.assertEqual(study_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(study_response.data['scan_operator_username'], 'testuser')
+        self.assertEqual(study_response.data['scan_operator_display'], 'Test User (testuser)')

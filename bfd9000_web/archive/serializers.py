@@ -187,11 +187,29 @@ class ImagingStudySerializer(serializers.ModelSerializer):
     laterality = CodingSerializer(read_only=True)
     series_modality = CodingSerializer(read_only=True)
     scan_location = LocationSerializer(read_only=True)
+    scan_operator_username = serializers.SerializerMethodField()
+    scan_operator_display = serializers.SerializerMethodField()
 
     class Meta:
         """Serializer metadata."""
         model = ImagingStudy
         fields = '__all__'
+
+    def get_scan_operator_username(self, obj: ImagingStudy) -> Optional[str]:
+        operator = getattr(obj, 'scan_operator', None)
+        if not operator:
+            return None
+        return operator.username
+
+    def get_scan_operator_display(self, obj: ImagingStudy) -> Optional[str]:
+        operator = getattr(obj, 'scan_operator', None)
+        if not operator:
+            return None
+
+        full_name = operator.get_full_name().strip()
+        if full_name:
+            return f"{full_name} ({operator.username})"
+        return operator.username
 
 class RecordSerializer(serializers.ModelSerializer):
     """Serializer for Record model."""
