@@ -104,6 +104,22 @@
         const errorMessage = document.getElementById("error-message");
         const errorText = document.getElementById("error-text");
 
+        function resolveIdentifierSystem(identifier) {
+            if (!identifier) {
+                return null;
+            }
+
+            if (/^B\d{4}$/i.test(identifier)) {
+                return "{{ bolton_identifier_system|escapejs }}";
+            }
+
+            if (/^L\d{8}$/i.test(identifier)) {
+                return "{{ lancaster_identifier_system|escapejs }}";
+            }
+
+            return null;
+        }
+
         form.addEventListener("submit", async (e) => {
             e.preventDefault();
 
@@ -115,7 +131,16 @@
             // Hide any previous errors
             errorMessage.classList.add("hidden");
 
-            const identifier = document.getElementById("identifier").value;
+            const identifier = document.getElementById("identifier").value.trim();
+            const identifierSystem = resolveIdentifierSystem(identifier);
+
+            if (identifier && !identifierSystem) {
+                errorText.textContent = "Identifier must match Bolton (B0001) or Lancaster (L########) format.";
+                errorMessage.classList.remove("hidden");
+                submitBtn.disabled = false;
+                submitBtn.textContent = "Create Subject";
+                return;
+            }
 
             // Build request body matching backend API format
             // Note: Backend requires birth_date, humanname_family, humanname_given
@@ -128,6 +153,11 @@
                 humanname_given: 'MISSING',
                 collection: document.getElementById("collection").value || null,
             };
+
+            if (identifier) {
+                formData.identifier_value = identifier;
+                formData.identifier_system = identifierSystem;
+            }
 
             try {
                 const response = await fetch("/api/subjects/", {
@@ -147,8 +177,12 @@
                     const errorData = await response.json();
                     let errorMsg = "Failed to create subject. ";
 
-                    // DRF returns errors as field: [messages] format
-                    if (typeof errorData === 'object') {
+                    if (errorData?.error) {
+                        errorMsg += errorData.error.message || '';
+                        if (errorData.error.details) {
+                            errorMsg += ' ' + JSON.stringify(errorData.error.details);
+                        }
+                    } else if (typeof errorData === 'object') {
                         const details = Object.entries(errorData)
                             .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
                             .join('; ');

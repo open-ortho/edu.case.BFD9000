@@ -4,7 +4,8 @@ from django.contrib.auth.models import User, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 from rest_framework import status
-from archive.models import Subject, Collection
+from archive.models import Subject, Collection, Identifier
+from archive.constants import SYSTEM_IDENTIFIER_BOLTON_SUBJECT
 from .base import CleanupAPITestCase
 
 class SubjectTests(CleanupAPITestCase):
@@ -55,6 +56,26 @@ class SubjectTests(CleanupAPITestCase):
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn('id', response.data)
+
+    def test_create_subject_with_identifier(self):
+        """Should attach identifier when identifier fields are provided."""
+        url = reverse('archive:subject-list')
+        data = {
+            "humanname_family": "Doe",
+            "humanname_given": "John",
+            "gender": "male",
+            "birth_date": "2000-01-01",
+            "identifier_value": "B0001",
+            "identifier_system": SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        subject = Subject.objects.get(pk=response.data['id'])
+        self.assertEqual(subject.identifiers.count(), 1)
+        identifier = Identifier.objects.get(pk=subject.identifiers.first().pk)
+        self.assertEqual(identifier.value, "B0001")
+        self.assertEqual(identifier.system, SYSTEM_IDENTIFIER_BOLTON_SUBJECT)
 
     def test_create_subject_missing_required_field(self):
         """Should return 400 if required fields are missing"""

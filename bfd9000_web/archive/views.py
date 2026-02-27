@@ -35,7 +35,13 @@ from .serializers import (
     RecordUploadSerializer
 )
 from .constants import (
-    SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE, SYSTEM_BODY_SITE
+    SYSTEM_RECORD_TYPE,
+    SYSTEM_ORIENTATION,
+    SYSTEM_MODALITY,
+    SYSTEM_PROCEDURE,
+    SYSTEM_BODY_SITE,
+    SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
+    SYSTEM_IDENTIFIER_LANCASTER_SUBJECT,
 )
 
 
@@ -496,7 +502,14 @@ def subject_detail(request, subject_id):
 @login_required
 def subject_create(request):
     """Render the subject creation form."""
-    return render(request, "archive/subject_create.html")
+    return render(
+        request,
+        "archive/subject_create.html",
+        {
+            "bolton_identifier_system": SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
+            "lancaster_identifier_system": SYSTEM_IDENTIFIER_LANCASTER_SUBJECT,
+        },
+    )
 
 
 @login_required

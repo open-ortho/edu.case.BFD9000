@@ -1,4 +1,4 @@
-code,meaning Original medium
+code,meaning,original_medium
 L,Lateral Ceph,Acetate Film
 F,Frontal Ceph,Acetate Film
 P,Pelvis,Acetate Film

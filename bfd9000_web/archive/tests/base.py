@@ -8,31 +8,26 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
 
 
-# Create a temporary directory for test media
-TEST_MEDIA_ROOT = tempfile.mkdtemp(prefix='bfd9000_test_media_')
+class _CleanupMediaMixin:
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._media_root = tempfile.mkdtemp(prefix='bfd9000_test_media_')
+        cls._override = override_settings(MEDIA_ROOT=cls._media_root)
+        cls._override.enable()
+
+    @classmethod
+    def tearDownClass(cls):
+        if getattr(cls, '_override', None):
+            cls._override.disable()
+        if getattr(cls, '_media_root', None) and Path(cls._media_root).exists():
+            shutil.rmtree(cls._media_root, ignore_errors=True)
+        super().tearDownClass()
 
 
-@override_settings(MEDIA_ROOT=TEST_MEDIA_ROOT)
-class CleanupTestCase(TestCase):
+class CleanupTestCase(_CleanupMediaMixin, TestCase):
     """Base TestCase with automatic media cleanup."""
 
-    @classmethod
-    def tearDownClass(cls):
-        """Clean up test media files after all tests in class complete."""
-        super().tearDownClass()
-        # Clean up the test media directory
-        if Path(TEST_MEDIA_ROOT).exists():
-            shutil.rmtree(TEST_MEDIA_ROOT, ignore_errors=True)
 
-
-@override_settings(MEDIA_ROOT=TEST_MEDIA_ROOT)
-class CleanupAPITestCase(APITestCase):
+class CleanupAPITestCase(_CleanupMediaMixin, APITestCase):
     """Base APITestCase with automatic media cleanup."""
-
-    @classmethod
-    def tearDownClass(cls):
-        """Clean up test media files after all tests in class complete."""
-        super().tearDownClass()
-        # Clean up the test media directory
-        if Path(TEST_MEDIA_ROOT).exists():
-            shutil.rmtree(TEST_MEDIA_ROOT, ignore_errors=True)

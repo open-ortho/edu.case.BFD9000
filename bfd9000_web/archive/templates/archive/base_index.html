@@ -329,7 +329,7 @@ class PaginatedTableManager {
         // Extract custom parameters
         for (const param of params.keys()) {
             const value = params.get(param);
-            if (value !== null && value !== 'search' && value !== 'page') {
+            if (value !== null && param !== 'search' && param !== 'page') {
                 state.customParams[param] = value;
             }
         }

@@ -120,6 +120,8 @@ class SubjectSerializer(serializers.ModelSerializer):
     skeletal_pattern = CodingSerializer(read_only=True)
     palatal_cleft = CodingSerializer(read_only=True)
     subject_identifier = serializers.SerializerMethodField()
+    identifier_value = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    identifier_system = serializers.CharField(write_only=True, required=False, allow_blank=True)
     collection = serializers.SlugRelatedField(
         slug_field='short_name',
         queryset=Collection.objects.all(),
@@ -138,6 +140,27 @@ class SubjectSerializer(serializers.ModelSerializer):
     def get_subject_identifier(self, obj: Subject) -> Optional[str]:
         """Return the preferred identifier for subject display."""
         return _get_preferred_identifier(obj.identifiers.all())
+
+    def create(self, validated_data: Dict[str, Any]) -> Subject:
+        identifier_value = validated_data.pop('identifier_value', '').strip()
+        identifier_system = validated_data.pop('identifier_system', '').strip()
+
+        if identifier_value and not identifier_system:
+            raise serializers.ValidationError({
+                'identifier_system': 'identifier_system is required when identifier_value is provided.'
+            })
+
+        subject = super().create(validated_data)
+
+        if identifier_value:
+            identifier, _ = Identifier.objects.get_or_create(
+                system=identifier_system,
+                value=identifier_value,
+                defaults={'use': 'official'},
+            )
+            subject.identifiers.add(identifier)
+
+        return subject
 
 class EncounterSerializer(serializers.ModelSerializer):
     """Serializer for Encounter model."""
@@ -372,7 +395,10 @@ class RecordUploadSerializer(serializers.ModelSerializer):
             if not isinstance(op, dict):
                 raise serializers.ValidationError('each transform op must be an object')
 
-            rotation = int(op.get('rotation', 0))
+            try:
+                rotation = int(op.get('rotation', 0))
+            except (TypeError, ValueError) as exc:
+                raise serializers.ValidationError('rotation must be a number') from exc
             rotation = rotation % 360
             if rotation not in {0, 90, 180, 270}:
                 raise serializers.ValidationError('rotation must be one of 0, 90, 180, 270')

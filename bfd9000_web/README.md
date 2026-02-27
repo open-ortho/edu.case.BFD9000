@@ -70,6 +70,25 @@ Useful test options:
 
 **Note**: Tests automatically clean up uploaded media files. Test images are stored in a temporary directory that is deleted after tests complete, so they won't clutter your `media/uploads/` directory.
 
+## Local Docker Workflow
+
+Build the image from the repo root:
+
+```bash
+docker build -f bfd9000_web/Dockerfile bfd9000_web -t bfd9000-web:test
+```
+
+Run the container directly:
+
+```bash
+docker run --rm -p 8000:8000 bfd9000-web:test
+```
+
+Or use the provided compose file:
+
+```bash
+```
+
 ## Import Historical Subjects
 
 Use the unified importer entrypoint for historical datasets:

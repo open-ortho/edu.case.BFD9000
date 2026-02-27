@@ -39,6 +39,15 @@
             </div>
 
             <div class="form-control w-full">
+                <label class="label">
+                    <span class="label-text">Procedure</span>
+                </label>
+                <select id="procedure-code" class="select select-bordered w-full" required>
+                    <option value="">Loading procedures...</option>
+                </select>
+            </div>
+
+            <div class="form-control w-full">
                 <!-- <label class="label">
                     <span class="label-text">Age at Encounter (Optional)</span>
                 </label>
@@ -103,6 +112,48 @@
         const errorMessage = document.getElementById('error-message');
         const errorText = document.getElementById('error-text');
 
+        async function searchSubjects(query) {
+            const params = new URLSearchParams({
+                search: query,
+                page_size: '20',
+            });
+            const response = await fetch(`/api/subjects/?${params}`);
+            if (!response.ok) {
+                throw new Error(`Failed to search subjects: ${response.status}`);
+            }
+            const data = await response.json();
+            return data.results || [];
+        }
+
+        async function fetchValueset(type) {
+            const response = await fetch(`/api/valuesets/?type=${type}`);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch valueset: ${type}`);
+            }
+            return await response.json();
+        }
+
+        function populateSelect(selectId, options) {
+            const select = document.getElementById(selectId);
+            select.innerHTML = '<option value="">Select...</option>';
+            options.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.id;
+                option.textContent = opt.display;
+                select.appendChild(option);
+            });
+        }
+
+        async function init() {
+            try {
+                const procedures = await fetchValueset('procedures');
+                populateSelect('procedure-code', procedures);
+            } catch (error) {
+                errorText.textContent = `Failed to load procedures: ${error.message}`;
+                errorMessage.classList.remove('hidden');
+            }
+        }
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
 
@@ -114,10 +165,46 @@
             errorMessage.classList.add('hidden');
 
             // Get form data
+            const subjectIdentifier = document.getElementById('subject_id').value.trim();
+            const encounterDate = document.getElementById('date').value;
+            const procedureCode = document.getElementById('procedure-code').value;
+
+            if (!subjectIdentifier) {
+                errorText.textContent = 'Subject identifier is required.';
+                errorMessage.classList.remove('hidden');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Encounter';
+                return;
+            }
+
+            let subjectId = null;
+            try {
+                const subjects = await searchSubjects(subjectIdentifier);
+                const normalized = subjectIdentifier.toLowerCase();
+                const exact = subjects.find((subject) =>
+                    (subject.subject_identifier || '').toLowerCase() === normalized
+                );
+                subjectId = (exact || subjects[0])?.id || null;
+            } catch (error) {
+                errorText.textContent = `Subject lookup failed: ${error.message}`;
+                errorMessage.classList.remove('hidden');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Encounter';
+                return;
+            }
+
+            if (!subjectId) {
+                errorText.textContent = 'Subject not found.';
+                errorMessage.classList.remove('hidden');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Encounter';
+                return;
+            }
+
             const formData = {
-                subject: document.getElementById('subject_id').value,
-                date: document.getElementById('date').value,
-                procedure_code: 1,
+                subject: subjectId,
+                actual_period_start: encounterDate,
+                procedure_code: procedureCode,
             };
 
             /*// Build age_at_encounter string if any age fields are provided
@@ -156,6 +243,11 @@
                         if (errorData.error.details) {
                             errorMsg += ' ' + JSON.stringify(errorData.error.details);
                         }
+                    } else if (typeof errorData === 'object') {
+                        const details = Object.entries(errorData)
+                            .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+                            .join('; ');
+                        errorMsg += details;
                     }
 
                     errorText.textContent = errorMsg;
@@ -174,6 +266,8 @@
                 submitBtn.textContent = 'Create Encounter';
             }
         });
+
+        init();
     });
 </script>
 {% endblock %}
