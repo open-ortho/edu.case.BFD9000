@@ -6,13 +6,6 @@ max-line-length=120
 
 [MESSAGES CONTROL]
 disable=
-    broad-exception-caught,
-    duplicate-code,
-    import-outside-toplevel,
-    invalid-name,
-    missing-class-docstring,
-    missing-function-docstring,
-    missing-module-docstring,
     no-member,
     protected-access,
     too-few-public-methods,
@@ -23,12 +16,7 @@ disable=
     too-many-positional-arguments,
     too-many-branches,
     too-many-return-statements,
-    trailing-whitespace,
-    ungrouped-imports,
     unnecessary-pass,
-    unused-argument,
-    unused-wildcard-import,
     wildcard-import,
     wrong-import-order,
-    wrong-import-position,
-    line-too-long
+    wrong-import-position
