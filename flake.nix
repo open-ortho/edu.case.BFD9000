@@ -8,34 +8,45 @@
   outputs =
     { self, nixpkgs }:
     let
-      system = "x86_64-linux";
-      pkgs = import nixpkgs { inherit system; };
-      python = pkgs.python311;
+      systems = [
+        "x86_64-linux"
+        "aarch64-darwin"
+      ];
+      forEachSystem = nixpkgs.lib.genAttrs systems;
     in
     {
-      devShells.${system}.default = pkgs.mkShell {
-        name = "django-env";
+      devShells = forEachSystem (
+        system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+          python = pkgs.python311;
+        in
+        {
+          default = pkgs.mkShell {
+            name = "django-env";
 
-        buildInputs = [
-          python
-          python.pkgs.django
-          python.pkgs.djangorestframework
-          python.pkgs.django-cors-headers
-          python.pkgs.django-filter
-          python.pkgs.drf-spectacular
-          python.pkgs.drf-nested-routers
-          python.pkgs.pillow
-          python.pkgs.whitenoise
-          python.pkgs.pip
-          pkgs.watchman
-        ];
+            buildInputs = [
+              python
+              python.pkgs.django
+              python.pkgs.djangorestframework
+              python.pkgs.django-cors-headers
+              python.pkgs.django-filter
+              python.pkgs.drf-spectacular
+              python.pkgs.drf-nested-routers
+              python.pkgs.pillow
+              python.pkgs.whitenoise
+              python.pkgs.pip
+              pkgs.watchman
+            ];
 
-        # Optional: environment variables for Django
-        # export DJANGO_SETTINGS_MODULE if needed
-        shellHook = ''
-          echo "Django development environment activated."
-          echo "Python: $(python --version)"
-        '';
-      };
+            # Optional: environment variables for Django
+            # export DJANGO_SETTINGS_MODULE if needed
+            shellHook = ''
+              echo "Django development environment activated."
+              echo "Python: $(python --version)"
+            '';
+          };
+        }
+      );
     };
 }
