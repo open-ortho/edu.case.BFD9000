@@ -37,6 +37,8 @@
               python.pkgs.openpyxl
               python.pkgs.whitenoise
               python.pkgs.pylint
+              python.pkgs.django-stubs
+              python.pkgs.djangorestframework-stubs
               python.pkgs.pip
               pkgs.watchman
             ];

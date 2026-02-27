@@ -1,0 +1,12 @@
+{
+  "typeCheckingMode": "basic",
+  "reportUnknownArgumentType": "warning",
+  "reportUnknownMemberType": "warning",
+  "reportUnknownParameterType": "warning",
+  "reportUnknownVariableType": "none",
+  "reportMissingTypeStubs": "warning",
+  "exclude": [
+    "**/migrations/**",
+    "**/tests/**"
+  ]
+}

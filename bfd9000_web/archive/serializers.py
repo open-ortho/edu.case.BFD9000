@@ -6,10 +6,10 @@ to and from native Python datatypes that can then be easily rendered into JSON, 
 It includes specialized logic for file uploads and validation.
 """
 import datetime
-from typing import Any, Dict, Optional
-from zoneinfo import ZoneInfo
+import importlib
+from typing import Any, Dict, Optional, cast
 try:
-    import magic
+    magic = importlib.import_module('magic')
 except ImportError:
     magic = None
 from django.db import transaction
@@ -26,10 +26,19 @@ from .models import (
     Record,
 )
 from .constants import (
-    SYSTEM_BODY_SITE,
     SYSTEM_ORIENTATION,
     SYSTEM_MODALITY,
+    SYSTEM_RECORD_TYPE,
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
+)
+
+
+RECORD_TYPE_CODES = (
+    '201456002',
+    '268425006',
+    '39714003',
+    '1597004',
+    '302189007',
 )
 
 
@@ -125,9 +134,10 @@ class EncounterSerializer(serializers.ModelSerializer):
 
     def get_subject_identifier(self, obj: Encounter) -> Optional[str]:
         """Return the preferred identifier for the encounter subject."""
-        if not obj.subject_id:
+        subject = getattr(obj, 'subject', None)
+        if not subject:
             return None
-        return _get_bolton_identifier(obj.subject.identifiers.all())
+        return _get_bolton_identifier(subject.identifiers.all())
 
     def to_representation(self, instance: Encounter) -> Dict[str, Any]:
         """Convert instance to dictionary representation."""
@@ -201,20 +211,16 @@ class RecordSerializer(serializers.ModelSerializer):
 
     def get_subject_identifier(self, obj: Record) -> Optional[str]:
         """Return the preferred identifier for the record's subject."""
-        if not obj.encounter_id or not obj.encounter.subject_id:
+        encounter = getattr(obj, 'encounter', None)
+        subject = getattr(encounter, 'subject', None)
+        if not subject:
             return None
-        return _get_bolton_identifier(obj.encounter.subject.identifiers.all())
+        return _get_bolton_identifier(subject.identifiers.all())
 
     def get_acquisition_date(self, obj):
-        """Get acquisition date from imaging study, assuming EST timezone."""
+        """Get acquisition date from imaging study."""
         if obj.imaging_study and obj.imaging_study.scan_datetime:
-            # Convert to date, assuming EST
-            dt = obj.imaging_study.scan_datetime
-            # If naive, assume UTC; otherwise convert to EST
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=ZoneInfo('UTC'))
-            est_dt = dt.astimezone(ZoneInfo('America/New_York'))
-            return est_dt.date()
+            return obj.imaging_study.scan_datetime.date()
         return None
 
 class RecordUploadSerializer(serializers.ModelSerializer):
@@ -229,7 +235,7 @@ class RecordUploadSerializer(serializers.ModelSerializer):
     # Use SlugRelatedField for idiomatic lookup by 'code'
     record_type = serializers.SlugRelatedField(
         slug_field='code',
-        queryset=Coding.objects.filter(system=SYSTEM_BODY_SITE),
+        queryset=Coding.objects.filter(system=SYSTEM_RECORD_TYPE, code__in=RECORD_TYPE_CODES),
         write_only=True
     )
     orientation = serializers.SlugRelatedField(
@@ -259,7 +265,7 @@ class RecordUploadSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance: Record) -> Dict[str, Any]:
         """Use standard RecordSerializer for response."""
-        return RecordSerializer(instance, context=self.context).data
+        return cast(Dict[str, Any], RecordSerializer(instance, context=self.context).data)
 
     def validate_file(self, value: Any) -> Any:
         """Validate uploaded file size, extension, and MIME type."""
@@ -344,7 +350,11 @@ class RecordUploadSerializer(serializers.ModelSerializer):
                 record_type=rt_coding,
                 view=view_coding,
                 series_modality=mod_coding,
-                scan_datetime=datetime.datetime.combine(acquisition_date, datetime.time.min),
+                scan_datetime=datetime.datetime.combine(
+                    acquisition_date,
+                    datetime.time.min,
+                    tzinfo=datetime.timezone.utc,
+                ),
                 source_file=file_obj,
                 scan_operator=scan_operator
             )

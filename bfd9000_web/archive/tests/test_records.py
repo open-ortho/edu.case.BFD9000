@@ -8,7 +8,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from rest_framework import status
 from archive.models import Subject, Encounter, Record, Coding, Collection
-from archive.constants import SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE
+from archive.constants import SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE, SYSTEM_BODY_SITE
 from .base import CleanupAPITestCase
 
 class RecordTests(CleanupAPITestCase):
@@ -57,8 +57,8 @@ class RecordTests(CleanupAPITestCase):
         # Create codings
         self.rt_lateral, _ = Coding.objects.get_or_create(
             system=SYSTEM_RECORD_TYPE,
-            code='lateral',
-            defaults={'display': 'Lateral'}
+            code='201456002',
+            defaults={'display': 'Cephalogram'}
         )
         self.orient_left, _ = Coding.objects.get_or_create(
             system=SYSTEM_ORIENTATION,
@@ -86,7 +86,7 @@ class RecordTests(CleanupAPITestCase):
 
         data = {
             "file": file,
-            "record_type": "lateral",
+            "record_type": self.rt_lateral.code,
             "orientation": "left",
             "modality": "RG",
             "operator": "TestOp"
@@ -104,7 +104,7 @@ class RecordTests(CleanupAPITestCase):
         """Should return 400 if file is missing"""
         url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
         data = {
-            "record_type": "lateral",
+            "record_type": self.rt_lateral.code,
             "orientation": "left",
             "modality": "RG",
             "operator": "TestOp"
@@ -133,7 +133,7 @@ class RecordTests(CleanupAPITestCase):
 
         data = {
             "file": file,
-            "record_type": "lateral",
+            "record_type": self.rt_lateral.code,
             "orientation": "left",
             "modality": "RG",
         }
@@ -149,7 +149,7 @@ class RecordTests(CleanupAPITestCase):
             file = SimpleUploadedFile(f"test{i}.png", self.image_content, content_type="image/png")
             data = {
                 "file": file,
-                "record_type": "lateral",
+                "record_type": self.rt_lateral.code,
                 "orientation": "left",
                 "modality": "RG",
             }
@@ -167,7 +167,7 @@ class RecordTests(CleanupAPITestCase):
         file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
         data = {
             "file": file,
-            "record_type": "lateral",
+            "record_type": self.rt_lateral.code,
             "orientation": "left",
             "modality": "RG",
         }
@@ -194,7 +194,7 @@ class RecordTests(CleanupAPITestCase):
         file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
         data = {
             "file": file,
-            "record_type": "lateral",
+            "record_type": self.rt_lateral.code,
             "orientation": "left",
             "modality": "RG",
         }
@@ -217,7 +217,7 @@ class RecordTests(CleanupAPITestCase):
         file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
         data = {
             "file": file,
-            "record_type": "lateral",
+            "record_type": self.rt_lateral.code,
             "orientation": "left",
             "modality": "RG",
         }
@@ -239,7 +239,7 @@ class RecordTests(CleanupAPITestCase):
         file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
         data = {
             "file": file,
-            "record_type": "lateral",
+            "record_type": self.rt_lateral.code,
             "orientation": "left",
             "modality": "RG",
         }
@@ -259,7 +259,7 @@ class RecordTests(CleanupAPITestCase):
         file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
         data = {
             "file": file,
-            "record_type": "lateral",
+            "record_type": self.rt_lateral.code,
             "orientation": "left",
             "modality": "RG",
         }
@@ -280,7 +280,7 @@ class RecordTests(CleanupAPITestCase):
         file1 = SimpleUploadedFile("test1.png", self.image_content, content_type="image/png")
         data1 = {
             "file": file1,
-            "record_type": "lateral",
+            "record_type": self.rt_lateral.code,
             "orientation": "left",
             "modality": "RG",
         }
@@ -294,7 +294,7 @@ class RecordTests(CleanupAPITestCase):
         self.assertGreater(len(response.data['results']), 0)
         for record in response.data['results']:
             # record_type is a nested object with code field
-            self.assertEqual(record['record_type']['code'], 'lateral')
+            self.assertEqual(record['record_type']['code'], self.rt_lateral.code)
 
     def test_unauthenticated_access(self):
         """Should return 401/403 if not authenticated"""
@@ -309,7 +309,7 @@ class RecordTests(CleanupAPITestCase):
         file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
         data = {
             "file": file,
-            "record_type": "lateral",
+            "record_type": self.rt_lateral.code,
             "orientation": "left",
             "modality": "RG",
         }
@@ -323,3 +323,41 @@ class RecordTests(CleanupAPITestCase):
         expected_fields = ['id', 'record_type', 'encounter', 'imaging_study']
         for field in expected_fields:
             self.assertIn(field, response.data)
+
+    def test_upload_preserves_acquisition_date(self):
+        """Should return the same acquisition date submitted on upload."""
+        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+
+        data = {
+            "file": file,
+            "record_type": self.rt_lateral.code,
+            "orientation": "left",
+            "modality": "RG",
+            "acquisition_date": "2026-02-27",
+        }
+
+        response = self.client.post(url, data, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(str(response.data['acquisition_date']), '2026-02-27')
+
+    def test_create_record_rejects_body_site_code_as_record_type(self):
+        """Should reject body-site coding when submitted as record_type."""
+        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        body_site, _ = Coding.objects.get_or_create(
+            system=SYSTEM_BODY_SITE,
+            code='69536005',
+            defaults={'display': 'Head'},
+        )
+
+        data = {
+            "file": file,
+            "record_type": body_site.code,
+            "orientation": "left",
+            "modality": "RG",
+        }
+
+        response = self.client.post(url, data, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('record_type', response.data['error']['details'])

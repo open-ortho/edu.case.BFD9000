@@ -33,8 +33,8 @@ class ApiFlowTests(CleanupAPITestCase):
         # Ensure codings exist
         self.rt, _ = Coding.objects.get_or_create(
             system=SYSTEM_RECORD_TYPE,
-            code='lateral',
-            defaults={'display': 'Lateral'},
+            code='201456002',
+            defaults={'display': 'Cephalogram'},
         )
         self.orient, _ = Coding.objects.get_or_create(
             system=SYSTEM_ORIENTATION,
@@ -98,7 +98,7 @@ class ApiFlowTests(CleanupAPITestCase):
 
         data = {
             "file": file,
-            "record_type": "lateral",
+            "record_type": self.rt.code,
             "orientation": "left",
             "modality": "RG",
             "operator": "TestOp"
@@ -114,7 +114,7 @@ class ApiFlowTests(CleanupAPITestCase):
         record = Record.objects.get(pk=record_id)
         self.assertTrue(record.imaging_study)
         self.assertTrue(record.imaging_study.source_file)
-        self.assertEqual(record.record_type.code, 'lateral')
+        self.assertEqual(record.record_type.code, self.rt.code)
 
         # 5. Verify Image Download
         url = reverse('archive:record-image', kwargs={'pk': record_id})

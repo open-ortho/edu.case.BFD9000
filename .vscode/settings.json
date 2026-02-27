@@ -13,6 +13,8 @@
     "python.testing.unittestEnabled": true,
     "cSpell.words": [
         "DICOM",
+        "FHIR",
+        "humanname",
         "Valueset",
         "Valuesets"
     ],
