@@ -21,7 +21,7 @@ import os
 from PIL import Image
 from .models import (
     Coding, Identifier, Address, Collection, Subject,
-    Encounter, Location, ImagingStudy, Record
+    Encounter, Location, ImagingStudy, Record, ValueSet
 )
 from .serializers import (
     CodingSerializer, IdentifierSerializer, AddressSerializer,
@@ -103,6 +103,12 @@ class ValuesetViewSet(viewsets.ViewSet):
             data = [{'id': c.code, 'display': c.display} for c in codings]
 
         else:
+            valueset = ValueSet.objects.filter(slug=valueset_type).first()
+            if valueset:
+                codings = Coding.objects.filter(value_sets=valueset).order_by('code')
+                data = [{'id': c.code, 'display': c.display} for c in codings]
+                return Response(data)
+
             return Response({"error": f"Unknown valueset type: {valueset_type}"}, status=404)
 
         return Response(data)

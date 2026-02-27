@@ -70,6 +70,17 @@ Useful test options:
 
 **Note**: Tests automatically clean up uploaded media files. Test images are stored in a temporary directory that is deleted after tests complete, so they won't clutter your `media/uploads/` directory.
 
+## Import Bolton Subjects
+
+To import identifiers and subject demographics from `BoltonSubjects2.xlsx`:
+
+```bash
+python bfd9000_web/manage.py import_bolton_subjects --file BoltonSubjects2.xlsx
+```
+
+Use `--dry-run` to validate without writing to the database. Override SNOMED codes with
+`--class-i-code`, `--class-ii-code`, and `--class-iii-code` if needed.
+
 ## Additional Information
 
 - The application settings can be found in `bfd9000/settings.py`.

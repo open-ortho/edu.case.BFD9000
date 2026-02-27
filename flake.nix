@@ -34,6 +34,7 @@
               python.pkgs.drf-spectacular
               python.pkgs.drf-nested-routers
               python.pkgs.pillow
+              python.pkgs.openpyxl
               python.pkgs.whitenoise
               python.pkgs.pip
               pkgs.watchman
