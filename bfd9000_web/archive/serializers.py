@@ -6,7 +6,7 @@ to and from native Python datatypes that can then be easily rendered into JSON, 
 It includes specialized logic for file uploads and validation.
 """
 import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 try:
     import magic
 except ImportError:
@@ -18,8 +18,16 @@ from .models import (
     Encounter, Location, ImagingStudy, Record
 )
 from .constants import (
-    SYSTEM_BODY_SITE, SYSTEM_ORIENTATION, SYSTEM_MODALITY
+    SYSTEM_BODY_SITE, SYSTEM_ORIENTATION, SYSTEM_MODALITY,
+    SYSTEM_IDENTIFIER_BOLTON_SUBJECT
 )
+
+
+def _get_bolton_identifier(identifiers) -> Optional[str]:
+    for identifier in identifiers:
+        if identifier.system == SYSTEM_IDENTIFIER_BOLTON_SUBJECT:
+            return identifier.value
+    return None
 
 class CodingSerializer(serializers.ModelSerializer):
     """Serializer for Coding model."""
@@ -62,6 +70,7 @@ class SubjectSerializer(serializers.ModelSerializer):
     ethnicity = CodingSerializer(read_only=True)
     skeletal_pattern = CodingSerializer(read_only=True)
     palatal_cleft = CodingSerializer(read_only=True)
+    subject_identifier = serializers.SerializerMethodField()
     collection = serializers.SlugRelatedField(
         slug_field='short_name',
         queryset=Collection.objects.all(),
@@ -76,12 +85,16 @@ class SubjectSerializer(serializers.ModelSerializer):
         model = Subject
         fields = '__all__'
 
+    def get_subject_identifier(self, obj: Subject) -> Optional[str]:
+        return _get_bolton_identifier(obj.identifiers.all())
+
 class EncounterSerializer(serializers.ModelSerializer):
     """Serializer for Encounter model."""
     diagnosis = CodingSerializer(read_only=True)
     procedure_code = serializers.PrimaryKeyRelatedField(queryset=Coding.objects.all())
     age_at_encounter = serializers.FloatField(required=False)
     subject = serializers.PrimaryKeyRelatedField(queryset=Subject.objects.all(), required=False)
+    subject_identifier = serializers.SerializerMethodField()
     
     record_count = serializers.IntegerField(read_only=True)
     
@@ -91,6 +104,11 @@ class EncounterSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'procedure_occurrence_age': {'write_only': True}
         }
+
+    def get_subject_identifier(self, obj: Encounter) -> Optional[str]:
+        if not obj.subject_id:
+            return None
+        return _get_bolton_identifier(obj.subject.identifiers.all())
 
     def to_representation(self, instance: Encounter) -> Dict[str, Any]:
         """Convert instance to dictionary representation."""
@@ -140,6 +158,7 @@ class RecordSerializer(serializers.ModelSerializer):
     # Add nested encounter and subject data
     encounter_id = serializers.IntegerField(source='encounter.id', read_only=True)
     subject_id = serializers.IntegerField(source='encounter.subject.id', read_only=True)
+    subject_identifier = serializers.SerializerMethodField()
     encounter_date = serializers.DateField(source='encounter.encounter_date', read_only=True)
     age_at_encounter = serializers.SerializerMethodField()
 
@@ -158,6 +177,11 @@ class RecordSerializer(serializers.ModelSerializer):
             days = obj.encounter.procedure_occurrence_age.days
             return round(days / 365.25, 2)
         return None
+
+    def get_subject_identifier(self, obj: Record) -> Optional[str]:
+        if not obj.encounter_id or not obj.encounter.subject_id:
+            return None
+        return _get_bolton_identifier(obj.encounter.subject.identifiers.all())
 
     def get_acquisition_date(self, obj):
         """Get acquisition date from imaging study, assuming EST timezone."""

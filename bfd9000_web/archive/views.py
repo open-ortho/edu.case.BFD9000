@@ -171,7 +171,9 @@ class SubjectViewSet(viewsets.ModelViewSet):
 
     Manages patient/subject information including demographics.
     """
-    queryset = Subject.objects.annotate(
+    queryset = Subject.objects.prefetch_related(
+        'identifiers'
+    ).annotate(
         encounter_count=Count('encounters', distinct=True),
         record_count=Count('encounters__records', distinct=True)
     ).all()
@@ -194,7 +196,11 @@ class EncounterViewSet(viewsets.ModelViewSet):
 
     Manages clinical encounters or visits.
     """
-    queryset = Encounter.objects.annotate(
+    queryset = Encounter.objects.select_related(
+        'subject'
+    ).prefetch_related(
+        'subject__identifiers'
+    ).annotate(
         record_count=Count('records', distinct=True)
     ).all()
     serializer_class = EncounterSerializer
@@ -248,7 +254,11 @@ class RecordViewSet(viewsets.ModelViewSet):
     Manages the high-level record entries that link encounters to imaging studies.
     Supports file uploads via a specialized serializer.
     """
-    queryset = Record.objects.all()
+    queryset = Record.objects.select_related(
+        'encounter', 'encounter__subject'
+    ).prefetch_related(
+        'encounter__subject__identifiers'
+    )
     serializer_class = RecordSerializer
     filterset_fields = ['encounter__id', 'encounter__subject', 'encounter__subject__collection',
                         'encounter__subject__collection__short_name', 'encounter']

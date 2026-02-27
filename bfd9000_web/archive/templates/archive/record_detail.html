@@ -148,7 +148,7 @@
         document.getElementById('record-image').src = `/api/records/${recordId}/image/`;
 
         // Subject & Encounter
-        document.getElementById('subject-id').textContent = record.subject_id || '-';
+        document.getElementById('subject-id').textContent = record.subject_identifier || record.subject_id || '-';
         document.getElementById('encounter-id').textContent = record.encounter_id || '-';
         document.getElementById('encounter-date').textContent = record.encounter_date || '-';
         document.getElementById('age-at-encounter').textContent = record.age_at_encounter 

@@ -136,7 +136,7 @@
                 const identifier = document.createElement("td");
                 const subjectBtn = document.createElement("button");
                 subjectBtn.className = "btn btn-soft btn-primary btn-xs";
-                subjectBtn.textContent = "B000" + subject.id; // FIXME
+                subjectBtn.textContent = subject.subject_identifier || subject.id;
                 subjectBtn.onclick = () => {
                     window.location.href = `/encounters/?subject=${subject.id}`;
                 };

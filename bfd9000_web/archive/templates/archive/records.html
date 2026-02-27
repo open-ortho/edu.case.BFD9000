@@ -157,7 +157,7 @@
                 const subject = document.createElement("td");
                 const subjectBtn = document.createElement("button");
                 subjectBtn.className = "btn btn-soft btn-xs";
-                subjectBtn.textContent = "B000" + (record.subject_id || "");
+                subjectBtn.textContent = record.subject_identifier || record.subject_id || "-";
                 subjectBtn.onclick = () =>
                     (window.location.href = `/encounters/?subject=${record.subject_id}`);
                 subject.appendChild(subjectBtn);

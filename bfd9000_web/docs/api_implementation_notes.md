@@ -4,11 +4,15 @@ This document describes discrepancies between the API specification (`api_requir
 
 ## Subject API
 
+### Identifier semantics
+
+Subjects can have multiple identifiers across different systems. `Identifier.use` is treated as a **subject-level preference**, not a statement about the issuing system. We use `official` for the primary, most trusted identifier for the subject in BFD9000, and `secondary` for cross-reference identifiers from other systems (e.g., Brush). Multiple `official` identifiers are allowed across systems; display logic should pick the best identifier using this priority: `official` → `secondary` → `usual` → others.
+
 ### Spec vs Implementation
 
 | Spec Field | Backend Field | Notes |
 |------------|---------------|-------|
-| `identifier` (string) | `identifiers` (array of Identifier objects) | Backend uses M2M relationship. To get subject identifier, access `identifiers[0].value`. To create, must POST identifier separately or extend serializer. |
+| `identifier` (string) | `identifiers` (array of Identifier objects) | Backend uses M2M relationship. Prefer `subject_identifier` when present; otherwise pick an identifier by `use` priority (official → secondary → usual → others). To create, must POST identifier separately or extend serializer. |
 | `sex` (M/F/O) | `gender` (male/female/other/unknown) | Different values. Frontend must map: M->male, F->female, O->other |
 | `date_of_birth` | `birth_date` | Same format (date), different name |
 | `dental_classification` | `skeletal_pattern` (FK to Coding) | Backend uses Coding reference, not simple string |
@@ -16,7 +20,7 @@ This document describes discrepancies between the API specification (`api_requir
 
 ### Workarounds for Frontend
 
-1. **Display identifier**: Use `subject.identifiers[0]?.value` or fall back to `subject.id`
+1. **Display identifier**: Use `subject.subject_identifier` if present, or select from `subject.identifiers` by `use` priority (official → secondary → usual → others), then fall back to `subject.id`.
 2. **Display subject**: Use `humanname_family, humanname_given` or identifier
 3. **Create subject**: Currently requires `gender`, `birth_date`, `humanname_family`, `humanname_given` (all required by model)
 
