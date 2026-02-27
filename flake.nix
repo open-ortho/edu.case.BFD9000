@@ -36,6 +36,7 @@
               python.pkgs.pillow
               python.pkgs.openpyxl
               python.pkgs.whitenoise
+              python.pkgs.pylint
               python.pkgs.pip
               pkgs.watchman
             ];
