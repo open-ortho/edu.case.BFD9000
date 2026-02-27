@@ -10,7 +10,7 @@ from typing import Iterable, Optional, Tuple
 from django.core.management.base import CommandError
 from django.db import transaction
 
-from archive.constants import SYSTEM_IDENTIFIER_LANCASTER_SUBJECT, SYSTEM_PROCEDURE
+from archive.constants import SYSTEM_PROCEDURE
 from archive.management.importers.base import BaseImporter, ImportStats
 from archive.models import Coding, Encounter, Subject
 

@@ -117,7 +117,7 @@ class ValueSet(TimestampedModel):
         ]
 
     def __str__(self):
-        return self.slug
+        return str(self.slug)
 
 
 class ValueSetConcept(TimestampedModel):
@@ -369,7 +369,7 @@ class Location(TimestampedModel):
         ordering = ['name']
 
     def __str__(self):
-        return self.name
+        return str(self.name)
 
 
 class ImagingStudy(TimestampedModel):
