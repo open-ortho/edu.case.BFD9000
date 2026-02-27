@@ -42,6 +42,7 @@ urlpatterns = [
     # Template views for HTML pages
     path('', views.index, name='index'),
     path('subjects/', views.subjects, name='subjects'),
+    path('subject/<int:subject_id>/', views.subject_detail, name='subject_detail'),
     path('subjects/create/', views.subject_create, name='subject_create'),
     path('encounters/', views.encounters, name='encounters'),
     path('encounters/create/', views.encounter_create, name='encounter_create'),

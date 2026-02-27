@@ -364,7 +364,19 @@ class RecordViewSet(viewsets.ModelViewSet):
         if not record.imaging_study or not record.imaging_study.source_file:
             return Response({"error": "No image file available"}, status=404)
 
-        return FileResponse(record.imaging_study.source_file)
+        source_file = record.imaging_study.source_file
+        ext = os.path.splitext(source_file.name)[1].lower()
+        if ext in {'.tif', '.tiff'}:
+            try:
+                source_file.open('rb')
+                png_bytes = _convert_tiff_to_png_bytes(source_file)
+                return HttpResponse(png_bytes, content_type='image/png')
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                return Response({"error": f"Error converting TIFF: {e}"}, status=500)
+            finally:
+                source_file.close()
+
+        return FileResponse(source_file)
 
     @extend_schema(
         responses={
@@ -438,6 +450,12 @@ def index(request):
 def subjects(request):
     """Render the subject list page."""
     return render(request, "archive/subjects.html")
+
+
+@login_required
+def subject_detail(request, subject_id):
+    """Render the subject detail page."""
+    return render(request, "archive/subject_detail.html", {"subject_id": subject_id})
 
 
 @login_required

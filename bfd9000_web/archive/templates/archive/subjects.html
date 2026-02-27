@@ -138,7 +138,7 @@
                 subjectBtn.className = "btn btn-soft btn-primary btn-xs";
                 subjectBtn.textContent = subject.subject_identifier || subject.id;
                 subjectBtn.onclick = () => {
-                    window.location.href = `/encounters/?subject=${subject.id}`;
+                    window.location.href = `/subject/${subject.id}/`;
                 };
                 identifier.appendChild(subjectBtn);
 

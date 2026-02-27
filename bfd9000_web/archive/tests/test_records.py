@@ -279,6 +279,24 @@ class RecordTests(CleanupAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('image/', response['Content-Type'])
 
+    def test_get_record_image_converts_tiff_to_png(self):
+        """Record image endpoint should return browser-friendly PNG for TIFF source."""
+        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile("test.tiff", self.tiff_content, content_type="image/tiff")
+        data = {
+            "file": file,
+            "record_type": self.rt_lateral.code,
+            "orientation": "left",
+            "modality": "RG",
+        }
+        create_response = self.client.post(url, data, format='multipart')
+        record_id = create_response.data['id']
+
+        image_url = reverse('archive:record-image', kwargs={'pk': record_id})
+        response = self.client.get(image_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response['Content-Type'], 'image/png')
+
     def test_get_record_thumbnail(self):
         """Should serve record thumbnail"""
         # Create a record
