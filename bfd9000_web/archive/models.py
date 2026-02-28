@@ -102,8 +102,8 @@ def record_thumbnail_path(instance, filename: str) -> str:
 
 class TimestampedModel(models.Model):
     """Abstract base class with timestamps and user tracking"""
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True, help_text="Timestamp when this record was created")
+    updated_at = models.DateTimeField(auto_now=True, help_text="Timestamp when this record was last updated")
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -129,9 +129,9 @@ class TimestampedModel(models.Model):
 class Coding(TimestampedModel):
     """Normalized coding table, FHIR-style"""
     system = models.URLField(max_length=255, help_text="Code system URL")
-    version = models.CharField(max_length=64, blank=True)
-    code = models.CharField(max_length=128)
-    display = models.CharField(max_length=255, blank=True)
+    version = models.CharField(max_length=64, blank=True, help_text="Code system version")
+    code = models.CharField(max_length=128, help_text="Code value in the code system")
+    display = models.CharField(max_length=255, blank=True, help_text="Human-readable label for this code")
     meaning = models.TextField(blank=True, help_text="Extended description")
 
     class Meta:
@@ -153,19 +153,19 @@ class Coding(TimestampedModel):
 
 class ValueSet(TimestampedModel):
     """FHIR-style value set grouping a curated list of codes."""
-    slug = models.SlugField(max_length=128, unique=True)
+    slug = models.SlugField(max_length=128, unique=True, help_text="Internal stable key used by API queries")
     url = models.URLField(max_length=255, unique=True,
                           help_text="Canonical URL")
-    name = models.CharField(max_length=255)
-    title = models.CharField(max_length=255, blank=True)
-    description = models.TextField(blank=True)
-    version = models.CharField(max_length=64, blank=True)
-    status = models.CharField(max_length=32, blank=True)
-    publisher = models.CharField(max_length=255, blank=True)
-    publication_url = models.URLField(max_length=255, blank=True)
-    code_system_url = models.URLField(max_length=255, blank=True)
-    code_system_publication_url = models.URLField(max_length=255, blank=True)
-    code_system_status = models.CharField(max_length=32, blank=True)
+    name = models.CharField(max_length=255, help_text="Computable ValueSet name")
+    title = models.CharField(max_length=255, blank=True, help_text="Human-readable ValueSet title")
+    description = models.TextField(blank=True, help_text="Narrative description of this ValueSet")
+    version = models.CharField(max_length=64, blank=True, help_text="Version string for this ValueSet")
+    status = models.CharField(max_length=32, blank=True, help_text="Publication status (e.g., active, draft)")
+    publisher = models.CharField(max_length=255, blank=True, help_text="Organization that publishes this ValueSet")
+    publication_url = models.URLField(max_length=255, blank=True, help_text="Documentation URL for this ValueSet")
+    code_system_url = models.URLField(max_length=255, blank=True, help_text="Canonical URL for the related code system")
+    code_system_publication_url = models.URLField(max_length=255, blank=True, help_text="Documentation URL for the code system")
+    code_system_status = models.CharField(max_length=32, blank=True, help_text="Status of the underlying code system")
 
     # NOTE: We use an explicit through model (ValueSetConcept) so we can
     # capture timestamps and enforce uniqueness at the join level. This means
@@ -176,6 +176,7 @@ class ValueSet(TimestampedModel):
         through='ValueSetConcept',
         related_name='value_sets',
         blank=True,
+        help_text="Codes included in this ValueSet via ValueSetConcept links",
     )
 
     class Meta:
@@ -222,9 +223,9 @@ class Identifier(TimestampedModel):
     ]
 
     use = models.CharField(
-        max_length=16, choices=USE_CHOICES, default='official')
+        max_length=16, choices=USE_CHOICES, default='official', help_text="FHIR Identifier.use semantics")
     system = models.URLField(max_length=255, help_text="Identifier system URL")
-    value = models.CharField(max_length=128)
+    value = models.CharField(max_length=128, help_text="Identifier value in the given system")
 
     class Meta:
         """Model metadata."""
@@ -245,14 +246,14 @@ class Identifier(TimestampedModel):
 
 class Address(TimestampedModel):
     """Minimal address, FHIR-style"""
-    use = models.CharField(max_length=16, blank=True)
-    type = models.CharField(max_length=16, blank=True)
-    line1 = models.CharField(max_length=255, blank=True)
-    line2 = models.CharField(max_length=255, blank=True)
-    city = models.CharField(max_length=128, blank=True)
-    district = models.CharField(max_length=128, blank=True)
-    state = models.CharField(max_length=128, blank=True)
-    postal_code = models.CharField(max_length=32, blank=True)
+    use = models.CharField(max_length=16, blank=True, help_text="Address use (home, work, temp, etc.)")
+    type = models.CharField(max_length=16, blank=True, help_text="Address type (postal, physical, both)")
+    line1 = models.CharField(max_length=255, blank=True, help_text="Primary street address line")
+    line2 = models.CharField(max_length=255, blank=True, help_text="Secondary street address line")
+    city = models.CharField(max_length=128, blank=True, help_text="City or locality")
+    district = models.CharField(max_length=128, blank=True, help_text="District or county")
+    state = models.CharField(max_length=128, blank=True, help_text="State, province, or region")
+    postal_code = models.CharField(max_length=32, blank=True, help_text="Postal or ZIP code")
     country = models.CharField(
         max_length=2, blank=True, help_text="ISO 3166-1 alpha-2 country code")
 
@@ -268,13 +269,13 @@ class Address(TimestampedModel):
 
 class Collection(TimestampedModel):
     """Dataset container (e.g., Bolton, Brush, ...)"""
-    short_name = models.CharField(max_length=64, unique=True)
-    full_name = models.CharField(max_length=255)
-    curator = models.CharField(max_length=255, blank=True)
-    institution = models.CharField(max_length=255, blank=True)
+    short_name = models.CharField(max_length=64, unique=True, help_text="Short unique collection key used in paths and filters")
+    full_name = models.CharField(max_length=255, help_text="Human-readable collection name")
+    curator = models.CharField(max_length=255, blank=True, help_text="Primary curator or maintainer of the collection")
+    institution = models.CharField(max_length=255, blank=True, help_text="Institution responsible for the collection")
     address = models.ForeignKey(
         Address, on_delete=models.SET_NULL, null=True, blank=True)
-    description = models.TextField(blank=True)
+    description = models.TextField(blank=True, help_text="Narrative description of collection scope")
     start_date = models.DateField(
         null=True, blank=True, help_text="Collection start date")
     end_date = models.DateField(
@@ -306,8 +307,8 @@ class Subject(TimestampedModel):
         ('unknown', 'Unknown'),
     ]
 
-    gender = models.CharField(max_length=16, choices=GENDER_CHOICES)
-    birth_date = models.DateField()
+    gender = models.CharField(max_length=16, choices=GENDER_CHOICES, help_text="Administrative sex/gender for the subject")
+    birth_date = models.DateField(help_text="Subject date of birth")
     humanname_family = models.CharField(
         max_length=128, help_text="Family name", null=True, blank=True)
     humanname_given = models.CharField(
@@ -336,7 +337,7 @@ class Subject(TimestampedModel):
         related_name='subjects_palatal_cleft'
     )
     identifiers = models.ManyToManyField(
-        Identifier, blank=True, related_name='subjects')
+        Identifier, blank=True, related_name='subjects', help_text="External identifiers associated with this subject")
     collection = models.ForeignKey(
         Collection,
         on_delete=models.PROTECT,
@@ -379,7 +380,8 @@ class Encounter(TimestampedModel):
     subject = models.ForeignKey(
         Subject,
         on_delete=models.CASCADE,
-        related_name='encounters'
+        related_name='encounters',
+        help_text="Subject linked to this encounter"
     )
     actual_period_start = models.DateField(
         null=True, blank=True, help_text="Encounter start date")
@@ -405,14 +407,16 @@ class Encounter(TimestampedModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='encounters_diagnosis'
+        related_name='encounters_diagnosis',
+        help_text="Optional diagnostic coding associated with this encounter"
     )
-    procedure_occurrence_age = models.DurationField(null=True, blank=True)
-    procedure_occurrence_datetime = models.DateTimeField(null=True, blank=True)
+    procedure_occurrence_age = models.DurationField(null=True, blank=True, help_text="Age at procedure/encounter when supplied by source data")
+    procedure_occurrence_datetime = models.DateTimeField(null=True, blank=True, help_text="Exact procedure occurrence datetime when known")
     procedure_code = models.ForeignKey(
         Coding,
         on_delete=models.PROTECT,
-        related_name='encounters_procedure'
+        related_name='encounters_procedure',
+        help_text="Procedure coding describing the encounter type"
     )
 
     class Meta:
@@ -436,9 +440,9 @@ class Encounter(TimestampedModel):
 
 class Location(TimestampedModel):
     """Location/Facility for scans"""
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, help_text="Name of facility or location")
     address = models.ForeignKey(
-        Address, on_delete=models.SET_NULL, null=True, blank=True)
+        Address, on_delete=models.SET_NULL, null=True, blank=True, help_text="Postal address for this location")
 
     class Meta:
         """Model metadata."""
@@ -466,7 +470,7 @@ class ImagingStudy(TimestampedModel):
         help_text='Dataset/collection this study belongs to'
     )
     identifiers = models.ManyToManyField(
-        Identifier, blank=True, related_name='imaging_studies')
+        Identifier, blank=True, related_name='imaging_studies', help_text="External identifiers for this imaging study")
     instance_uid = models.CharField(
         max_length=64, blank=True, help_text='DICOM Study Instance UID'
     )
@@ -597,7 +601,7 @@ class Record(TimestampedModel):
     physical_location_shelf = models.CharField(max_length=128, blank=True, help_text='Shelf identifier in physical archive')
     physical_location_tray = models.CharField(max_length=128, blank=True, help_text='Tray identifier in physical archive')
     physical_location_compartment = models.CharField(max_length=128, blank=True, help_text='Compartment identifier in physical archive')
-    identifiers = models.ManyToManyField(Identifier, blank=True, related_name='records')
+    identifiers = models.ManyToManyField(Identifier, blank=True, related_name='records', help_text="External identifiers for this record instance")
     device = models.CharField(max_length=255, blank=True, help_text='Device used to capture this record')
 
     class Meta:

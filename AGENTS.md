@@ -5,6 +5,18 @@ The github action uses the nix flake as well. Any time you add another dependenc
 ## Reference
 
 - **Main API spec**: [api_requirements.md](./bfd9000_web/docs/api_requirements.md)
+- **Data model spec**: [data_model.md](./bfd9000_web/docs/data_model.md)
+
+## Data Model
+
+- Follow the archive hierarchy documented in `bfd9000_web/docs/data_model.md`:
+  - `Encounter -> ImagingStudy -> Series -> Record`
+- Keep field ownership strict:
+  - `record_type` belongs to `Series`
+  - upload/acquisition fields belong to `Record`
+- Critical warning:
+  - `record_type` (SNOMED clinical study type) is **not** the same as `image_type` (legacy identifier code like `L`, `SM`)
+  - never substitute one for the other in API, filtering, or UI logic
 
 Whenever a large change is made, documenting it in `./bfd9000_web/docs` is good practice.
 
