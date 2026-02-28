@@ -47,10 +47,6 @@
                                     <td id="encounter-id">-</td>
                                 </tr>
                                 <tr>
-                                    <th>Encounter Date</th>
-                                    <td id="encounter-date">-</td>
-                                </tr>
-                                <tr>
                                     <th>Age at Encounter</th>
                                     <td id="age-at-encounter">-</td>
                                 </tr>
@@ -81,32 +77,32 @@
                 </div>
             </div>
 
-            <!-- Imaging Study Details -->
+            <!-- Series & Acquisition Details -->
             <div class="card bg-base-200 shadow">
                 <div class="card-body">
-                    <h2 class="card-title text-lg">Imaging Study</h2>
+                    <h2 class="card-title text-lg">Series & Acquisition</h2>
                     <div class="overflow-x-auto">
                         <table class="table table-sm">
                             <tbody>
-                                <tr>
-                                    <th>Orientation</th>
-                                    <td id="orientation">-</td>
-                                </tr>
                                 <tr>
                                     <th>Modality</th>
                                     <td id="modality">-</td>
                                 </tr>
                                 <tr>
-                                    <th>Scan Date</th>
-                                    <td id="scan-date">-</td>
+                                    <th>Image Type</th>
+                                    <td id="image-type">-</td>
                                 </tr>
                                 <tr>
-                                    <th>Operator</th>
-                                    <td id="operator">-</td>
+                                    <th>Patient Orientation</th>
+                                    <td id="patient-orientation">-</td>
                                 </tr>
                                 <tr>
-                                    <th>Collection</th>
-                                    <td id="collection">-</td>
+                                    <th>Acquisition</th>
+                                    <td id="acquisition-datetime">-</td>
+                                </tr>
+                                <tr>
+                                    <th>Scan Operator</th>
+                                    <td id="scan-operator">-</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -150,30 +146,24 @@
         // Subject & Encounter
         document.getElementById('subject-id').textContent = record.subject_identifier || record.subject_id || '-';
         document.getElementById('encounter-id').textContent = record.encounter_id || '-';
-        document.getElementById('encounter-date').textContent = record.encounter_date || '-';
         document.getElementById('age-at-encounter').textContent = formatAge(record);
 
         // Record Details
-        document.getElementById('record-type').textContent = record.record_type?.display || '-';
+        document.getElementById('record-type').textContent = record.series_record_type?.display || '-';
         document.getElementById('created-at').textContent = record.created_at 
             ? new Date(record.created_at).toLocaleString()
             : '-';
 
-        // Imaging Study (if available)
-        if (record.imaging_study) {
-            fetch(`/api/imaging-studies/${record.imaging_study}/`)
-                .then(res => res.json())
-                .then(study => {
-                    document.getElementById('orientation').textContent = study.view?.display || '-';
-                    document.getElementById('modality').textContent = study.series_modality?.display || '-';
-                    document.getElementById('scan-date').textContent = study.scan_datetime 
-                        ? new Date(study.scan_datetime).toLocaleString()
-                        : '-';
-                    document.getElementById('operator').textContent = study.scan_operator_display || study.scan_operator_username || '-';
-                    document.getElementById('collection').textContent = study.collection || '-';
-                })
-                .catch(err => console.error('Error loading imaging study:', err));
-        }
+        // Series & acquisition details come from record payload
+        document.getElementById('modality').textContent = record.series_modality?.display || '-';
+        document.getElementById('image-type').textContent = record.image_type?.display || '-';
+        document.getElementById('patient-orientation').textContent = Array.isArray(record.patient_orientation)
+            ? record.patient_orientation.join('\\')
+            : '-';
+        document.getElementById('acquisition-datetime').textContent = record.acquisition_datetime
+            ? new Date(record.acquisition_datetime).toLocaleString()
+            : '-';
+        document.getElementById('scan-operator').textContent = record.scan_operator || '-';
     }
 
     function formatAge(record) {

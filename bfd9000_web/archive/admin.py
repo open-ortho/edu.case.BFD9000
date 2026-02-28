@@ -10,6 +10,7 @@ from .models import (
     Identifier,
     ImagingStudy,
     Location,
+    Series,
     Record,
     Subject,
 )
@@ -190,16 +191,14 @@ class ImagingStudyAdmin(TimestampedAdmin):
     list_display = (
         "encounter",
         "collection",
-        "record_type",
-        "scan_datetime",
-        "scan_operator",
+        "instance_uid",
+        "created_at",
     )
-    list_filter = ("collection", "scan_datetime", "record_type")
+    list_filter = ("collection", "created_at")
     search_fields = (
         "encounter__subject__humanname_family",
         "encounter__subject__humanname_given",
         "instance_uid",
-        "series_uid",
     )
     autocomplete_fields = ("encounter",)
     filter_horizontal = ("identifiers",)
@@ -207,34 +206,34 @@ class ImagingStudyAdmin(TimestampedAdmin):
         (None, {"fields": ("encounter", "collection")}),
         (
             "Study Details",
-            {"fields": ("record_type", "view", "body_site", "laterality")},
-        ),
-        (
-            "Scan Information",
-            {
-                "fields": (
-                    "scan_datetime",
-                    "scan_operator",
-                    "scan_location",
-                    "device",
-                    "endpoint",
-                )
-            },
-        ),
-        (
-            "DICOM Fields",
-            {
-                "fields": (
-                    "instance_uid",
-                    "instance_sop_class",
-                    "instance_number",
-                    "series_uid",
-                    "series_modality",
-                ),
-                "classes": ("collapse",),
-            },
+            {"fields": ("instance_uid", "description", "endpoint")},
         ),
         ("Identifiers", {"fields": ("identifiers",)}),
+    )
+
+
+@admin.register(Series)
+class SeriesAdmin(TimestampedAdmin):
+    """Admin settings for series."""
+    list_display = (
+        "imaging_study",
+        "record_type",
+        "modality",
+        "uid",
+        "created_at",
+    )
+    list_filter = ("record_type", "modality", "created_at")
+    search_fields = (
+        "uid",
+        "description",
+        "imaging_study__encounter__subject__humanname_family",
+        "imaging_study__encounter__subject__humanname_given",
+    )
+    autocomplete_fields = ("imaging_study", "record_type", "modality", "acquisition_location")
+    fieldsets = (
+        (None, {"fields": ("imaging_study", "uid")}),
+        ("Classification", {"fields": ("record_type", "modality", "description")}),
+        ("Acquisition", {"fields": ("acquisition_location",)}),
     )
 
 
@@ -242,22 +241,26 @@ class ImagingStudyAdmin(TimestampedAdmin):
 class RecordAdmin(TimestampedAdmin):
     """Admin settings for records and linked imaging studies."""
     list_display = (
-        "encounter",
-        "record_type",
-        "is_scanned",
+        "series",
+        "record_type_display",
+        "modality_display",
+        "acquisition_datetime",
         "created_at",
     )
-    list_filter = ("record_type", "created_at")
+    list_filter = ("series__record_type", "series__modality", "created_at")
     search_fields = (
-        "encounter__subject__humanname_family",
-        "encounter__subject__humanname_given",
+        "series__imaging_study__encounter__subject__humanname_family",
+        "series__imaging_study__encounter__subject__humanname_given",
+        "sop_instance_uid",
         "physical_location_box",
         "physical_location_shelf",
     )
-    autocomplete_fields = ("encounter",)
+    autocomplete_fields = ("series", "scan_operator", "image_type")
     filter_horizontal = ("identifiers",)
     fieldsets = (
-        (None, {"fields": ("encounter", "record_type")}),
+        (None, {"fields": ("series", "image_type", "sop_instance_uid")}),
+        ("Acquisition", {"fields": ("acquisition_datetime", "scan_operator", "source_file", "thumbnail", "endpoint")}),
+        ("Image Processing", {"fields": ("patient_orientation", "image_transform_ops")}),
         (
             "Physical Location",
             {
@@ -270,7 +273,14 @@ class RecordAdmin(TimestampedAdmin):
                 )
             },
         ),
-        ("Digital Link", {"fields": ("imaging_study",)}),
         ("Other", {"fields": ("device",)}),
         ("Identifiers", {"fields": ("identifiers",)}),
     )
+
+    @admin.display(description="Record Type")
+    def record_type_display(self, obj):
+        return getattr(getattr(obj, "series", None), "record_type", None)
+
+    @admin.display(description="Modality")
+    def modality_display(self, obj):
+        return getattr(getattr(obj, "series", None), "modality", None)

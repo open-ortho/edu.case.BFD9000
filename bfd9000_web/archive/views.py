@@ -26,13 +26,13 @@ from django.shortcuts import render
 from django.views.decorators.http import require_POST
 from .models import (
     Coding, Identifier, Address, Collection, Subject,
-    Encounter, Location, ImagingStudy, Record, ValueSet
+    Encounter, Location, ImagingStudy, Series, Record, ValueSet
 )
 from .serializers import (
     CodingSerializer, IdentifierSerializer, AddressSerializer,
     CollectionSerializer, SubjectSerializer, EncounterSerializer,
     LocationSerializer, ImagingStudySerializer, RecordSerializer,
-    RecordUploadSerializer
+    RecordUploadSerializer, SeriesSerializer
 )
 from .constants import (
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
@@ -153,7 +153,7 @@ class SubjectViewSet(viewsets.ModelViewSet):
         'identifiers'
     ).annotate(
         encounter_count=Count('encounters', distinct=True),
-        record_count=Count('encounters__records', distinct=True)
+        record_count=Count('encounters__imaging_study__series__records', distinct=True)
     ).all()
     serializer_class = SubjectSerializer
     filterset_fields = {
@@ -179,13 +179,13 @@ class EncounterViewSet(viewsets.ModelViewSet):
     ).prefetch_related(
         'subject__identifiers'
     ).annotate(
-        record_count=Count('records', distinct=True)
+        record_count=Count('imaging_study__series__records', distinct=True)
     ).order_by('-actual_period_start', '-id')
     serializer_class = EncounterSerializer
     filterset_fields = ['subject', 'actual_period_start']
     search_fields = ['subject__identifiers__value']
 
-    def perform_create(self, serializer: serializers.ModelSerializer) -> None:
+    def perform_create(self, serializer: serializers.BaseSerializer) -> None:
         """
         Custom creation logic to handle subject association and age calculation.
         """
@@ -223,7 +223,17 @@ class ImagingStudyViewSet(viewsets.ModelViewSet):
     """
     queryset = ImagingStudy.objects.all()
     serializer_class = ImagingStudySerializer
-    filterset_fields = ['encounter', 'collection', 'scan_datetime']
+    filterset_fields = ['encounter', 'collection']
+
+
+class SeriesViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Series model.
+
+    Exposes series grouped under imaging studies. Standard CRUD.
+    """
+    queryset = Series.objects.select_related('imaging_study', 'record_type', 'modality').prefetch_related('records')
+    serializer_class = SeriesSerializer
 
 
 class RecordViewSet(viewsets.ModelViewSet):
@@ -233,20 +243,24 @@ class RecordViewSet(viewsets.ModelViewSet):
     Manages the high-level record entries that link encounters to imaging studies.
     Supports file uploads via a specialized serializer.
     """
+    # Use series -> imaging_study -> encounter chain for related lookups
     queryset = Record.objects.select_related(
-        'encounter', 'encounter__subject'
+        'series__imaging_study__encounter',
+        'series__record_type',
+        'series__modality'
     ).prefetch_related(
-        'encounter__subject__identifiers'
+        'series__imaging_study__encounter__subject__identifiers',
+        'identifiers'
     )
     serializer_class = RecordSerializer
     filterset_fields = [
-        'encounter__id',
-        'encounter__subject',
-        'encounter__subject__collection',
-        'encounter__subject__collection__short_name',
-        'encounter',
+        'series__imaging_study__encounter__id',
+        'series__imaging_study__encounter__subject',
+        'series__imaging_study__encounter__subject__collection',
+        'series__imaging_study__encounter__subject__collection__short_name',
+        'series',
     ]
-    search_fields = ['id', 'encounter__id', 'encounter__subject__id']
+    search_fields = ['id', 'series__imaging_study__encounter__id', 'series__imaging_study__encounter__subject__id']
 
     def get_serializer_class(self) -> Type[serializers.Serializer]:
         """Return the appropriate serializer class based on the action."""
@@ -268,15 +282,20 @@ class RecordViewSet(viewsets.ModelViewSet):
     def get_queryset(self) -> QuerySet:
         """Filter queryset based on nested routes."""
         qs = super().get_queryset()
-        # Filter by nested encounter if present
+        # Filter by nested encounter if present (via series -> imaging_study)
         encounter_pk = self.kwargs.get('encounter_pk')
         if encounter_pk:
-            qs = qs.filter(encounter__id=encounter_pk)
+            qs = qs.filter(series__imaging_study__encounter__id=encounter_pk)
 
         # Filter by nested subject if present
         subject_pk = self.kwargs.get('subject_pk')
         if subject_pk:
-            qs = qs.filter(encounter__subject__id=subject_pk)
+            qs = qs.filter(series__imaging_study__encounter__subject__id=subject_pk)
+
+        # Backward-compatible query param aliases
+        record_type = self.request.query_params.get('record_type')
+        if record_type:
+            qs = qs.filter(series__record_type__id=record_type)
 
         return qs
 
@@ -286,15 +305,15 @@ class RecordViewSet(viewsets.ModelViewSet):
         }
     )
     @action(detail=True, methods=['get'])
-    def image(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Response:
+    def image(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Any:
         """Serve the raw image file associated with the record."""
         # DRF action signature requires request/pk/kwargs.
         del request, pk, kwargs
         record = self.get_object()
-        if not record.imaging_study or not record.imaging_study.source_file:
+        if not getattr(record, 'source_file', None):
             return Response({"error": "No image file available"}, status=404)
 
-        source_file = record.imaging_study.source_file
+        source_file = record.source_file
         ext = os.path.splitext(source_file.name)[1].lower()
         transform_ops = record.image_transform_ops or []
         if ext in {'.tif', '.tiff'}:
@@ -334,16 +353,16 @@ class RecordViewSet(viewsets.ModelViewSet):
         }
     )
     @action(detail=True, methods=['get'])
-    def thumbnail(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Response:
+    def thumbnail(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Any:
         """Generate and serve a thumbnail for the record's image."""
         # DRF action signature requires request/pk/kwargs.
         del request, pk, kwargs
         record = self.get_object()
 
-        if not record.imaging_study or not record.imaging_study.source_file:
+        if not getattr(record, 'source_file', None):
             return Response({"error": "No image file available"}, status=404)
 
-        source_file = record.imaging_study.source_file
+        source_file = record.source_file
         # Check if file exists
         if not os.path.exists(source_file.path):
             return Response({"error": "File not found on server"}, status=404)
@@ -396,7 +415,7 @@ class RecordViewSet(viewsets.ModelViewSet):
             return Response({"error": f"Error generating thumbnail: {e}"}, status=500)
 
     @action(detail=True, methods=['get'])
-    def dicom(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Response:
+    def dicom(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Any:
         """Serve the DICOM file (Not Implemented)."""
         # DRF action signature requires request/pk/kwargs.
         del request, pk, kwargs

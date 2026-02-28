@@ -40,7 +40,6 @@
                     </div>
                     <div id="encounter-info" class="text-sm text-base-content/70 hidden !mt-0">
                         <div class="alert alert-info !p-1">
-                            <strong>Date:</strong> <span id="encounter-date"></span>
                             <strong>Age:</strong> <span id="encounter-age"></span>
                             <strong>Records:</strong> <span id="encounter-records"></span>
                         </div>
@@ -149,16 +148,6 @@
                         </select>
                     </div>
 
-                    <!-- Orientation -->
-                    <div class="form-control">
-                        <label class="label">
-                            <span class="label-text">Orientation <span class="text-error">*</span></span>
-                        </label>
-                        <select id="orientation" class="select select-bordered select-sm">
-                            <option value="">Loading...</option>
-                        </select>
-                    </div>
-
                     <!-- Modality -->
                     <div class="form-control">
                         <label class="label">
@@ -262,7 +251,6 @@
         aiPatientOrientation: null,
         valuesets: {
             record_types: [],
-            orientations: [],
             modalities: []
         }
     };
@@ -647,10 +635,7 @@
     }
 
     function showEncounterInfo(encounter) {
-        document.getElementById('encounter-date').textContent = encounter.actual_period_start || '-';
-        document.getElementById('encounter-age').textContent = encounter.procedure_occurrence_age
-            ? `${encounter.procedure_occurrence_age} years`
-            : '-';
+        document.getElementById('encounter-age').textContent = formatAge(encounter.age_at_encounter, encounter.actual_period_start_precision, encounter.actual_period_start_uncertain);
         document.getElementById('encounter-records').textContent = encounter.record_count || 0;
         document.getElementById('encounter-info').classList.remove('hidden');
         document.getElementById('encounter-error').classList.add('hidden');
@@ -676,10 +661,9 @@
         encounters.forEach(enc => {
             const option = document.createElement('option');
             option.value = enc.id;
-            const date = enc.actual_period_start || 'No date';
-            const age = enc.procedure_occurrence_age ? `${enc.procedure_occurrence_age}y` : '';
+            const age = formatAge(enc.age_at_encounter, enc.actual_period_start_precision, enc.actual_period_start_uncertain);
             const records = enc.record_count ? `${enc.record_count} records` : '0 records';
-            option.textContent = `Encounter ${enc.id} - ${date} ${age ? `(${age})` : ''} - ${records}`;
+            option.textContent = `Encounter ${enc.id} - ${age} - ${records}`;
             select.appendChild(option);
         });
         select.disabled = false;
@@ -721,7 +705,6 @@
 
     function clearFormFields() {
         document.getElementById('record-type').value = '';
-        document.getElementById('orientation').value = '';
         document.getElementById('modality').value = '';
         document.getElementById('operator').value = defaultOperatorDisplay;
         // Reset acquisition date to today
@@ -735,10 +718,9 @@
         const hasEncounter = state.encounter !== null;
         const hasFile = state.file !== null;
         const hasRecordType = document.getElementById('record-type').value !== '';
-        const hasOrientation = document.getElementById('orientation').value !== '';
         const hasModality = document.getElementById('modality').value !== '';
 
-        const canSubmit = hasSubject && hasEncounter && hasFile && hasRecordType && hasOrientation && hasModality;
+        const canSubmit = hasSubject && hasEncounter && hasFile && hasRecordType && hasModality;
         document.getElementById('submit-button').disabled = !canSubmit;
 
         // Update AI and image manipulation buttons (need file and must be PNG)
@@ -779,6 +761,32 @@
         const sizes = ['Bytes', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    function formatAge(ageYears, precision = '', uncertain = false) {
+        if (ageYears === null || ageYears === undefined) {
+            return '-';
+        }
+
+        const wholeYears = Math.floor(ageYears);
+        let months = Math.round((ageYears - wholeYears) * 12);
+        let years = wholeYears;
+        if (months === 12) {
+            years += 1;
+            months = 0;
+        }
+
+        let ageText = `${years}y ${months}m`;
+        if (uncertain) {
+            if (precision === 'month') {
+                ageText += ' +/- 1m';
+            } else if (precision === 'year') {
+                ageText += ' +/- 1y';
+            } else {
+                ageText += ' +/-';
+            }
+        }
+        return ageText;
     }
 
     // ========================================
@@ -1079,7 +1087,6 @@
             const formData = new FormData();
             formData.append('file', state.file);
             formData.append('record_type', document.getElementById('record-type').value);
-            formData.append('orientation', document.getElementById('orientation').value);
             formData.append('modality', document.getElementById('modality').value);
 
             if (state.aiImageTypeCode) {
@@ -1091,11 +1098,6 @@
             }
             if (state.requiresServerTransform && state.transformOps.length > 0) {
                 formData.append('image_transform_ops', JSON.stringify(state.transformOps));
-            }
-
-            const operator = document.getElementById('operator').value.trim();
-            if (operator) {
-                formData.append('operator', operator);
             }
 
             const acquisitionDate = document.getElementById('acquisition-date').value;
@@ -1174,19 +1176,16 @@
 
         // Load valuesets
         try {
-            const [recordTypes, orientations, modalities] = await Promise.all([
+            const [recordTypes, modalities] = await Promise.all([
                 fetchValueset('record_types'),
-                fetchValueset('orientations'),
                 fetchValueset('modalities')
             ]);
 
             state.valuesets.record_types = recordTypes;
-            state.valuesets.orientations = orientations;
             state.valuesets.modalities = modalities;
             console.log(state.valuesets);
 
             populateSelect('record-type', recordTypes);
-            populateSelect('orientation', orientations);
             populateSelect('modality', modalities);
         } catch (error) {
             console.error('Failed to load valuesets:', error);
@@ -1213,7 +1212,7 @@
         });
 
         // Watch form fields for changes
-        ['record-type', 'orientation', 'modality'].forEach(id => {
+        ['record-type', 'modality'].forEach(id => {
             document.getElementById(id).addEventListener('change', updateSubmitButton);
         });
 
