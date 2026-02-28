@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -9,19 +10,40 @@ from typing import Dict, Optional, Tuple
 from django.core.management.base import CommandError
 from django.db import transaction
 
-from archive.constants import SYSTEM_IDENTIFIER_BOLTON_SUBJECT, SYSTEM_IDENTIFIER_BRUSH
+from archive.constants import (
+    SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
+    SYSTEM_IDENTIFIER_BRUSH,
+)
 from archive.management.importers.base import BaseImporter, ImportStats
-from archive.models import Coding, Subject
+from archive.models import Coding, Subject, Encounter
 
 
 @dataclass
 class BoltonStats(ImportStats):
     """Import counters specific to the Bolton dataset."""
     skeletal_missing: int = 0
+    encounters_created: int = 0
+    encounters_skipped: int = 0
 
 
 class BoltonImporter(BaseImporter):
     """Import Bolton subjects and related identifiers/codings."""
+    def __init__(
+        self,
+        *,
+        dry_run: bool,
+        include_names: bool,
+        stdout,
+        stderr,
+        timepoints_file: Optional[str] = None,
+        skip_timepoints: bool = False,
+    ) -> None:
+        super().__init__(
+            dry_run=dry_run, include_names=include_names, stdout=stdout, stderr=stderr
+        )
+        self.timepoints_file: Optional[str] = timepoints_file
+        self.skip_timepoints = skip_timepoints
+
     def run(self, file_path: Path) -> None:
         """Execute the Bolton import from the provided workbook path."""
         try:
@@ -54,12 +76,26 @@ class BoltonImporter(BaseImporter):
                 self.stdout.write("Dry run enabled: no database writes will occur.")
 
             with transaction.atomic():
+                procedure_code = self._get_or_create_procedure()
                 for row in rows:
                     if not row or all(cell is None for cell in row):
                         continue
                     try:
                         self._import_row(row, index, class_codes, coding_cache, stats)
                     except CommandError as exc:
+                        stats.rows_skipped += 1
+                        self.stderr.write(str(exc))
+
+                # Optionally import timepoints CSV (generates Encounter rows per subject/timepoint)
+                if not self.skip_timepoints:
+                    if self.timepoints_file:
+                        csv_path = Path(self.timepoints_file).expanduser().resolve()
+                    else:
+                        csv_path = Path(__file__).resolve().parents[3] / "docs" / "collections_data" / "BoltonTimepoints2.csv"
+                    try:
+                        self._import_timepoints(csv_path, stats, procedure_code)
+                    except CommandError as exc:
+                        # Non-fatal for import: report and continue
                         stats.rows_skipped += 1
                         self.stderr.write(str(exc))
 
@@ -146,13 +182,19 @@ class BoltonImporter(BaseImporter):
 
         collection = self._get_or_create_collection(collection_id)
 
+        ethnicity = self._resolve_race(ethnicity_value, coding_cache)
+        skeletal = self._resolve_skeletal_pattern(angle_class, class_codes, coding_cache)
+        if not skeletal:
+            stats.skeletal_missing += 1
+
         subject = self._get_subject_by_identifier(subject_id)
-        is_new_subject = subject is None
         if subject is None:
             subject = Subject.objects.create(
                 gender=self._map_gender(sex_value),
                 birth_date=self._normalize_date(birth_date),
                 collection=collection,
+                ethnicity=ethnicity,
+                skeletal_pattern=skeletal,
             )
             stats.subjects_created += 1
         else:
@@ -168,22 +210,15 @@ class BoltonImporter(BaseImporter):
             if subject.collection_id is None:
                 subject.collection = collection
                 updated = True
+            if ethnicity and subject.ethnicity_id != ethnicity.id:
+                subject.ethnicity = ethnicity
+                updated = True
+            if skeletal and subject.skeletal_pattern_id != skeletal.id:
+                subject.skeletal_pattern = skeletal
+                updated = True
             if updated:
                 subject.save()
                 stats.subjects_updated += 1
-
-        ethnicity = self._resolve_race(ethnicity_value, coding_cache)
-        if ethnicity and subject.ethnicity_id != ethnicity.id:
-            subject.ethnicity = ethnicity
-            subject.save()
-
-        skeletal = self._resolve_skeletal_pattern(angle_class, class_codes, coding_cache)
-        if skeletal:
-            if subject.skeletal_pattern_id != skeletal.id:
-                subject.skeletal_pattern = skeletal
-                subject.save()
-        else:
-            stats.skeletal_missing += 1
 
         self._attach_identifier(
             subject,
@@ -201,9 +236,6 @@ class BoltonImporter(BaseImporter):
                 stats=stats,
             )
 
-        if not is_new_subject and subject.pk:
-            subject.save()
-
     def _get_subject_by_identifier(self, value: str) -> Optional[Subject]:
         return (
             Subject.objects.filter(
@@ -213,6 +245,74 @@ class BoltonImporter(BaseImporter):
             .distinct()
             .first()
         )
+
+    def _import_timepoints(self, csv_path: Path, stats: BoltonStats, procedure_code: Coding) -> None:
+        """Read the BoltonTimepoints2.csv and create Encounter objects per timepoint.
+
+        The CSV uses `subjectid` values that correspond to the Bolton identifier
+        (system = SYSTEM_IDENTIFIER_BOLTON_SUBJECT). For each row we locate the
+        Subject by that identifier and create an Encounter with
+        `actual_period_start` populated from `timepointdate`.
+        """
+        if not csv_path.exists():
+            raise CommandError(f"Timepoints CSV not found: {csv_path}")
+
+        with csv_path.open(newline='', encoding='utf-8') as fh:
+            reader = csv.DictReader(fh)
+            required = ["collectionid", "subjectid", "timepointnum", "timepointdate"]
+            # Normalize fieldnames to lowercase so row access is consistent (#7)
+            raw_fieldnames = reader.fieldnames or []
+            normalized_fieldnames = [h.strip().lower() for h in raw_fieldnames]
+            missing = [r for r in required if r not in normalized_fieldnames]
+            if missing:
+                raise CommandError(f"Bolton timepoints CSV missing columns: {', '.join(missing)}")
+            # Build a mapping from normalized key -> original key for DictReader rows
+            key_map = {norm: orig for norm, orig in zip(normalized_fieldnames, raw_fieldnames)}
+
+            for raw_row in reader:
+                # Normalize row keys to lowercase (#7)
+                row = {norm: raw_row[orig] for norm, orig in key_map.items()}
+                subject_id = self._cell_str(row.get("subjectid"))
+                date_raw = row.get("timepointdate")
+                if not subject_id or not date_raw:
+                    self.stderr.write(f"Skipping timepoint row with missing subject or date: {row}")
+                    stats.encounters_skipped += 1
+                    continue
+
+                subject = self._get_subject_by_identifier(subject_id)
+                if subject is None:
+                    self.stderr.write(f"No subject found for Bolton id {subject_id}; skipping timepoint")
+                    stats.encounters_skipped += 1
+                    continue
+
+                try:
+                    actual_date = self._normalize_date(date_raw)
+                except CommandError:
+                    self.stderr.write(f"Invalid date for subject {subject_id}: {date_raw}; skipping")
+                    stats.encounters_skipped += 1
+                    continue
+
+                date_raw_str = self._cell_str(date_raw)  # #8a: use _cell_str instead of str()
+
+                # Avoid creating duplicate encounters for same subject/date/raw (#8b)
+                if Encounter.objects.filter(
+                    subject=subject,
+                    actual_period_start=actual_date,
+                    actual_period_start_raw=date_raw_str,
+                ).exists():
+                    self.stderr.write(f"Encounter already exists for {subject_id} on {actual_date}; skipping")
+                    stats.encounters_skipped += 1
+                    continue
+
+                # Use objects.create() instead of manual save() (#8c)
+                Encounter.objects.create(
+                    subject=subject,
+                    actual_period_start=actual_date,
+                    actual_period_start_raw=date_raw_str,
+                    actual_period_start_precision="day",
+                    procedure_code=procedure_code,
+                )
+                stats.encounters_created += 1
 
     def _resolve_skeletal_pattern(
         self,
@@ -234,7 +334,7 @@ class BoltonImporter(BaseImporter):
             "1": "2106-3",
             "0": "2054-5",
         }
-        normalized = str(value).strip()
+        normalized = self._cell_str(value)
         code = race_map.get(normalized)
         if not code:
             return None
@@ -247,5 +347,7 @@ class BoltonImporter(BaseImporter):
         self.stdout.write(f"Subjects updated: {stats.subjects_updated}")
         self.stdout.write(f"Identifiers created: {stats.identifiers_created}")
         self.stdout.write(f"Identifiers attached: {stats.identifiers_attached}")
+        self.stdout.write(f"Encounters created: {stats.encounters_created}")
+        self.stdout.write(f"Encounters skipped: {stats.encounters_skipped}")
         self.stdout.write(f"Rows skipped: {stats.rows_skipped}")
         self.stdout.write(f"Skeletal patterns missing: {stats.skeletal_missing}")
