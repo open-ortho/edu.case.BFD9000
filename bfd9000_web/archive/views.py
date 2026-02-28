@@ -307,46 +307,13 @@ class RecordViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=['get'])
     def image(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Any:
-        """Serve the raw image file associated with the record."""
-        # DRF action signature requires request/pk/kwargs.
+        """Serve the raw source file (passthrough, no modification)."""
         del request, pk, kwargs
         record = self.get_object()
         if not getattr(record, 'source_file', None):
             return Response({"error": "No image file available"}, status=404)
-
         source_file = record.source_file
-        ext = os.path.splitext(source_file.name)[1].lower()
-        transform_ops = record.image_transform_ops or []
-        if ext in {'.tif', '.tiff'}:
-            try:
-                source_file.open('rb')
-                png_bytes = _convert_tiff_to_png_bytes(source_file)
-                if transform_ops:
-                    with Image.open(io.BytesIO(png_bytes)) as img:
-                        transformed = _apply_transform_ops(img, transform_ops)
-                        out = io.BytesIO()
-                        transformed.save(out, format='PNG', optimize=True)
-                        png_bytes = out.getvalue()
-                return HttpResponse(png_bytes, content_type='image/png')
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                return Response({"error": f"Error converting TIFF: {e}"}, status=500)
-            finally:
-                source_file.close()
-
-        if transform_ops and ext != '.stl':
-            try:
-                source_file.open('rb')
-                with Image.open(source_file) as img:
-                    transformed = _apply_transform_ops(img, transform_ops)
-                    out = io.BytesIO()
-                    transformed.save(out, format='PNG', optimize=True)
-                    return HttpResponse(out.getvalue(), content_type='image/png')
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                return Response({"error": f"Error transforming image: {e}"}, status=500)
-            finally:
-                source_file.close()
-
-        return FileResponse(source_file)
+        return FileResponse(source_file.open('rb'))
 
     @extend_schema(
         responses={
@@ -355,9 +322,7 @@ class RecordViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=['get'])
     def thumbnail(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Any:
-        """Generate and serve a thumbnail for the record's image.
-        Returns static fallback if missing or on error.
-        """
+        """Serve record thumbnail (persisted), or static fallback if missing."""
         from django.contrib.staticfiles import finders
         del request, pk, kwargs
         record = self.get_object()
@@ -369,30 +334,13 @@ class RecordViewSet(viewsets.ModelViewSet):
             except Exception:
                 pass
 
-        # Try dynamic generation only for known image types, else fallback
-        if getattr(record, 'source_file', None):
-            try:
-                file_stream = record.source_file.open('rb')
-                try:
-                    thumb_bytes = generate_thumbnail_jpeg_bytes(file_stream, record.source_file.name)
-                    if thumb_bytes:
-                        return HttpResponse(thumb_bytes, content_type='image/jpeg')
-                finally:
-                    file_stream.close()
-            except Exception:
-                pass
-
-        # Serve static fallback if no thumbnail available/generated
+        # Serve static fallback if no thumbnail available
         fallback_path = finders.find('archive/img/no-thumbnail.jpg')
         if fallback_path:
             with open(fallback_path, 'rb') as f:
                 return HttpResponse(f.read(), content_type='image/jpeg')
-        # As absolute fallback, render a plain JPEG
-        img = Image.new('RGB', (300, 300), color=(200, 200, 200))
-        buf = io.BytesIO()
-        img.save(buf, format='JPEG')
-        buf.seek(0)
-        return HttpResponse(buf, content_type='image/jpeg')
+        # If fallback missing, return 404
+        return JsonResponse({"error": "No thumbnail or fallback available."}, status=404)
 
     @action(detail=True, methods=['get'])
     def dicom(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Any:

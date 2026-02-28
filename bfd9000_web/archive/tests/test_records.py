@@ -314,8 +314,8 @@ class RecordTests(CleanupAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('image/', response['Content-Type'])
 
-    def test_get_record_image_converts_tiff_to_png(self):
-        """Record image endpoint should return browser-friendly PNG for TIFF source."""
+    def test_get_record_image_returns_raw_tiff(self):
+        """Record image endpoint should passthrough TIFF source unmodified."""
         url = reverse('archive:encounter-records-list',
                       kwargs={'encounter_pk': self.encounter.id})
         file = SimpleUploadedFile(
@@ -332,7 +332,7 @@ class RecordTests(CleanupAPITestCase):
         image_url = reverse('archive:record-image', kwargs={'pk': record_id})
         response = self.client.get(image_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response['Content-Type'], 'image/png')
+        self.assertEqual(response['Content-Type'], 'image/tiff')
 
     def test_create_record_sets_default_patient_orientation_for_lateral_image_type(self):
         """Lateral image type should default PatientOrientation to A\\F."""
@@ -356,8 +356,8 @@ class RecordTests(CleanupAPITestCase):
         record = Record.objects.get(pk=create_response.data['id'])
         self.assertEqual(record.patient_orientation, 'A\\F')
 
-    def test_record_image_applies_saved_transform_ops(self):
-        """Image endpoint should apply persisted transform operations."""
+    def test_record_image_ignores_saved_transform_ops(self):
+        """Image endpoint should serve raw source regardless of transform ops."""
         img = Image.new('RGB', (2, 1), color=(255, 255, 255))
         buf = io.BytesIO()
         img.save(buf, format='PNG')
@@ -384,8 +384,10 @@ class RecordTests(CleanupAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response['Content-Type'], 'image/png')
 
-        transformed = Image.open(io.BytesIO(response.content))
-        self.assertEqual(transformed.size, (1, 2))
+        payload = b''.join(response.streaming_content) if hasattr(
+            response, 'streaming_content') else response.content
+        raw = Image.open(io.BytesIO(payload))
+        self.assertEqual(raw.size, (2, 1))
 
     def test_get_record_thumbnail(self):
         """Should serve record thumbnail (raster image)"""

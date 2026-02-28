@@ -396,7 +396,7 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 **API Requirement**:
 
 - **Endpoint**: `GET /api/records/{id}/image/`
-- **Response**: Image file with appropriate `Content-Type` (image/png, image/tiff, image/jpeg, model/stl, etc.)
+- **Response**: Raw source artifact as stored (unmodified passthrough), with source `Content-Type` (image/png, image/tiff, image/jpeg, model/stl, etc.)
 - **Authentication**: Required
 - **Caching**: Support `ETag` and `Last-Modified` headers
 
@@ -407,10 +407,10 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 **API Requirement**:
 
 - **Endpoint**: `GET /api/records/{id}/thumbnail/`
-- **Response**: JPEG thumbnail image (max 300x300px, target ~20KB, hard limit 100KB); returns static fallback if no thumbnail can be generated or for 3D files (STL, PLY, OBJ)
+- **Response**: Stored JPEG thumbnail image (max 300x300px, target ~20KB, hard limit 100KB); returns static fallback if thumbnail does not exist
 - **Authentication**: Required
 - **Caching**: Support `ETag` and `Last-Modified` headers
-- **Note**: Thumbnails are generated for raster images (PNG, TIFF, JPEG); for 3D file types or if thumbnail is missing, the API serves a static fallback image as `image/jpeg` with HTTP 200.
+- **Note**: Thumbnails are generated only at ingest/upload time for raster images (PNG, TIFF, JPEG). For 3D file types (STL, PLY, OBJ), no generated thumbnail is stored; endpoint serves static fallback image as `image/jpeg` with HTTP 200.
 
 #### 6.3 Get Record DICOM File
 
