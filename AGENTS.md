@@ -27,6 +27,8 @@ The github action uses the nix flake as well. Any time you add another dependenc
 - Use `cast()` only when direct annotations and normal control-flow typing cannot express the type clearly.
 - Avoid "type-like" protocol/shim objects or other typing-only abstractions that add complexity without improving readability.
 - The goal of typing is clearer code and fewer errors, not extra boilerplate.
+- VSCode + Pylance is the expected type-checking workflow during development.
+- `django-types` should be available in the development environment; it is a dev-time dependency, not a production runtime requirement.
 
 Whenever a large change is made, documenting it in `./bfd9000_web/docs` is good practice.
 

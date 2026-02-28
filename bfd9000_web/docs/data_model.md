@@ -92,6 +92,27 @@ These are different concepts and must never be substituted.
 
 Current schema supports one canonical endpoint per record. If multiple virtual endpoints are required later, add a separate child model instead of overloading existing fields.
 
+## Staging vs archival storage
+
+During pre-archive staging inside Django:
+
+- file path layout is intentionally simple and implementation-focused
+- `source_file` is transitory and can should removed after archival
+
+Archival path hierarchy and provider-specific layout belong to the Storage Layer implementation (see issue #43), including local-storage hierarchy rules.
+
+## Thumbnail policy
+
+Thumbnails are persistent UI previews and follow these defaults:
+
+- JPEG output
+- max dimensions: 300x300
+- target size: about 20KB
+- hard size limit: 100KB
+- default quality: 75 (tunable)
+
+This is tuned for large-scale browse workloads. For planning, 500k thumbnails at ~20KB is roughly 10GB total.
+
 ## Device semantics
 
 `Record.device` captures acquisition/scanning device information for the specific artifact instance (physical generation device or digitization device).

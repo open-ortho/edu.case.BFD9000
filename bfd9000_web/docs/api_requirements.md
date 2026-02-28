@@ -205,6 +205,7 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 **Purpose**: Valuesets provide enumerated options for dropdown fields and validation. Valuesets are dynamic and can be queried by type.
 
 **Response Format**: All valueset queries return an array of objects with:
+
 - `id` (string): The identifier/code to submit in API requests
 - `display` (string): Localized, human-readable text to show in the UI
 
@@ -213,6 +214,7 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 **User Action**: Frontend needs enumeration values for dropdown fields
 
 **API Requirement**:
+
 - **Endpoint**: `GET /api/valuesets/?type={valueset_type}`
 - **Query Parameters**:
   - `type` (string, required): The type of valueset to retrieve
@@ -227,6 +229,7 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 - **`modalities`**: Available modality codes (DICOM codes) with display names
 
 **Example Response Format**:
+
 ```json
 [
   {"id": "lateral", "display": "Lateral"},
@@ -236,6 +239,7 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 ```
 
 **For Modalities**:
+
 ```json
 [
   {"id": "RG", "display": "Radiography"},
@@ -244,13 +248,15 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 ]
 ```
 
-**Note**: 
+**Note**:
+
 - The `id` field contains the code/identifier stored in the database and submitted in API requests
 - The `display` field contains localized, human-readable text for UI display
 - Actual values returned are managed in the database and can be added/modified without changing this API specification
 - Frontend displays `display` in dropdowns but submits `id` back to the API
 
 **Error Responses**:
+
 - `400 Bad Request` - Missing or invalid `type` parameter
 - `404 Not Found` - Unknown valueset type
 
@@ -401,7 +407,7 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 **API Requirement**:
 
 - **Endpoint**: `GET /api/records/{id}/thumbnail/`
-- **Response**: JPEG thumbnail image (max 300x300px)
+- **Response**: JPEG thumbnail image (max 300x300px, target ~20KB, hard limit 100KB)
 - **Authentication**: Required
 - **Caching**: Support `ETag` and `Last-Modified` headers
 - **Note**: For STL files, thumbnail should be a rendered preview image

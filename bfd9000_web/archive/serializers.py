@@ -10,7 +10,6 @@ import os
 import importlib
 import json
 from typing import Any, Dict, Optional, cast
-from io import BytesIO
 from django.core.files.base import ContentFile
 from PIL import Image
 try:
@@ -38,6 +37,7 @@ from .constants import (
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
     SYSTEM_IDENTIFIER_IMAGE_TYPE,
 )
+from .media_utils import render_thumbnail_jpeg_bytes
 
 
 RECORD_TYPE_CODES = (
@@ -582,15 +582,11 @@ class RecordUploadSerializer(serializers.ModelSerializer):
                 file_stream = record.source_file.open('rb')
                 try:
                     with Image.open(file_stream) as img:
-                        # Convert tiff/large images to RGB preview
-                        if img.mode not in ('RGB', 'RGBA'):
-                            img = img.convert('RGB')
-                        img.thumbnail((300, 300))
-                        thumb_io = BytesIO()
-                        img.save(thumb_io, format='JPEG', quality=85)
-                        thumb_content = ContentFile(thumb_io.getvalue())
-                        thumb_name = f"{record.id}.jpg"
-                        record.thumbnail.save(thumb_name, thumb_content, save=False)
+                        thumb_bytes = render_thumbnail_jpeg_bytes(img)
+                        if thumb_bytes:
+                            thumb_content = ContentFile(thumb_bytes)
+                            thumb_name = f"{record.id}.jpg"
+                            record.thumbnail.save(thumb_name, thumb_content, save=False)
                 finally:
                     file_stream.close()
             except Exception:

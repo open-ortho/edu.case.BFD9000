@@ -38,6 +38,7 @@ from .constants import (
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
     SYSTEM_IDENTIFIER_LANCASTER_SUBJECT,
 )
+from .media_utils import render_thumbnail_jpeg_bytes
 
 MAX_TIFF_PREVIEW_BYTES = 100 * 1024 * 1024
 MAX_TIFF_PREVIEW_PIXELS = 100_000_000
@@ -359,6 +360,13 @@ class RecordViewSet(viewsets.ModelViewSet):
         del request, pk, kwargs
         record = self.get_object()
 
+        # Serve persisted thumbnail if available
+        if getattr(record, 'thumbnail', None):
+            try:
+                return FileResponse(record.thumbnail.open('rb'), content_type='image/jpeg')
+            except Exception:
+                pass
+
         if not getattr(record, 'source_file', None):
             return Response({"error": "No image file available"}, status=404)
 
@@ -404,13 +412,10 @@ class RecordViewSet(viewsets.ModelViewSet):
                 if processed_img.mode not in ('RGB', 'RGBA', 'LA', 'L'):
                     processed_img = processed_img.convert('RGB')
 
-                processed_img.thumbnail((300, 300))
-
-                buf = io.BytesIO()
-                processed_img.save(buf, format='JPEG')
-                buf.seek(0)
-
-                return HttpResponse(buf, content_type='image/jpeg')
+                payload = render_thumbnail_jpeg_bytes(processed_img)
+                if not payload:
+                    return Response({"error": "Unable to generate thumbnail under configured size limits"}, status=500)
+                return HttpResponse(payload, content_type='image/jpeg')
         except Exception as e:  # pylint: disable=broad-exception-caught
             return Response({"error": f"Error generating thumbnail: {e}"}, status=500)
 
