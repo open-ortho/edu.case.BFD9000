@@ -145,3 +145,4 @@ tailwindcss.exe
 
 .direnv/
 tmp/
+.DS_Store
