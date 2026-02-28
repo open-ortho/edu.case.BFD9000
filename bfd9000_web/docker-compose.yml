@@ -1,7 +1,13 @@
+name: bfd9000
 services:
-  backend:
-    build: .
-    container_name: bfd9000-backend
+  bfd9000:
+    image: ghcr.io/open-ortho/edu.case.bfd9000:local
+    container_name: bfd9000
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
     # command: python manage.py runserver 0.0.0.0:8000
     env_file:
       - .env
@@ -10,8 +16,6 @@ services:
       - media_volume:/app/media
       # Mount local SQLite database for persistence
       - ./db.sqlite3:/app/db.sqlite3
-    ports:
-      - "8000:8000"
     # environment:
     #   - DEBUG=1
     #   - SECRET_KEY=dev_secret_key

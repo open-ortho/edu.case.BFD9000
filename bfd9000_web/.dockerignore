@@ -24,3 +24,9 @@ coverage.xml
 db.sqlite3
 db.sqlite3-journal
 *.sqlite3
+
+# Tailwind CSS source file - only output.css is needed at runtime.
+# input.css references the Tailwind CLI binary which is not present in the
+# container, causing WhiteNoise's CompressedManifestStaticFilesStorage to
+# fail during collectstatic.
+archive/static/css/input.css
