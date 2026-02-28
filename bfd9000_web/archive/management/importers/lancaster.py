@@ -12,7 +12,6 @@ from typing import Iterable, Optional, Tuple
 from django.core.management.base import CommandError
 from django.db import transaction
 
-from archive.constants import SYSTEM_PROCEDURE
 from archive.management.importers.base import BaseImporter, ImportStats
 from archive.models import Coding, Encounter, Subject
 
@@ -316,14 +315,6 @@ class LancasterImporter(BaseImporter):
         next_month = date(year, month, 1).replace(day=28) + timedelta(days=4)
         last_day = next_month - timedelta(days=next_month.day)
         return last_day.day
-
-    def _get_or_create_procedure(self) -> Coding:
-        procedure, _ = Coding.objects.get_or_create(
-            system=SYSTEM_PROCEDURE,
-            code="historical-import-encounter",
-            defaults={"display": "Historical imported encounter"},
-        )
-        return procedure
 
     def _get_subject_by_identifier(self, value: str) -> Optional[Subject]:
         return (

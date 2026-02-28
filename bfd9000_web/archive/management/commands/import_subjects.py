@@ -34,6 +34,16 @@ class Command(BaseCommand):
             action="store_true",
             help="Populate first/last names when available",
         )
+        bolton.add_argument(
+            "--timepoints-file",
+            default=None,
+            help="Path to BoltonTimepoints2.csv (defaults to bundled docs/collections_data)",
+        )
+        bolton.add_argument(
+            "--no-timepoints",
+            action="store_true",
+            help="Do not import timepoints (skip creating Encounters)",
+        )
 
         lancaster = subparsers.add_parser("lancaster", help="Import Lancaster subjects")
         lancaster.add_argument(
@@ -86,6 +96,8 @@ class Command(BaseCommand):
                 include_names=options["include_names"],
                 stdout=self.stdout,
                 stderr=self.stderr,
+                timepoints_file=options.get("timepoints_file"),
+                skip_timepoints=options.get("no_timepoints", False),
             )
             importer.run(Path(options["file"]).expanduser().resolve())
             return
