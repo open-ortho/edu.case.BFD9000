@@ -191,14 +191,14 @@ class ImagingStudyAdmin(TimestampedAdmin):
     list_display = (
         "encounter",
         "collection",
-        "instance_uid",
+        "study_instance_uid",
         "created_at",
     )
     list_filter = ("collection", "created_at")
     search_fields = (
         "encounter__subject__humanname_family",
         "encounter__subject__humanname_given",
-        "instance_uid",
+        "study_instance_uid",
     )
     autocomplete_fields = ("encounter",)
     filter_horizontal = ("identifiers",)
@@ -206,7 +206,7 @@ class ImagingStudyAdmin(TimestampedAdmin):
         (None, {"fields": ("encounter", "collection")}),
         (
             "Study Details",
-            {"fields": ("instance_uid", "description", "endpoint")},
+            {"fields": ("study_instance_uid", "description", "endpoint")},
         ),
         ("Identifiers", {"fields": ("identifiers",)}),
     )
@@ -219,19 +219,19 @@ class SeriesAdmin(TimestampedAdmin):
         "imaging_study",
         "record_type",
         "modality",
-        "uid",
+        "series_instance_uid",
         "created_at",
     )
     list_filter = ("record_type", "modality", "created_at")
     search_fields = (
-        "uid",
+        "series_instance_uid",
         "description",
         "imaging_study__encounter__subject__humanname_family",
         "imaging_study__encounter__subject__humanname_given",
     )
     autocomplete_fields = ("imaging_study", "record_type", "modality", "acquisition_location")
     fieldsets = (
-        (None, {"fields": ("imaging_study", "uid")}),
+        (None, {"fields": ("imaging_study", "series_instance_uid")}),
         ("Classification", {"fields": ("record_type", "modality", "description")}),
         ("Acquisition", {"fields": ("acquisition_location",)}),
     )

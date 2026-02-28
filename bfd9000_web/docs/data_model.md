@@ -24,7 +24,7 @@ Imaging data is organized as:
 Example:
 
 - One encounter can contain cephalometric films and scanned study models.
-- All records can share the same study (`ImagingStudy.instance_uid`).
+- All records can share the same study (`ImagingStudy.study_instance_uid`).
 - Cephalometric images and model scans belong to different `Series` because modality/acquisition context differs.
 
 ## Field ownership and non-duplication rules
@@ -37,7 +37,7 @@ Owns study-level context only:
 
 - `encounter` (one-to-one)
 - `collection`
-- study identifiers (`instance_uid`, external identifiers)
+- study identifiers (`study_instance_uid`, external identifiers)
 - study-level endpoint/description
 
 Must not own instance-level fields such as file uploads, scan operator, scan datetime, modality, or record type.
@@ -49,7 +49,7 @@ Owns grouping/classification fields:
 - `record_type` (SNOMED clinical study type)
 - `modality` (DICOM modality)
 - `acquisition_location`
-- optional `uid` and description
+- optional `series_instance_uid` and description
 
 ### Record
 

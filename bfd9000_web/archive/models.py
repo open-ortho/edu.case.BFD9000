@@ -6,9 +6,17 @@ core entities like Subject, Encounter, ImagingStudy, and Record, as well as
 supporting entities like Coding, Identifier, and Collection.
 """
 from django.db import models
+from .media_utils import generate_dicom_uid
 from django.db.models import QuerySet
 from django.conf import settings
 from django.core.exceptions import ValidationError
+
+from .constants import (
+    STUDYINSTANCEUID_ROOT,
+    SERIESINSTANCEUID_ROOT,
+    SOPINSTANCEUID_ROOT,
+)
+
 
 
 class TimestampedModel(models.Model):
@@ -431,8 +439,9 @@ class ImagingStudy(TimestampedModel):
     )
     identifiers = models.ManyToManyField(
         Identifier, blank=True, related_name='imaging_studies', help_text="External identifiers for this imaging study")
-    instance_uid = models.CharField(
-        max_length=64, blank=True, help_text='DICOM Study Instance UID'
+    # Intentionally aligned to the official DICOM keyword StudyInstanceUID.
+    study_instance_uid = models.CharField(
+        max_length=64, blank=True, help_text='DICOM StudyInstanceUID'
     )
     endpoint = models.URLField(
         max_length=500, blank=True, help_text='URL providing access to study-level data (DICOMweb, PACS, etc.)'
@@ -447,13 +456,19 @@ class ImagingStudy(TimestampedModel):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['encounter']),
-            models.Index(fields=['instance_uid']),
+            models.Index(fields=['study_instance_uid']),
         ]
 
     def __str__(self) -> str:
-        if self.instance_uid:
-            return f"ImagingStudy {self.instance_uid}"
+        if self.study_instance_uid:
+            return f"ImagingStudy {self.study_instance_uid}"
         return f"ImagingStudy for {self.encounter}"
+
+    def save(self, *args, **kwargs) -> None:
+        if not self.study_instance_uid:
+            # DICOM StudyInstanceUID (official DICOM keyword)
+            self.study_instance_uid = generate_dicom_uid(STUDYINSTANCEUID_ROOT)
+        super().save(*args, **kwargs)
 
 
 class Series(TimestampedModel):
@@ -468,8 +483,9 @@ class Series(TimestampedModel):
         related_name='series',
         help_text='The ImagingStudy this series belongs to'
     )
-    uid = models.CharField(max_length=64, blank=True,
-                           help_text='DICOM Series Instance UID')
+    # Intentionally aligned to the official DICOM keyword SeriesInstanceUID.
+    series_instance_uid = models.CharField(max_length=64, blank=True,
+                                           help_text='DICOM SeriesInstanceUID')
     record_type = models.ForeignKey(
         Coding,
         on_delete=models.PROTECT,
@@ -500,7 +516,13 @@ class Series(TimestampedModel):
         indexes = [models.Index(fields=['imaging_study'])]
 
     def __str__(self) -> str:
-        return f"Series {self.uid or self.pk} ({self.record_type})"
+        return f"Series {self.series_instance_uid or self.pk} ({self.record_type})"
+
+    def save(self, *args, **kwargs) -> None:
+        if not self.series_instance_uid:
+            # DICOM SeriesInstanceUID (official DICOM keyword)
+            self.series_instance_uid = generate_dicom_uid(SERIESINSTANCEUID_ROOT)
+        super().save(*args, **kwargs)
 
 
 class Record(TimestampedModel):
@@ -517,8 +539,9 @@ class Record(TimestampedModel):
         related_name='records',
         help_text='The Series this record instance belongs to'
     )
+    # Intentionally aligned to the official DICOM keyword SOPInstanceUID.
     sop_instance_uid = models.CharField(
-        max_length=64, blank=True, help_text='DICOM SOP Instance UID uniquely identifying this artifact instance'
+        max_length=64, blank=True, help_text='DICOM SOPInstanceUID uniquely identifying this artifact instance'
     )
     acquisition_datetime = models.DateTimeField(
         null=True, blank=True, help_text='Date and time this artifact was acquired or scanned'
@@ -593,3 +616,9 @@ class Record(TimestampedModel):
 
     def __str__(self) -> str:
         return f"Record {self.pk} ({self.series.record_type if self.series else 'NoSeries'})"
+
+    def save(self, *args, **kwargs) -> None:
+        if not self.sop_instance_uid:
+            # DICOM SOPInstanceUID (official DICOM keyword)
+            self.sop_instance_uid = generate_dicom_uid(SOPINSTANCEUID_ROOT)
+        super().save(*args, **kwargs)

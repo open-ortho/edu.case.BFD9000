@@ -1,11 +1,32 @@
 """Utilities for media processing and transformations."""
 
-from io import BytesIO
 import os
-from typing import Optional, Any, Dict
+import uuid
+from io import BytesIO
+from typing import Any, Optional
 
 from django.conf import settings
 from PIL import Image
+
+try:
+    from pydicom.uid import generate_uid as pydicom_generate_uid  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - fallback for environments missing pydicom
+    pydicom_generate_uid = None
+
+
+def generate_dicom_uid(root: str) -> str:
+    """
+    Generate a DICOM-compliant UID using pydicom, given a root string.
+    Ensures the root ends with a '.' as required by pydicom.
+    """
+    prefix: str = root if root.endswith('.') else f"{root}."
+    if pydicom_generate_uid is not None:
+        return str(pydicom_generate_uid(prefix=prefix))
+
+    # Fallback: keep UID numeric with dots and cap to 64 chars.
+    suffix = str(uuid.uuid4().int)
+    max_suffix_length = max(1, 64 - len(prefix))
+    return f"{prefix}{suffix[:max_suffix_length]}"
 
 
 def get_bits_per_sample(img: Image.Image) -> Optional[int]:
@@ -34,7 +55,7 @@ def resize_image_for_preview(img: Image.Image, max_dim: int = 1024) -> Image.Ima
     return img.resize(new_size, resample)
 
 
-def apply_transform_ops(img: Image.Image, ops: list[Dict[str, Any]]) -> Image.Image:
+def apply_transform_ops(img: Image.Image, ops: list[dict[str, Any]]) -> Image.Image:
     """Apply ordered rotate/flip operations (e.g., for Record preview)."""
     transformed = img.copy()
     for op in ops:
@@ -48,7 +69,6 @@ def apply_transform_ops(img: Image.Image, ops: list[Dict[str, Any]]) -> Image.Im
 
 def convert_tiff_to_png_bytes(upload) -> bytes:
     """Convert TIFF to PNG, preserving 16-bit grayscale if needed."""
-    from PIL import Image  # ensure correct import in this helper
     with Image.open(upload) as img:
         bits_per_sample = get_bits_per_sample(img)
         high_bit_gray = bits_per_sample in {12, 16} or img.mode in {"I;16", "I;16L", "I;16B"}
@@ -71,7 +91,7 @@ def convert_tiff_to_png_bytes(upload) -> bytes:
 
 
 def generate_thumbnail_jpeg_bytes(
-    fileobj, filename: str, transform_ops: Optional[list[Dict[str, Any]]] = None
+    fileobj, filename: str, transform_ops: Optional[list[dict[str, Any]]] = None
 ) -> Optional[bytes]:
     """
     Unified thumbnail generator with transform_ops and TIFF PNG workflow.
@@ -102,6 +122,7 @@ def generate_thumbnail_jpeg_bytes(
     except Exception:
         pass
     return None
+
 
 def _render_thumbnail_from_raster(img: Image.Image) -> Optional[bytes]:
     """
@@ -136,4 +157,3 @@ def _render_thumbnail_from_raster(img: Image.Image) -> Optional[bytes]:
         quality -= 5
 
     return best_fit
-

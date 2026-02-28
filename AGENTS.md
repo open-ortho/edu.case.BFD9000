@@ -1,8 +1,10 @@
 # BFD9000 instructions for developing
 
-Currently, the primary development focus is on the Django server in `bfd9000_web`. If dependencies are missing, this project does use a nix flake at its root, so try running `nix develop` to set up the development environment properly.
+Currently, the primary development focus is on the Django server in `bfd9000_web`.
 
-The github action uses the nix flake as well. Any time you add another dependency or python package, make sure to update the flake.nix file.
+Environment setup is now automatic via `direnv` and `.envrc`. Simply `cd` into the repo and run `direnv allow` (once): your local `.venv` will be created (if missing), activated, and Python requirements installed/updated from `bfd9000_web/requirements-dev.txt` as needed. The requirements files are the **only** source of truth for Python dependencies (do not add Python packages to `flake.nix`).
+
+The github action uses the nix flake as well. As a fallback, `nix develop` still works and uses the same `.venv` + requirements files workflow. For Python package dependencies, always update bfd9000_web/requirements.txt (and bfd9000_web/requirements-dev.txt if dev-only). The flake.nix file is only for development shell and must not be the source of truth for Python dependencies.
 
 ## Reference
 

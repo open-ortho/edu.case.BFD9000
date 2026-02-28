@@ -27,29 +27,54 @@
 
             buildInputs = [
               python
-              python.pkgs.django
-              python.pkgs.djangorestframework
-              python.pkgs.django-cors-headers
-              python.pkgs.django-filter
-              python.pkgs.drf-spectacular
-              python.pkgs.drf-nested-routers
-              python.pkgs.pillow
-              python.pkgs.openpyxl
-              python.pkgs.whitenoise
-              python.pkgs.pylint
-              python.pkgs.pytest
-              python.pkgs.pytest-django
-              python.pkgs."django-types"
               python.pkgs.pip
               pkgs.watchman
             ];
 
-            # Optional: environment variables for Django
-            # export DJANGO_SETTINGS_MODULE if needed
+            # Why this shellHook exists:
+            # - Python dependencies are defined in requirements files, not flake.nix.
+            # - direnv users get setup via .envrc, but plain `nix develop` users need the
+            #   same automatic bootstrap behavior.
+            #
+            # If you do not use direnv:
+            # 1) run `nix develop` from the repository root
+            # 2) the hook below creates/activates `.venv` and syncs dependencies
+            # 3) run Python/Django commands normally (`python ...`, `pytest ...`)
             shellHook = ''
-              echo "Django development environment activated."
-              echo "Python: $(python --version)"
+                            if [ ! -d .venv ]; then
+                              python -m venv .venv
+                            fi
+                            . .venv/bin/activate
+
+                            req_file="bfd9000_web/requirements-dev.txt"
+                            stamp_file=".venv/.bfd9000_requirements_stamp"
+                            req_hash="$(python - "$req_file" <<'PY'
+              import hashlib
+              import pathlib
+              import sys
+
+              path = pathlib.Path(sys.argv[1])
+              print(hashlib.sha256(path.read_bytes()).hexdigest())
+              PY
+                            )"
+
+                            stamp_hash=""
+                            if [ -f "$stamp_file" ]; then
+                              IFS= read -r stamp_hash < "$stamp_file"
+                            fi
+
+                            if [ "$req_hash" != "$stamp_hash" ]; then
+                              python -m pip install -r "$req_file"
+                              echo "$req_hash" > "$stamp_file"
+                              deps_status="[installed]"
+                            else
+                              deps_status="[up to date]"
+                            fi
+
+                            echo "[nix] .venv Python: $(python --version) deps: $deps_status"
+                            unset req_file stamp_file req_hash stamp_hash deps_status
             '';
+
           };
         }
       );
