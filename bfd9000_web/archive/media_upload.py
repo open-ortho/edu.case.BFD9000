@@ -74,7 +74,6 @@ def handle_media_file(file_path: Path) -> bool:
         logger.debug(f"Handling media file: {file_path}")
         # Attempt to upload the file
         if upload_file(file_path):
-            logger.info(f"Successfully uploaded: {file_path}")
             # Delete the file after successful upload TODO: delete it
             # file_path.unlink()
             # logger.debug(f"Deleted local file: {file_path}")
@@ -117,9 +116,10 @@ def upload_file(file_path: Path) -> bool:
         file_size = file_path.stat().st_size
 
         # Preflight check: verify the file will be accepted before uploading
+        upload_url = None
         for _ in range(3):
             try:
-                client.uploads.preflight_file_upload_check(
+                upload_url = client.uploads.preflight_file_upload_check(
                     name=file_name,
                     size=file_size,
                     parent=PreflightFileUploadCheckParent(id=current_folder_id),
@@ -127,7 +127,7 @@ def upload_file(file_path: Path) -> bool:
                 break
             except BoxAPIError as e:
                 if e.response_info.status_code == 409:
-                    logger.info(f"File already exists! deleting {file_name}...")
+                    logger.debug(f"File already exists! deleting {file_name}...")
                     client.files.delete_file_by_id(e.response_info.context_info['conflicts']['id'])  # pyright: ignore
                 else:
                     logger.error(f"Preflight check failed: {e}")
@@ -135,13 +135,10 @@ def upload_file(file_path: Path) -> bool:
 
         # Upload the file
         with open(file_path, 'rb') as file_stream:
-            if file_size > 20_000_000:
-                uploaded_file = client.chunked_uploads.upload_big_file(
-                    file=file_stream,
-                    file_name=file_name,
-                    file_size=file_size,
-                    parent_folder_id=current_folder_id,
-                )
+            if file_size > 50_000_000:
+                session_id = upload_url.upload_url.rsplit('?', 1)[1]  # pyright: ignore[reportOptionalMemberAccess]
+                raise NotImplementedError("TODO: implement chunked uploads for files > 50MB")
+                # https://developer.box.com/reference/put-files-upload-sessions-id
             else:
                 result = client.uploads.upload_file(
                     attributes=UploadFileAttributes(
@@ -152,7 +149,7 @@ def upload_file(file_path: Path) -> bool:
                 )
                 uploaded_file = result.entries[0]  # pyright: ignore[reportOptionalSubscript]
 
-            logger.info(f"Uploaded {file_path} to Box (ID: {uploaded_file.id})")
+            logger.debug(f"Uploaded {file_path} to Box (ID: {uploaded_file.id})")
             return True
 
     except BoxAPIError as e:
