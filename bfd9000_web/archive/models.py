@@ -502,6 +502,11 @@ class Record(TimestampedModel):
         blank=True,
         related_name='records_physical_location'
     )
+    physical_location_box = models.CharField(max_length=128, blank=True)
+    physical_location_shelf = models.CharField(max_length=128, blank=True)
+    physical_location_tray = models.CharField(max_length=128, blank=True)
+    physical_location_compartment = models.CharField(
+        max_length=128, blank=True)
     imaging_study = models.OneToOneField(
         ImagingStudy,
         on_delete=models.SET_NULL,
@@ -535,11 +540,6 @@ class Record(TimestampedModel):
         Identifier, blank=True, related_name='records')
 
     device = models.CharField(max_length=255, blank=True)
-    physical_location_box = models.CharField(max_length=128, blank=True)
-    physical_location_shelf = models.CharField(max_length=128, blank=True)
-    physical_location_tray = models.CharField(max_length=128, blank=True)
-    physical_location_compartment = models.CharField(
-        max_length=128, blank=True)
 
     class Meta:
         """Model metadata."""

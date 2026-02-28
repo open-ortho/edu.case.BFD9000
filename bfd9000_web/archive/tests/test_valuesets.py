@@ -3,7 +3,7 @@
 from django.contrib.auth.models import User
 from django.urls import reverse
 from rest_framework import status
-from archive.models import Collection, Coding
+from archive.models import Collection, Coding, ValueSet, ValueSetConcept
 from archive.constants import (
     SYSTEM_RECORD_TYPE,
     SYSTEM_ORIENTATION,
@@ -30,16 +30,65 @@ class ValuesetTests(CleanupAPITestCase):
             defaults={"full_name": "Test Collection 2"},
         )
 
+        self.record_types_valueset, _ = ValueSet.objects.get_or_create(
+            slug="record_types",
+            defaults={
+                "url": "https://orthodontics.case.edu/fhir/ValueSet/record-types",
+                "name": "RecordTypes",
+                "title": "Record types",
+            },
+        )
+        self.orientations_valueset, _ = ValueSet.objects.get_or_create(
+            slug="orientations",
+            defaults={
+                "url": "https://orthodontics.case.edu/fhir/ValueSet/orientations",
+                "name": "Orientations",
+                "title": "Orientations",
+            },
+        )
+        self.modalities_valueset, _ = ValueSet.objects.get_or_create(
+            slug="modalities",
+            defaults={
+                "url": "https://orthodontics.case.edu/fhir/ValueSet/modalities",
+                "name": "Modalities",
+                "title": "Modalities",
+            },
+        )
+        self.procedures_valueset, _ = ValueSet.objects.get_or_create(
+            slug="procedures",
+            defaults={
+                "url": "https://orthodontics.case.edu/fhir/ValueSet/procedures",
+                "name": "Procedures",
+                "title": "Procedures",
+            },
+        )
+        self.image_types_valueset, _ = ValueSet.objects.get_or_create(
+            slug="image_types",
+            defaults={
+                "url": "https://orthodontics.case.edu/fhir/ValueSet/image-types",
+                "name": "ImageTypes",
+                "title": "Image types",
+            },
+        )
+
         # Record types (using SNOMED codes from migration)
         self.rt_lateral, _ = Coding.objects.get_or_create(
             system=SYSTEM_RECORD_TYPE,
             code='201456002',
             defaults={'display': 'Cephalogram'},
         )
+        ValueSetConcept.objects.get_or_create(
+            valueset=self.record_types_valueset,
+            coding=self.rt_lateral,
+        )
         self.rt_pa, _ = Coding.objects.get_or_create(
             system=SYSTEM_RECORD_TYPE,
             code='268425006',
             defaults={'display': 'Pelvis X-ray'},
+        )
+        ValueSetConcept.objects.get_or_create(
+            valueset=self.record_types_valueset,
+            coding=self.rt_pa,
         )
 
         # Orientations (using SNOMED codes from migration)
@@ -48,22 +97,47 @@ class ValuesetTests(CleanupAPITestCase):
             code='399173006',
             defaults={'display': 'Left lateral projection'},
         )
+        ValueSetConcept.objects.get_or_create(
+            valueset=self.orientations_valueset,
+            coding=self.orient_left,
+        )
         self.orient_right, _ = Coding.objects.get_or_create(
             system=SYSTEM_ORIENTATION,
             code='399198007',
             defaults={'display': 'Right lateral projection'},
+        )
+        ValueSetConcept.objects.get_or_create(
+            valueset=self.orientations_valueset,
+            coding=self.orient_right,
         )
 
         # Modalities
         self.mod_rg, _ = Coding.objects.get_or_create(
             system=SYSTEM_MODALITY,
             code='RG',
-            defaults={'display': 'Radiography'},
+            defaults={'display': 'Radiographic imaging'},
+        )
+        ValueSetConcept.objects.get_or_create(
+            valueset=self.modalities_valueset,
+            coding=self.mod_rg,
         )
         self.mod_m3d, _ = Coding.objects.get_or_create(
             system=SYSTEM_MODALITY,
             code='M3D',
-            defaults={'display': '3D Model'},
+            defaults={'display': '3D Manufacturing Modeling System'},
+        )
+        ValueSetConcept.objects.get_or_create(
+            valueset=self.modalities_valueset,
+            coding=self.mod_m3d,
+        )
+        self.mod_docd, _ = Coding.objects.get_or_create(
+            system=SYSTEM_MODALITY,
+            code='DOCD',
+            defaults={'display': 'Document Digitizer Equipment'},
+        )
+        ValueSetConcept.objects.get_or_create(
+            valueset=self.modalities_valueset,
+            coding=self.mod_docd,
         )
 
         # Procedures
@@ -72,11 +146,19 @@ class ValuesetTests(CleanupAPITestCase):
             code='ortho-visit',
             defaults={'display': 'Orthodontic Visit'},
         )
+        ValueSetConcept.objects.get_or_create(
+            valueset=self.procedures_valueset,
+            coding=self.proc_visit,
+        )
 
         self.image_type_l, _ = Coding.objects.get_or_create(
             system=SYSTEM_IDENTIFIER_IMAGE_TYPE,
             code='L',
             defaults={'display': 'Lateral'},
+        )
+        ValueSetConcept.objects.get_or_create(
+            valueset=self.image_types_valueset,
+            coding=self.image_type_l,
         )
 
     def test_missing_type_parameter(self):
@@ -183,6 +265,8 @@ class ValuesetTests(CleanupAPITestCase):
         ids = [item['id'] for item in response.data]
         self.assertIn('RG', ids)
         self.assertIn('M3D', ids)
+        self.assertIn('DOCD', ids)
+        self.assertNotIn('SI', ids)
 
     def test_procedures(self):
         """Should return procedures with correct structure"""

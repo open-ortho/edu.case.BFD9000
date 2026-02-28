@@ -35,14 +35,13 @@ from .serializers import (
     RecordUploadSerializer
 )
 from .constants import (
-    SYSTEM_RECORD_TYPE,
-    SYSTEM_ORIENTATION,
-    SYSTEM_MODALITY,
-    SYSTEM_PROCEDURE,
-    SYSTEM_BODY_SITE,
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
     SYSTEM_IDENTIFIER_LANCASTER_SUBJECT,
 )
+
+MAX_TIFF_PREVIEW_BYTES = 100 * 1024 * 1024
+MAX_TIFF_PREVIEW_PIXELS = 100_000_000
+Image.MAX_IMAGE_PIXELS = MAX_TIFF_PREVIEW_PIXELS
 
 
 class ValuesetViewSet(viewsets.ViewSet):
@@ -80,82 +79,6 @@ class ValuesetViewSet(viewsets.ViewSet):
             colls = Collection.objects.all()
             data = [{'id': c.short_name, 'display': c.full_name}
                     for c in colls]
-
-        elif valueset_type == 'record_types':
-            # Record type codes from SNOMED
-            record_type_codes = [
-                '201456002',
-                '268425006',
-                '39714003',
-                '1597004',
-                '302189007',
-            ]
-            codings = Coding.objects.filter(system=SYSTEM_RECORD_TYPE, code__in=record_type_codes)
-            data = [{'id': c.code, 'display': c.display} for c in codings]
-
-        elif valueset_type == 'orientations':
-            # Orientation codes from SNOMED
-            orientation_codes = [
-                '399198007',
-                '399173006',
-                '272479007',
-                '399348003',
-                '7771000',
-                '24028007',
-            ]
-            codings = Coding.objects.filter(system=SYSTEM_ORIENTATION, code__in=orientation_codes)
-            data = [{'id': c.code, 'display': c.display} for c in codings]
-
-        elif valueset_type == 'modalities':
-            # Modality codes from DICOM
-            codings = Coding.objects.filter(system=SYSTEM_MODALITY)
-            data = [{'id': c.code, 'display': c.display} for c in codings]
-
-        elif valueset_type == 'body_sites':
-            # Body site codes from SNOMED
-            body_site_codes = [
-                '69536005',
-                '609617007',
-                '731298009',
-                '729875002',
-                '1927002',
-                '71889004',
-                '210659002',
-                '210562007',
-            ]
-            codings = Coding.objects.filter(system=SYSTEM_BODY_SITE, code__in=body_site_codes)
-            data = [{'id': c.code, 'display': c.display} for c in codings]
-
-        elif valueset_type == 'procedures':
-            # Procedure codes from SNOMED (currently empty but filtered separately)
-            body_site_codes = [
-                '69536005',
-                '609617007',
-                '731298009',
-                '729875002',
-                '1927002',
-                '71889004',
-                '210659002',
-                '210562007',
-            ]
-            record_type_codes = [
-                '201456002',
-                '268425006',
-                '39714003',
-                '1597004',
-                '302189007',
-            ]
-            orientation_codes = [
-                '399198007',
-                '399173006',
-                '272479007',
-                '399348003',
-                '7771000',
-                '24028007',
-            ]
-            exclude_codes = body_site_codes + record_type_codes + orientation_codes
-            codings = Coding.objects.filter(system=SYSTEM_PROCEDURE).exclude(code__in=exclude_codes)
-            data = [{'id': c.code, 'display': c.display} for c in codings]
 
         else:
             valueset = ValueSet.objects.filter(slug=valueset_type).first()
@@ -550,6 +473,7 @@ def scan(request):
             "operator_display": operator_display,
             "scanner_api_base": settings.SCANNER_API_BASE,
             "scanner_device_id": settings.SCANNER_DEVICE_ID,
+            "ai_base_url": settings.BFD9020_BASE_URL,
         },
     )
 
@@ -627,6 +551,9 @@ def scan_tiff_preview(request):
     upload = request.FILES.get("file")
     if not upload:
         return JsonResponse({"error": "Missing file"}, status=400)
+
+    if upload.size > MAX_TIFF_PREVIEW_BYTES:
+        return JsonResponse({"error": "File too large"}, status=400)
 
     ext = os.path.splitext(upload.name)[1].lower()
     if ext not in {".tif", ".tiff"}:
