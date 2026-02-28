@@ -111,6 +111,9 @@ Thumbnails are persistent UI previews and follow these defaults:
 - hard size limit: 100KB
 - default quality: 75 (tunable)
 
+- Thumbnails are generated at upload only for raster image files (PNG, TIFF, JPEG). For 3D file types (STL, PLY, OBJ), no thumbnail is generated.
+- If no thumbnail exists for a record, the API and UI automatically return a static fallback JPEG image (never an error/404 for missing thumbnails).
+
 This is tuned for large-scale browse workloads. For planning, 500k thumbnails at ~20KB is roughly 10GB total.
 
 ## Device semantics

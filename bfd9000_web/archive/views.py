@@ -38,7 +38,7 @@ from .constants import (
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
     SYSTEM_IDENTIFIER_LANCASTER_SUBJECT,
 )
-from .media_utils import render_thumbnail_jpeg_bytes
+from .media_utils import generate_thumbnail_jpeg_bytes
 
 MAX_TIFF_PREVIEW_BYTES = 100 * 1024 * 1024
 MAX_TIFF_PREVIEW_PIXELS = 100_000_000
@@ -355,8 +355,10 @@ class RecordViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=['get'])
     def thumbnail(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Any:
-        """Generate and serve a thumbnail for the record's image."""
-        # DRF action signature requires request/pk/kwargs.
+        """Generate and serve a thumbnail for the record's image.
+        Returns static fallback if missing or on error.
+        """
+        from django.contrib.staticfiles import finders
         del request, pk, kwargs
         record = self.get_object()
 
@@ -367,57 +369,30 @@ class RecordViewSet(viewsets.ModelViewSet):
             except Exception:
                 pass
 
-        if not getattr(record, 'source_file', None):
-            return Response({"error": "No image file available"}, status=404)
+        # Try dynamic generation only for known image types, else fallback
+        if getattr(record, 'source_file', None):
+            try:
+                file_stream = record.source_file.open('rb')
+                try:
+                    thumb_bytes = generate_thumbnail_jpeg_bytes(file_stream, record.source_file.name)
+                    if thumb_bytes:
+                        return HttpResponse(thumb_bytes, content_type='image/jpeg')
+                finally:
+                    file_stream.close()
+            except Exception:
+                pass
 
-        source_file = record.source_file
-        # Check if file exists
-        if not os.path.exists(source_file.path):
-            return Response({"error": "File not found on server"}, status=404)
-
-        ext = os.path.splitext(source_file.name)[1].lower()
-
-        if ext == '.stl':
-            # Return placeholder for STL
-            img = Image.new('RGB', (100, 100), color=(73, 109, 137))
-            buf = io.BytesIO()
-            img.save(buf, format='JPEG')
-            buf.seek(0)
-            return HttpResponse(buf, content_type='image/jpeg')
-
-        try:
-            if ext in {'.tif', '.tiff'}:
-                source_file.open('rb')
-                png_bytes = _convert_tiff_to_png_bytes(source_file)
-                source_file.close()
-                image_stream = io.BytesIO(png_bytes)
-            else:
-                image_stream = source_file
-
-            # Open image using a context manager
-            with Image.open(image_stream) as img:
-                # Use a separate variable for any processed version of the image
-                processed_img = img
-
-                if record.image_transform_ops:
-                    processed_img = _apply_transform_ops(processed_img, record.image_transform_ops)
-
-                # Convert to RGB if RGBA (PNG) or LA
-                if processed_img.mode in ('RGBA', 'LA'):
-                    background = Image.new(
-                        processed_img.mode[:-1], processed_img.size, (255, 255, 255))
-                    background.paste(processed_img, processed_img.split()[-1])
-                    processed_img = background
-
-                if processed_img.mode not in ('RGB', 'RGBA', 'LA', 'L'):
-                    processed_img = processed_img.convert('RGB')
-
-                payload = render_thumbnail_jpeg_bytes(processed_img)
-                if not payload:
-                    return Response({"error": "Unable to generate thumbnail under configured size limits"}, status=500)
-                return HttpResponse(payload, content_type='image/jpeg')
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            return Response({"error": f"Error generating thumbnail: {e}"}, status=500)
+        # Serve static fallback if no thumbnail available/generated
+        fallback_path = finders.find('archive/img/no-thumbnail.jpg')
+        if fallback_path:
+            with open(fallback_path, 'rb') as f:
+                return HttpResponse(f.read(), content_type='image/jpeg')
+        # As absolute fallback, render a plain JPEG
+        img = Image.new('RGB', (300, 300), color=(200, 200, 200))
+        buf = io.BytesIO()
+        img.save(buf, format='JPEG')
+        buf.seek(0)
+        return HttpResponse(buf, content_type='image/jpeg')
 
     @action(detail=True, methods=['get'])
     def dicom(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Any:

@@ -407,10 +407,10 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 **API Requirement**:
 
 - **Endpoint**: `GET /api/records/{id}/thumbnail/`
-- **Response**: JPEG thumbnail image (max 300x300px, target ~20KB, hard limit 100KB)
+- **Response**: JPEG thumbnail image (max 300x300px, target ~20KB, hard limit 100KB); returns static fallback if no thumbnail can be generated or for 3D files (STL, PLY, OBJ)
 - **Authentication**: Required
 - **Caching**: Support `ETag` and `Last-Modified` headers
-- **Note**: For STL files, thumbnail should be a rendered preview image
+- **Note**: Thumbnails are generated for raster images (PNG, TIFF, JPEG); for 3D file types or if thumbnail is missing, the API serves a static fallback image as `image/jpeg` with HTTP 200.
 
 #### 6.3 Get Record DICOM File
 

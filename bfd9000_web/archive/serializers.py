@@ -37,7 +37,7 @@ from .constants import (
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
     SYSTEM_IDENTIFIER_IMAGE_TYPE,
 )
-from .media_utils import render_thumbnail_jpeg_bytes
+from .media_utils import generate_thumbnail_jpeg_bytes
 
 
 RECORD_TYPE_CODES = (
@@ -577,16 +577,19 @@ class RecordUploadSerializer(serializers.ModelSerializer):
             filename = f"{record.id}{ext}"
             record.source_file.save(filename, file_obj, save=False)
 
-            # Generate thumbnail (JPEG) from source file when possible
+            # Generate thumbnail (JPEG) using unified utility (raster only)
             try:
                 file_stream = record.source_file.open('rb')
                 try:
-                    with Image.open(file_stream) as img:
-                        thumb_bytes = render_thumbnail_jpeg_bytes(img)
-                        if thumb_bytes:
-                            thumb_content = ContentFile(thumb_bytes)
-                            thumb_name = f"{record.id}.jpg"
-                            record.thumbnail.save(thumb_name, thumb_content, save=False)
+                    thumb_bytes = generate_thumbnail_jpeg_bytes(
+                        file_stream,
+                        record.source_file.name,
+                        transform_ops=transform_ops,
+                    )
+                    if thumb_bytes:
+                        thumb_content = ContentFile(thumb_bytes)
+                        thumb_name = f"{record.id}.jpg"
+                        record.thumbnail.save(thumb_name, thumb_content, save=False)
                 finally:
                     file_stream.close()
             except Exception:

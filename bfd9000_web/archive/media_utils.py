@@ -1,13 +1,46 @@
 """Utilities for media processing and transformations."""
 
 from io import BytesIO
+import os
 from typing import Optional
 
 from django.conf import settings
 from PIL import Image
 
 
-def render_thumbnail_jpeg_bytes(img: Image.Image) -> Optional[bytes]:
+def generate_thumbnail_jpeg_bytes(fileobj, filename: str, transform_ops: Optional[list[str]] = None) -> Optional[bytes]:
+    """
+    Unified thumbnail generator:
+    - For supported raster formats (png, tif/tiff, jpeg/jpg): returns JPEG thumbnail bytes
+    - For 3D/file types (stl, ply, obj): returns None
+    - For unknown types: returns None
+
+    Args:
+        fileobj: file-like object
+        filename: source filename or path used to detect extension
+        transform_ops: optional transform operations (reserved for future use)
+    Returns:
+        Bytes for JPEG thumbnail, or None (3D or unsupported)
+    """
+    del transform_ops
+
+    ext = os.path.splitext(filename)[1].lower().lstrip('.')
+    raster_types = {"png", "tif", "tiff", "jpeg", "jpg"}
+    non_raster_types = {"stl", "ply", "obj"}
+
+    if ext in non_raster_types:
+        return None
+    if ext not in raster_types:
+        return None
+    try:
+        fileobj.seek(0) # pyright: ignore[reportUnknownMemberType]
+        with Image.open(fileobj) as img:
+            return _render_thumbnail_from_raster(img)
+    except Exception:
+        pass
+    return None
+
+def _render_thumbnail_from_raster(img: Image.Image) -> Optional[bytes]:
     """Create JPEG thumbnail bytes with target and hard-limit controls."""
     max_width: int = int(getattr(settings, 'THUMBNAIL_MAX_WIDTH', 300))
     max_height: int = int(getattr(settings, 'THUMBNAIL_MAX_HEIGHT', 300))
@@ -37,3 +70,4 @@ def render_thumbnail_jpeg_bytes(img: Image.Image) -> Optional[bytes]:
         quality -= 5
 
     return best_fit
+
