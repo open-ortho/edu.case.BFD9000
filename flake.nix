@@ -39,8 +39,7 @@
               python.pkgs.pylint
               python.pkgs.pytest
               python.pkgs.pytest-django
-              python.pkgs.django-stubs
-              python.pkgs.djangorestframework-stubs
+              python.pkgs."django-types"
               python.pkgs.pip
               pkgs.watchman
             ];
