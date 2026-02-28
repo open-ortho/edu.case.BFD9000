@@ -45,26 +45,13 @@
             </tbody>
         </table>
     </div>
-    <div class="bg-base-300 p-2 flex">
+    <div class="bg-base-300 p-2 flex items-center gap-3">
         <a href="{% url 'archive:encounter_create' %}" class="btn btn-primary rounded-full">New Encounter</a>
         <div class="grow"></div>
-        <div class="join">
-            <button
-                class="join-item btn rounded-l-full"
-                id="prev-button"
-                disabled
-            >
-                «
-            </button>
-            <button class="join-item btn" id="page-button">Page 1 / 0</button>
-            <button
-                class="join-item btn rounded-r-full"
-                id="next-button"
-                disabled
-            >
-                »
-            </button>
-        </div>
+        <span class="text-sm text-base-content/60">
+            <span id="encounter-count-badge"></span>
+            <span class="ml-1">encounters</span>
+        </span>
     </div>
 </div>
 {% endblock %} {% block head %} {{ block.super }}
@@ -73,16 +60,10 @@
      * Fetch encounters from the API
      * @param {Object} params - Query parameters
      * @param {string} params.search - Search query for subject identifier
-     * @param {string} params.subject - Search query for subject identifier
+     * @param {string} params.subject - Filter by subject ID
      * @param {number} params.page - Page number (1-indexed)
      * @param {number} params.page_size - Number of items per page
      * @returns {Promise<Object>} Response with { count, next, previous, results }
-     *
-     * TO SWITCH TO REAL API:
-     * Replace the body of this function with:
-     * const queryParams = new URLSearchParams({ search, subject, page, page_size });
-     * const response = await fetch(`/api/encounters/?${queryParams}`);
-     * return await response.json();
      */
     async function fetchEncounters({
         search = "",
@@ -110,7 +91,7 @@
     }
 
     // ========================================
-    // TABLE SETUP USING PaginatedTableManager
+    // TABLE SETUP USING InfiniteScrollTableManager
     // ========================================
 
     function formatAge(encounter) {
@@ -143,9 +124,10 @@
         return ageText;
     }
 
-    const tableManager = new PaginatedTableManager({
+    const tableManager = new InfiniteScrollTableManager({
         tableBodyId: "encounter_table_body",
         columnCount: 5,
+        countBadgeId: "encounter-count-badge",
         fetchData: fetchEncounters,
         renderRows: (encounters) => {
             return encounters.map((encounter) => {
