@@ -22,9 +22,9 @@
         <!-- Left: Image -->
         <div class="card bg-base-200 shadow">
             <div class="card-body">
-                <h2 class="card-title text-lg">Image</h2>
+                <h2 class="card-title text-lg">Thumbnail</h2>
                 <div class="flex items-center justify-center bg-base-300 rounded">
-                    <img id="record-image" src="" alt="Record image" class="max-w-full max-h-[600px] object-contain rounded" />
+                    <img id="record-image" src="" alt="Record thumbnail" class="max-w-full max-h-[600px] object-contain rounded" />
                 </div>
             </div>
         </div>
@@ -140,8 +140,8 @@
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('content').classList.remove('hidden');
 
-        // Set image
-        document.getElementById('record-image').src = `/api/records/${recordId}/image/`;
+        // Use thumbnail endpoint for all GUI image display
+        document.getElementById('record-image').src = `/api/records/${recordId}/thumbnail/`;
 
         // Subject & Encounter
         document.getElementById('subject-id').textContent = record.subject_identifier || record.subject_id || '-';
