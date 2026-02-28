@@ -11,3 +11,5 @@ whitenoise>=6.6,<7.0
 openpyxl>=3.1,<4.0
 django-stubs>=4.2,<5.0
 djangorestframework-stubs>=3.14,<4.0
+python-dotenv>=1.2.1
+boxsdk>=10.4.0

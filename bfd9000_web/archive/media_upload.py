@@ -4,10 +4,28 @@ import logging
 import time
 from pathlib import Path
 
-from BFD9000.settings import BOX_ACCESS_TOKEN, BOX_FOLDER_ID
+from box_sdk_gen import BoxAPIError, BoxClient, BoxDeveloperTokenAuth, CreateFolderParent, Item
+from box_sdk_gen.managers.uploads import (
+    PreflightFileUploadCheckParent,
+    UploadFileAttributes,
+    UploadFileAttributesParentField,
+)
 from django.conf import settings
 
+from BFD9000.settings import (
+    BOX_ACCESS_TOKEN,
+    BOX_CLIENT_ID,
+    BOX_CLIENT_SECRET,
+    BOX_FOLDER_ID,
+)
+
 logger = logging.getLogger(__name__)
+
+
+def _get_box_client() -> BoxClient:
+    """Get an authenticated Box client."""
+    auth: BoxDeveloperTokenAuth = BoxDeveloperTokenAuth(token=BOX_ACCESS_TOKEN)  # pyright: ignore[reportArgumentType]
+    return BoxClient(auth=auth)
 
 
 def media_upload_worker():
@@ -53,18 +71,18 @@ def process_media_files() -> int:
 def handle_media_file(file_path: Path) -> bool:
     """Handle a single media file: upload, delete, and prune directory."""
     try:
+        logger.debug(f"Handling media file: {file_path}")
         # Attempt to upload the file
         if upload_file(file_path):
             logger.info(f"Successfully uploaded: {file_path}")
-            # Delete the file after successful upload
-            file_path.unlink()
-            logger.debug(f"Deleted local file: {file_path}")
+            # Delete the file after successful upload TODO: delete it
+            # file_path.unlink()
+            # logger.debug(f"Deleted local file: {file_path}")
 
             # Prune parent directory if empty
             prune_empty_directory(file_path.parent)
             return True
         else:
-            logger.debug(f"Upload failed (expected): {file_path}")
             return False
     except Exception as e:
         logger.error(f"Error handling file {file_path}: {e}", exc_info=True)
@@ -73,14 +91,112 @@ def handle_media_file(file_path: Path) -> bool:
 
 def upload_file(file_path: Path) -> bool:
     """
-    Upload a file to remote storage.
+    Upload a file to Box.com, creating folder structure as needed, and deleting the file if it already exists.
 
-    TODO: Implement actual upload logic
-    Currently returns False to prevent any deletions.
+    The folder structure in Box will mirror the structure relative to MEDIA_ROOT.
+    For example: /media/patient123/scan001/image.jpg -> BOX_FOLDER_ID/patient123/scan001/image.jpg
     """
-    # Placeholder - always fails for now
-    logger.debug(f"Upload attempted for {file_path} (not implemented)")
-    return False
+    try:
+        client = _get_box_client()
+        media_root = Path(settings.MEDIA_ROOT)
+
+        # Get the relative path from MEDIA_ROOT
+        relative_path = file_path.relative_to(media_root)
+        folder_parts = relative_path.parent.parts
+        file_name = file_path.name
+
+        # Navigate/create folder structure starting from root folder
+        current_folder_id = BOX_FOLDER_ID or "0"
+
+        for folder_name in folder_parts:
+            current_folder_id = _get_or_create_folder(client, current_folder_id, folder_name)
+            if not current_folder_id:
+                logger.error(f"Failed to create/navigate to folder: {folder_name}")
+                return False
+
+        file_size = file_path.stat().st_size
+
+        # Preflight check: verify the file will be accepted before uploading
+        for _ in range(3):
+            try:
+                client.uploads.preflight_file_upload_check(
+                    name=file_name,
+                    size=file_size,
+                    parent=PreflightFileUploadCheckParent(id=current_folder_id),
+                )
+                break
+            except BoxAPIError as e:
+                if e.response_info.status_code == 409:
+                    logger.info(f"File already exists! deleting {file_name}...")
+                    client.files.delete_file_by_id(e.response_info.context_info['conflicts']['id'])  # pyright: ignore
+                else:
+                    logger.error(f"Preflight check failed: {e}")
+                    return False
+
+        # Upload the file
+        with open(file_path, 'rb') as file_stream:
+            if file_size > 20_000_000:
+                uploaded_file = client.chunked_uploads.upload_big_file(
+                    file=file_stream,
+                    file_name=file_name,
+                    file_size=file_size,
+                    parent_folder_id=current_folder_id,
+                )
+            else:
+                result = client.uploads.upload_file(
+                    attributes=UploadFileAttributes(
+                        name=file_name,
+                        parent=UploadFileAttributesParentField(id=current_folder_id),
+                    ),
+                    file=file_stream,
+                )
+                uploaded_file = result.entries[0]  # pyright: ignore[reportOptionalSubscript]
+
+            logger.info(f"Uploaded {file_path} to Box (ID: {uploaded_file.id})")
+            return True
+
+    except BoxAPIError as e:
+        logger.error(f"Box API error uploading {file_path}: {e}", exc_info=True)
+        return False
+    except Exception as e:
+        logger.error(f"Error uploading {file_path}: {e}", exc_info=True)
+        return False
+
+
+def _get_item_by_name(client: BoxClient, folder_id: str, name: str) -> Item | None:
+    try:
+        items = client.folders.get_folder_items(folder_id)
+
+        while True:
+            for item in items.entries or []:
+                if item.name == name:
+                    logger.debug(f"Found item by name: {item.id} {name}")
+                    return item
+            if items.next_marker is None:
+                break
+            items = client.folders.get_folder_items(folder_id, marker=items.next_marker)
+    except BoxAPIError as e:
+        logger.error(f"Box API error getting item by name: {e}", exc_info=True)
+    except Exception as e:
+        logger.error(f"Error getting item by name: {e}", exc_info=True)
+    return None
+
+def _get_or_create_folder(client: BoxClient, parent_folder_id: str, folder_name: str) -> str | None:
+    try:
+        item = _get_item_by_name(client, parent_folder_id, folder_name)
+        if item is None:
+            # Folder doesn't exist, create it
+            subfolder = client.folders.create_folder(name=folder_name, parent=CreateFolderParent(id=parent_folder_id))
+            logger.debug(f"Created folder: {folder_name} (ID: {subfolder.id})")
+            return subfolder.id
+        elif item.type == 'folder':
+            return item.id
+    except BoxAPIError as e:
+        logger.error(f"Box API error creating folder {folder_name}: {e}", exc_info=True)
+        return None
+    except Exception as e:
+        logger.error(f"Error creating folder {folder_name}: {e}", exc_info=True)
+        return None
 
 
 def prune_empty_directory(directory: Path):

@@ -10,13 +10,17 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import logging
 import os
 from pathlib import Path
 
-import logging
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 # Quick-start development settings - unsuitable for production
@@ -26,6 +30,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get(
     'SECRET_KEY', 'django-insecure-+6m#s88j*)qb+a%2s%cw31e2k04um&*a-fk!jgcpl3849(w4sm')
+
+# Box.com Configuration
+BOX_CLIENT_ID = os.environ.get('BOX_CLIENT_ID')
+BOX_CLIENT_SECRET = os.environ.get('BOX_CLIENT_SECRET')
 BOX_ACCESS_TOKEN = os.environ.get('BOX_ACCESS_TOKEN')
 BOX_FOLDER_ID = os.environ.get('BOX_FOLDER_ID')
 
@@ -211,13 +219,13 @@ BFD9020_BASE_URL = os.environ.get('BFD9020_BASE_URL', 'https://wingate.case.edu/
 # Logging Configuration
 class PrettyFormatter(logging.Formatter):
     """A custom formatter to add color to stdout log records."""
-    
+
     GRAY = "\x1b[90m"
     YELLOW = "\x1b[33;21m"
     RED = "\x1b[31;21m"
     BOLD_RED = "\x1b[31;1m"
     RESET = "\x1b[0m"
-    
+
     # Define a different format for each level
     FORMATS = {
         logging.DEBUG: f"{GRAY}%(asctime)s {GRAY}DEBUG {GRAY}%(name)s: {RESET}%(message)s",
