@@ -87,6 +87,10 @@ docker run --rm -p 8000:8000 bfd9000-web:test
 Or use the provided compose file:
 
 ```bash
+# Copy the example env file and edit as needed
+cp bfd9000_web/dot-env.example bfd9000_web/.env
+
+docker compose -f bfd9000_web/docker-compose.yml up
 ```
 
 ## Import Historical Subjects
