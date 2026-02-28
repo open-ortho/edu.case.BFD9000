@@ -11,7 +11,6 @@ import importlib
 import json
 from typing import Any, Dict, Optional, cast
 from django.core.files.base import ContentFile
-from PIL import Image
 try:
     magic = importlib.import_module('magic')
 except ImportError:
@@ -374,6 +373,7 @@ class RecordUploadSerializer(serializers.ModelSerializer):
     ImagingStudy and Record objects within a transaction.
     """
     file = serializers.FileField(write_only=True)
+    thumbnail_preview = serializers.FileField(required=False, write_only=True)
 
     # Use SlugRelatedField for idiomatic lookup by 'code'
     record_type = serializers.SlugRelatedField(
@@ -417,6 +417,7 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'file',
+            'thumbnail_preview',
             'record_type',
             'modality',
             'acquisition_date',
@@ -513,6 +514,7 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         Wraps creation in a transaction to ensure data integrity.
         """
         file_obj = validated_data.pop('file')
+        thumbnail_preview = validated_data.pop('thumbnail_preview', None)
 
         # These are now Coding objects, not strings!
         rt_coding = validated_data.pop('record_type')
@@ -579,19 +581,28 @@ class RecordUploadSerializer(serializers.ModelSerializer):
 
             # Generate thumbnail (JPEG) using unified utility (raster only)
             try:
-                file_stream = record.source_file.open('rb')
-                try:
+                thumb_bytes = None
+                if thumbnail_preview is not None:
                     thumb_bytes = generate_thumbnail_jpeg_bytes(
-                        file_stream,
-                        record.source_file.name,
-                        transform_ops=transform_ops,
+                        thumbnail_preview,
+                        thumbnail_preview.name,
+                        transform_ops=None,
                     )
-                    if thumb_bytes:
-                        thumb_content = ContentFile(thumb_bytes)
-                        thumb_name = f"{record.id}.jpg"
-                        record.thumbnail.save(thumb_name, thumb_content, save=False)
-                finally:
-                    file_stream.close()
+                else:
+                    file_stream = record.source_file.open('rb')
+                    try:
+                        thumb_bytes = generate_thumbnail_jpeg_bytes(
+                            file_stream,
+                            record.source_file.name,
+                            transform_ops=transform_ops,
+                        )
+                    finally:
+                        file_stream.close()
+
+                if thumb_bytes:
+                    thumb_content = ContentFile(thumb_bytes)
+                    thumb_name = f"{record.id}.jpg"
+                    record.thumbnail.save(thumb_name, thumb_content, save=False)
             except Exception:
                 # On failure, skip thumbnail generation
                 pass

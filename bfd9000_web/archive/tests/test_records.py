@@ -436,6 +436,32 @@ class RecordTests(CleanupAPITestCase):
         record = Record.objects.get(pk=record_id)
         self.assertFalse(bool(record.thumbnail))
 
+    def test_create_record_uses_thumbnail_preview_when_provided(self):
+        """3D source can still store thumbnail when thumbnail_preview is provided."""
+        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        stl_file = SimpleUploadedFile(
+            "model.stl",
+            b"solid ascii\nendsolid",
+            content_type="application/octet-stream",
+        )
+        preview_png = SimpleUploadedFile(
+            "preview.png",
+            self.image_content,
+            content_type="image/png",
+        )
+        data = {
+            "file": stl_file,
+            "thumbnail_preview": preview_png,
+            "record_type": self.rt_lateral.code,
+            "orientation": "left",
+            "modality": "RG",
+        }
+        create_response = self.client.post(url, data, format='multipart')
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        record = Record.objects.get(pk=create_response.data['id'])
+        self.assertTrue(bool(record.thumbnail))
+
     def test_filter_records_by_record_type(self):
         """Should filter records by record type"""
         url = reverse('archive:encounter-records-list',

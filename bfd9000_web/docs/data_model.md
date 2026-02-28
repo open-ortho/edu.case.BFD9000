@@ -112,6 +112,7 @@ Thumbnails are persistent UI previews and follow these defaults:
 - default quality: 75 (tunable)
 
 - Thumbnails are generated at upload only for raster image files (PNG, TIFF, JPEG). For 3D file types (STL, PLY, OBJ), no thumbnail is generated.
+- Upload clients may provide an optional preprocessed preview image (`thumbnail_preview`) to be compressed and stored as the thumbnail source of truth.
 - Thumbnail endpoint serves persisted thumbnail only; it does not generate previews at view time.
 - If no thumbnail exists for a record, the API and UI return a static fallback JPEG image.
 

@@ -1086,6 +1086,9 @@
         try {
             const formData = new FormData();
             formData.append('file', state.file);
+            if (state.previewFile) {
+                formData.append('thumbnail_preview', state.previewFile, 'thumbnail_preview.png');
+            }
             formData.append('record_type', document.getElementById('record-type').value);
             formData.append('modality', document.getElementById('modality').value);
 

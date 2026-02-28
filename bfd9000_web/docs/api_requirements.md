@@ -318,6 +318,7 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 - **Request Body** (form fields):
 
   - `file` (file upload, required): PNG or STL file from scanner
+  - `thumbnail_preview` (file upload, optional): preprocessed preview PNG from UI pipeline; used as thumbnail source when provided
   - `record_type` (string, required): value from `/api/valuesets/?type=record_types`
   - `orientation` (string, required): value from `/api/valuesets/?type=orientations`
   - `modality` (string, required): value from `/api/valuesets/?type=modalities`

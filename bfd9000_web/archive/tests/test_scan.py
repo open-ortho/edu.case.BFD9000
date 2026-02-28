@@ -46,7 +46,7 @@ class ScanTiffPreviewTests(TestCase):
         payload = self._build_16bit_tiff([0, 4095], (2, 1))
         upload = SimpleUploadedFile('scan.tif', payload, content_type='image/tiff')
 
-        with patch('archive.views._get_bits_per_sample', return_value=12):
+        with patch('archive.media_utils.get_bits_per_sample', return_value=12):
             response = self.client.post(reverse('archive:scan_tiff_preview'), {'file': upload})
 
         self.assertEqual(response.status_code, 200)

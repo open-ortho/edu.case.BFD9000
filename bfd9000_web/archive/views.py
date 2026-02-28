@@ -5,7 +5,6 @@ This module defines the ViewSets for the API, handling CRUD operations
 for subjects, encounters, records, and related medical entities.
 It also includes custom actions for file serving and valueset retrieval.
 """
-import io
 import os
 from typing import Any, Dict, List, Optional, Type
 
@@ -38,7 +37,7 @@ from .constants import (
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
     SYSTEM_IDENTIFIER_LANCASTER_SUBJECT,
 )
-from .media_utils import generate_thumbnail_jpeg_bytes
+from .media_utils import convert_tiff_to_png_bytes
 
 MAX_TIFF_PREVIEW_BYTES = 100 * 1024 * 1024
 MAX_TIFF_PREVIEW_PIXELS = 100_000_000
@@ -425,72 +424,6 @@ def scan(request):
     )
 
 
-def _get_bits_per_sample(img: Image.Image) -> Optional[int]:
-    """Best-effort extraction of TIFF bits-per-sample."""
-    tag_v2 = getattr(img, "tag_v2", None)
-    if tag_v2 is None:
-        return None
-
-    bits = tag_v2.get(258)
-    if bits is None:
-        return None
-    if isinstance(bits, tuple):
-        return int(max(bits))
-    return int(bits)
-
-
-def _resize_image_for_preview(img: Image.Image, max_dim: int = 1024) -> Image.Image:
-    """Resize while preserving aspect ratio for display/AI preview."""
-    width, height = img.size
-    largest = max(width, height)
-    if largest <= max_dim:
-        return img
-
-    scale = max_dim / float(largest)
-    new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
-    resample = Image.Resampling.NEAREST if img.mode.startswith("I;16") else Image.Resampling.LANCZOS
-    return img.resize(new_size, resample)
-
-
-def _apply_transform_ops(img: Image.Image, ops: List[Dict[str, Any]]) -> Image.Image:
-    """Apply ordered rotate/flip operations stored on Record."""
-    transformed = img.copy()
-    for op in ops:
-        degrees = int(op.get('rotation', 0)) % 360
-        if degrees:
-            transformed = transformed.rotate(-degrees, expand=True)
-        if bool(op.get('flip', False)):
-            transformed = transformed.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-    return transformed
-
-
-def _convert_tiff_to_png_bytes(upload) -> bytes:
-    """Convert TIFF to PNG, preserving 16-bit grayscale when needed."""
-    with Image.open(upload) as img:
-        bits_per_sample = _get_bits_per_sample(img)
-        high_bit_gray = bits_per_sample in {12, 16} or img.mode in {"I;16", "I;16L", "I;16B"}
-
-        if high_bit_gray:
-            gray = img
-            if gray.mode == "I;16B":
-                gray = gray.convert("I")
-            elif gray.mode not in {"I;16", "I;16L", "I"}:
-                gray = gray.convert("I")
-
-            if bits_per_sample == 12:
-                if gray.mode != "I":
-                    gray = gray.convert("I")
-
-            png_image = gray.convert("I;16")
-            png_image = _resize_image_for_preview(png_image)
-        else:
-            png_image = _resize_image_for_preview(img.convert("RGB"))
-
-        buf = io.BytesIO()
-        png_image.save(buf, format="PNG", optimize=True)
-        return buf.getvalue()
-
-
 @login_required
 @require_POST
 def scan_tiff_preview(request):
@@ -507,7 +440,7 @@ def scan_tiff_preview(request):
         return JsonResponse({"error": "Only TIFF files are supported"}, status=400)
 
     try:
-        png_bytes = _convert_tiff_to_png_bytes(upload)
+        png_bytes = convert_tiff_to_png_bytes(upload)
         return HttpResponse(png_bytes, content_type="image/png")
     except Exception as exc:  # pylint: disable=broad-exception-caught
         return JsonResponse({"error": f"Failed to convert TIFF: {exc}"}, status=400)
