@@ -18,6 +18,14 @@ The github action uses the nix flake as well. Any time you add another dependenc
   - `record_type` (SNOMED clinical study type) is **not** the same as `image_type` (legacy identifier code like `L`, `SM`)
   - never substitute one for the other in API, filtering, or UI logic
 
+## Typing
+
+- All code should be explicitly typed.
+- Prefer direct variable type annotations (for example `typed_instance: Record = instance`) over `cast()` whenever possible.
+- Use `cast()` only when direct annotations and normal control-flow typing cannot express the type clearly.
+- Avoid "type-like" protocol/shim objects or other typing-only abstractions that add complexity without improving readability.
+- The goal of typing is clearer code and fewer errors, not extra boilerplate.
+
 Whenever a large change is made, documenting it in `./bfd9000_web/docs` is good practice.
 
 - Include the collection in the subjects view
