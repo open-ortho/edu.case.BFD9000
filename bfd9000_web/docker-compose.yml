@@ -1,0 +1,21 @@
+services:
+  backend:
+    build: .
+    container_name: bfd9000-backend
+    # command: python manage.py runserver 0.0.0.0:8000
+    env_file:
+      - .env
+    volumes:
+      # Keep media files (uploads) persistent
+      - media_volume:/app/media
+      # Mount local SQLite database for persistence
+      - ./db.sqlite3:/app/db.sqlite3
+    ports:
+      - "8000:8000"
+    # environment:
+    #   - DEBUG=1
+    #   - SECRET_KEY=dev_secret_key
+    #   - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,[::1],0.0.0.0
+
+volumes:
+  media_volume:
