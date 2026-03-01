@@ -46,7 +46,7 @@ RUN chown -R django:django /app
 USER django
 
 # Expose port
-EXPOSE 8000
+EXPOSE 9000
 
 # Default command
-CMD ["gunicorn", "BFD9000.wsgi:application", "--bind", "0.0.0.0:8000"]
+CMD ["gunicorn", "BFD9000.wsgi:application", "--bind", "0.0.0.0:9000"]
