@@ -26,6 +26,7 @@
                 <div class="flex items-center justify-center bg-base-300 rounded">
                     <img id="record-image" src="" alt="Record thumbnail" class="max-w-full max-h-[600px] object-contain rounded" />
                 </div>
+                <button id="download-original-btn" class="btn btn-primary btn-sm mt-2">Download Original</button>
             </div>
         </div>
 
@@ -190,6 +191,7 @@
             : '-';
         document.getElementById('scan-operator').textContent = record.scan_operator || '-';
         renderArchiveLocations(record.archive_locations || []);
+        setupDownloadButton(record);
     }
 
     function renderArchiveLocations(locations) {
@@ -271,6 +273,101 @@
         }
 
         return ageText;
+    }
+
+    function setupDownloadButton(record) {
+        const btn = document.getElementById('download-original-btn');
+        if (!btn) return;
+
+        const subjectId = record.subject_identifier || record.subject_id || "";
+        const imageType = record.image_type ? record.image_type.code : "";
+        const ageFloat = record.age_at_encounter !== undefined ? parseFloat(record.age_at_encounter) : null;
+
+        // Get extension from image_url
+        function getExtension(url) {
+            if (!url) return "bin";
+            const m = url.match(/\.(\w+)$/);
+            if (m) return m[1];
+            return "bin";
+        }
+
+        const ext = getExtension(record.image_url);
+
+        // Age parsing
+        function parseAge(age) {
+            if (!Number.isFinite(age)) return { years: "00", months: "00" };
+            let years = Math.floor(age);
+            let months = Math.floor((age - years) * 12 + 0.001);
+            return {
+                years: String(years).padStart(2, '0'),
+                months: String(months).padStart(2, '0')
+            };
+        }
+
+        // Map gender
+        function mapGender(g) {
+            switch ((g||"").toLowerCase()) {
+                case "male":    return "M";
+                case "female":  return "F";
+                case "other":   return "O";
+                case "unknown": return "U";
+                default:        return "U";
+            }
+        }
+
+        // Compose filename
+        function makeFilename({subject, imgType, gender, age}) {
+            const parts = [
+                subject || "",
+                imgType || "",
+                gender || "",
+                age.years + "y" + age.months + "m"
+            ].filter(x => x.length).join("");
+            const dotExt = ext ? ("." + ext) : "";
+            return (parts || "record") + dotExt;
+        }
+
+        btn.addEventListener('click', async function () {
+            // Fetch subject gender
+            let gender = "U";
+            try {
+                const resp = await fetch((window.script_name || '') + `/api/subjects/${record.subject_id}/`);
+                if (resp.ok) {
+                    const subj = await resp.json();
+                    gender = mapGender(subj.gender);
+                }
+            } catch (e) {
+                // Keep gender = "U"
+            }
+
+            // Generate filename
+            const age = parseAge(ageFloat);
+            const filename = makeFilename({
+                subject: subjectId,
+                imgType: imageType,
+                gender: gender,
+                age: age
+            });
+
+            // Download
+            const url = (window.script_name || '') + `/api/records/${recordId}/image/`;
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('Download failed');
+                const blob = await res.blob();
+                const link = document.createElement('a');
+                link.href = window.URL.createObjectURL(blob);
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                setTimeout(() => {
+                    window.URL.revokeObjectURL(link.href);
+                    link.remove();
+                }, 100);
+            } catch (err) {
+                alert("Failed to download file: " + err.message);
+            }
+        });
     }
 
     document.addEventListener('DOMContentLoaded', loadRecord);

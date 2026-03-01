@@ -139,16 +139,21 @@ def _render_thumbnail_from_raster(img: Image.Image) -> Optional[bytes]:
     default_quality: int = int(getattr(settings, 'THUMBNAIL_DEFAULT_QUALITY', 75))
     min_quality: int = int(getattr(settings, 'THUMBNAIL_MIN_QUALITY', 40))
 
-    processed: Image.Image = img.copy()
-    if processed.mode == 'RGBA':
-        processed = processed.convert('RGB')
-    elif processed.mode not in ('RGB',):
-        # Pillow cannot convert some modes (e.g. 'I;16' from 16-bit PNGs) directly to
-        # RGB.  Convert via 'I' (32-bit grayscale) first as an intermediate step that
-        # Pillow supports for all raw/16-bit modes.
-        if processed.mode != 'I':
-            processed = processed.convert('I')
-        processed = processed.convert('RGB')
+    processed: Image.Image = img.copy()  # Create a copy to avoid modifying the original image
+    if processed.mode == 'RGBA':  # Handle images with alpha channel (e.g., PNG with transparency)
+        processed = processed.convert('RGB')  # Convert to RGB, discarding alpha
+    elif processed.mode not in ('RGB',):  # Process non-RGB modes (grayscale, palette, etc.)
+        if processed.mode in ('I', 'I;16', 'I;16B', 'I;16L'):  # High-bit grayscale modes (32-bit or 16-bit)
+            # These modes appear for 16-bit PNGs and 12/16-bit TIFFs after preprocessing in convert_tiff_to_png_bytes
+            processed = processed.convert('F')  # Convert to float mode ('F') for precise division operations
+            processed = processed.point(lambda x: x / 256)  # Scale down high-bit values (0-65535) to 8-bit range (0-255)
+                                                             # by dividing by 256 (equivalent to right-shift by 8 for 16-bit)
+            processed = processed.convert('L')  # Convert to 8-bit grayscale ('L') mode
+        else:  # For other modes like 'P' (palette), 'LA' (grayscale with alpha), etc.
+            processed = processed.convert('RGB')  # Convert directly to RGB
+    # Ensure RGB for JPEG
+    if processed.mode != 'RGB':  # Final check to guarantee RGB mode
+        processed = processed.convert('RGB')  # Convert any remaining non-RGB images to RGB for JPEG compatibility
 
     processed.thumbnail((max_width, max_height))
 
