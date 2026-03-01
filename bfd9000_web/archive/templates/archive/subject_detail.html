@@ -104,7 +104,7 @@
 
     async function loadSubject() {
         try {
-            const response = await fetch(`/api/subjects/${subjectId}/`);
+            const response = await fetch((window.script_name || '') + `/api/subjects/${subjectId}/`);
             if (!response.ok) {
                 throw new Error(`Failed to load subject: ${response.status}`);
             }

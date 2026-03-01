@@ -146,7 +146,7 @@
 
     async function loadRecord() {
         try {
-            const response = await fetch(`/api/records/${recordId}/`);
+            const response = await fetch((window.script_name || '') + `/api/records/${recordId}/`);
             if (!response.ok) {
                 throw new Error(`Failed to load record: ${response.status}`);
             }
@@ -166,7 +166,7 @@
         document.getElementById('content').classList.remove('hidden');
 
         // Use thumbnail endpoint for all GUI image display
-        document.getElementById('record-image').src = `/api/records/${recordId}/thumbnail/`;
+        document.getElementById('record-image').src = (window.script_name || '') + `/api/records/${recordId}/thumbnail/`;
 
         // Subject & Encounter
         document.getElementById('subject-id').textContent = record.subject_identifier || record.subject_id || '-';

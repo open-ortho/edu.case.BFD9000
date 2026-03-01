@@ -117,7 +117,7 @@
                 search: query,
                 page_size: '20',
             });
-            const response = await fetch(`/api/subjects/?${params}`);
+            const response = await fetch((window.script_name || '') + `/api/subjects/?${params}`);
             if (!response.ok) {
                 throw new Error(`Failed to search subjects: ${response.status}`);
             }
@@ -126,7 +126,7 @@
         }
 
         async function fetchValueset(type) {
-            const response = await fetch(`/api/valuesets/?type=${type}`);
+            const response = await fetch((window.script_name || '') + `/api/valuesets/?type=${type}`);
             if (!response.ok) {
                 throw new Error(`Failed to fetch valueset: ${type}`);
             }
