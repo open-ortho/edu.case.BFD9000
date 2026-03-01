@@ -19,7 +19,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count, QuerySet
+from django.db.models import Case, CharField, Count, OuterRef, QuerySet, Subquery, When
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_POST
@@ -148,13 +148,23 @@ class SubjectViewSet(viewsets.ModelViewSet):
     ViewSet for Subject model.
 
     Manages patient/subject information including demographics.
+    Subjects are ordered by their preferred display identifier (official →
+    Bolton system → first), resolved at the database level via correlated
+    subqueries to match the serializer's ``subject_identifier`` field.
     """
     queryset = Subject.objects.prefetch_related(
         'identifiers'
     ).annotate(
         encounter_count=Count('encounters', distinct=True),
-        record_count=Count('encounters__imaging_study__series__records', distinct=True)
-    ).all()
+        record_count=Count('encounters__imaging_study__series__records', distinct=True),
+        official_identifier=Subquery(
+            Identifier.objects.filter(
+                subjects=OuterRef('pk'),
+                use='official',
+            ).order_by('pk').values('value')[:1],
+            output_field=CharField(),
+        ),
+    ).order_by('official_identifier', 'id')
     serializer_class = SubjectSerializer
     filterset_fields = {
         'identifiers__value',
