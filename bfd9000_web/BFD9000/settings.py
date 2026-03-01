@@ -200,7 +200,7 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     'TITLE': 'BFD9000 API',
     'DESCRIPTION': 'API for BFD9000 Medical Imaging System',
-    'VERSION': '1.0.0',
+    'VERSION': APP_VERSION,
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
     'SERVE_PERMISSIONS': ['rest_framework.permissions.IsAuthenticated'],
