@@ -74,3 +74,41 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 ```
 
 Set both values in your environment (for example `bfd9000_web/.env` when using docker-compose).
+
+---
+
+## Configuration: Environment Variables
+
+The web application is configured using the following environment variables. These can be provided via the environment, a `.env` file, or via Docker Compose.
+
+|        Variable Name        |   Required?    |                                 Description                                  |            Example / Default Value            |
+| --------------------------- | -------------- | ---------------------------------------------------------------------------- | --------------------------------------------- |
+| `SECRET_KEY`                | **Yes (prod)** | Django secret key for cryptographic signing.                                 | (must set in production)                      |
+| `DEBUG`                     | No             | Enable Django debug mode (do not enable in production).                      | `True` (default), `False`                     |
+| `DJANGO_ALLOWED_HOSTS`      | No             | Comma-separated hostnames Django will allow.                                 | `localhost,127.0.0.1`                         |
+| `APP_VERSION`               | No             | Set displayed app version; falls back to VERSION file or `nover`.            | `1.2.0` or blank                              |
+| `DJANGO_FORCE_SCRIPT_NAME`  | No             | Subpath hosting prefix (e.g., `/bfd9000`). Needed for reverse proxy support. | `/bfd9000` or blank                           |
+| `CORS_ALLOWED_ORIGINS`      | No             | Comma-separated list of CORS-allowed origins (frontend integration).         | `http://localhost:5173,http://127.0.0.1:5173` |
+| `SCANNER_API_BASE`          | No             | Base URL for scanner-side API calls.                                         | `http://localhost:5000`                       |
+| `SCANNER_DEVICE_ID`         | No             | Scanner hardware ID string.                                                  | `scanner-001`                                 |
+| `BFD9020_BASE_URL`          | No             | Endpoint for the BFD9020 AI microservice (magic AI button).                  | `https://wingate.case.edu/bfd9020`            |
+| `THUMBNAIL_MAX_WIDTH`       | No             | Maximum width for UI/API generated thumbnails (px).                          | `300`                                         |
+| `THUMBNAIL_MAX_HEIGHT`      | No             | Maximum height for UI/API generated thumbnails (px).                         | `300`                                         |
+| `THUMBNAIL_TARGET_BYTES`    | No             | Target file size for thumbnails, in bytes.                                   | `20480` (20 KB)                               |
+| `THUMBNAIL_HARD_MAX_BYTES`  | No             | Hard cap for thumbnail file size, in bytes.                                  | `102400` (100 KB)                             |
+| `THUMBNAIL_DEFAULT_QUALITY` | No             | Default thumbnail image quality (0-100).                                     | `75`                                          |
+| `THUMBNAIL_MIN_QUALITY`     | No             | Minimum allowed thumbnail quality (0-100).                                   | `40`                                          |
+
+**For subpath deployments**, you must set `DJANGO_FORCE_SCRIPT_NAME` to your public path prefix (e.g., `/bfd9000`) to ensure all static/media/API/navigation work behind a proxy that strips this prefix.
+
+A minimal `.env` example for development:
+
+```env
+DEBUG=True
+SECRET_KEY=your-generated-key
+DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+DJANGO_FORCE_SCRIPT_NAME=/bfd9000
+```
+
+---
