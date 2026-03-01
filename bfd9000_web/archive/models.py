@@ -5,8 +5,6 @@ This module defines the database schema for the BFD9000 system, including
 core entities like Subject, Encounter, ImagingStudy, and Record, as well as
 supporting entities like Coding, Identifier, and Collection.
 """
-import base64
-import hashlib
 import json
 from typing import Any
 
@@ -15,7 +13,7 @@ from django.db import models
 from .media_utils import generate_dicom_uid
 from django.db.models import QuerySet
 from django.conf import settings
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ImproperlyConfigured, ValidationError
 
 from .constants import (
     STUDYINSTANCEUID_ROOT,
@@ -565,12 +563,17 @@ class Endpoint(TimestampedModel):
         return f"{self.name} ({self.connection_type})"
 
     def _get_fernet(self) -> Fernet:
+        # ENDPOINT_CREDENTIALS_KEY must be set explicitly and separately from SECRET_KEY.
+        # Sharing SECRET_KEY for encryption would enlarge the blast radius of a key compromise
+        # (SECRET_KEY also protects sessions, CSRF tokens, and password reset links) and would
+        # break all stored credentials silently if SECRET_KEY is rotated, with no migration path.
         configured_key = str(getattr(settings, 'ENDPOINT_CREDENTIALS_KEY', '') or '').strip()
-        if configured_key:
-            key_bytes = configured_key.encode('utf-8')
-        else:
-            digest = hashlib.sha256(settings.SECRET_KEY.encode('utf-8')).digest()
-            key_bytes = base64.urlsafe_b64encode(digest)
+        if not configured_key:
+            raise ImproperlyConfigured(
+                "ENDPOINT_CREDENTIALS_KEY must be set in settings. "
+                "Do not reuse SECRET_KEY for credential encryption."
+            )
+        key_bytes = configured_key.encode('utf-8')
         return Fernet(key_bytes)
 
     def set_credentials(self, payload: dict[str, Any]) -> None:
