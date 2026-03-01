@@ -40,14 +40,6 @@ This runs:
 - `createsuperuser`
 - `import_subjects` (Bolton + Lancaster by default)
 
-Useful options:
-
-- `--skip-migrate`
-- `--skip-superuser`
-- `--skip-import`
-- `--import-source {all,bolton,lancaster}`
-- `--non-interactive --superuser-username ... --superuser-email ... --superuser-password ...`
-
 See full command help:
 
 `python bfd9000_web/manage.py help initialize`
@@ -59,7 +51,9 @@ When rotating keys, generate **two different values**:
 - `SECRET_KEY` for Django signing/session security.
 - `ENDPOINT_CREDENTIALS_KEY` for endpoint credential encryption (Fernet).
 
-Do **not** reuse one key for both variables.
+**Do not reuse one key for both variables.**
+
+**Why?** If you use the same value for both `SECRET_KEY` and any encryption key, a leak in one area (e.g., Fernet credentials) could let an attacker forge Django cookies or CSRF tokens. Unique, random keys for each cryptographic use greatly reduce risk of whole-system compromise.
 
 Generate a new Django `SECRET_KEY`:
 
@@ -110,5 +104,35 @@ DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
 CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 DJANGO_FORCE_SCRIPT_NAME=/bfd9000
 ```
+
+---
+
+## Example: Nginx Reverse Proxy with Subpath (SCRIPT_NAME) Hosting
+
+To deploy the Django server under a subpath (e.g., `/bfd9000`), use the following Nginx configuration:
+
+```nginx
+# Redirect /bfd9000 to /bfd9000/ for consistency
+location = /bfd9000 {
+    return 301 /bfd9000/;
+}
+
+# Host Django at /bfd9000/
+location /bfd9000/ {
+    # Trailing slash strips /bfd9000/ before proxying
+    proxy_pass http://bfd9000:9000/;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    # Optionally inform upstream of prefix (most Django setups do NOT require this)
+    proxy_set_header X-Forwarded-Prefix /bfd9000;
+}
+```
+
+- Set `DJANGO_FORCE_SCRIPT_NAME=/bfd9000` in the environment so Django generates URLs with the correct prefix.
+- If your app listens on a different port (e.g., 8000), adjust `proxy_pass` accordingly.
+- This config ensures all app URLs, static/media, forms, and fetch endpoints work at `/bfd9000`, regardless of the upstream root path.
 
 ---
