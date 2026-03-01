@@ -100,7 +100,7 @@
             params.set("search", search.trim());
         }
 
-        const response = await fetch(`/api/subjects/?${params}`);
+        const response = await fetch((window.script_name || '') + `/api/subjects/?${params}`);
         if (!response.ok) {
             throw new Error(`API error: ${response.status}`);
         }
@@ -126,7 +126,7 @@
                 subjectBtn.className = "btn btn-soft btn-primary btn-xs";
                 subjectBtn.textContent = subject.subject_identifier || subject.id;
                 subjectBtn.onclick = () => {
-                    window.location.href = `/subject/${subject.id}/`;
+                    window.location.href = (window.script_name || '') + `/subject/${subject.id}/`;
                 };
                 identifier.appendChild(subjectBtn);
 
@@ -136,7 +136,7 @@
                 encountersBtn.className = "btn btn-soft btn-xs";
                 encountersBtn.textContent = subject.encounter_count || 0;
                 encountersBtn.onclick = () =>
-                    (window.location.href = `/encounters/?subject=${subject.id}`);
+                    (window.location.href = (window.script_name || '') + `/encounters/?subject=${subject.id}`);
                 encounters.appendChild(encountersBtn);
 
                 // Records column with default button
@@ -145,7 +145,7 @@
                 recordsBtn.className = "btn btn-soft btn-xs";
                 recordsBtn.textContent = subject.record_count || 0;
                 recordsBtn.onclick = () =>
-                    (window.location.href = `/records/?subject=${subject.id}`);
+                    (window.location.href = (window.script_name || '') + `/records/?subject=${subject.id}`);
                 records.appendChild(recordsBtn);
 
                 // Dental Classification column (no button)

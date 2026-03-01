@@ -19,5 +19,5 @@
 
 ## 4) Local verification (no registry push)
 - [ ] `docker build -f bfd9000_web/Dockerfile bfd9000_web -t bfd9000-web:test`
-- [ ] `docker run --rm -p 8000:8000 bfd9000-web:test`
+- [ ] `docker run --rm -p 9000:9000 bfd9000-web:test`
 - [ ] Smoke check `/` (or `/api/schema/` if available)

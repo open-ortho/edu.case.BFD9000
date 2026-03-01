@@ -86,6 +86,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "BFD9000.context_processors.app_version",
+                "BFD9000.context_processors.script_name_prefix",
             ],
         },
     },
@@ -100,7 +101,7 @@ WSGI_APPLICATION = "BFD9000.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": BASE_DIR / "db" / "db.sqlite3",
     }
 }
 
@@ -139,7 +140,18 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+# Subpath hosting config (DJANGO_FORCE_SCRIPT_NAME env)
+FORCE_SCRIPT_NAME = os.environ.get('DJANGO_FORCE_SCRIPT_NAME', None)
+if FORCE_SCRIPT_NAME == '' or FORCE_SCRIPT_NAME is None:
+    FORCE_SCRIPT_NAME = None
+
+# Prefix-aware STATIC_URL and MEDIA_URL
+def _prefix_url(path):
+    if FORCE_SCRIPT_NAME:
+        return f"{FORCE_SCRIPT_NAME.rstrip('/')}/{path.lstrip('/')}"
+    return f"/{path.lstrip('/')}"
+
+STATIC_URL = _prefix_url('static/')
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 STORAGES = {
@@ -152,7 +164,7 @@ STORAGES = {
 }
 
 # Media files (Uploads)
-MEDIA_URL = '/media/'
+MEDIA_URL = _prefix_url('media/')
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
@@ -188,14 +200,14 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     'TITLE': 'BFD9000 API',
     'DESCRIPTION': 'API for BFD9000 Medical Imaging System',
-    'VERSION': '1.0.0',
+    'VERSION': APP_VERSION,
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
     'SERVE_PERMISSIONS': ['rest_framework.permissions.IsAuthenticated'],
 }
 
 # Authentication
-LOGIN_REDIRECT_URL = '/'
+LOGIN_REDIRECT_URL = 'archive:index'  # Named route, prefix-safe
 LOGIN_URL = 'login'
 
 # CORS Configuration

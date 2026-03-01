@@ -40,14 +40,99 @@ This runs:
 - `createsuperuser`
 - `import_subjects` (Bolton + Lancaster by default)
 
-Useful options:
-
-- `--skip-migrate`
-- `--skip-superuser`
-- `--skip-import`
-- `--import-source {all,bolton,lancaster}`
-- `--non-interactive --superuser-username ... --superuser-email ... --superuser-password ...`
-
 See full command help:
 
 `python bfd9000_web/manage.py help initialize`
+
+## Generating Security Keys
+
+When rotating keys, generate **two different values**:
+
+- `SECRET_KEY` for Django signing/session security.
+- `ENDPOINT_CREDENTIALS_KEY` for endpoint credential encryption (Fernet).
+
+**Do not reuse one key for both variables.**
+
+**Why?** If you use the same value for both `SECRET_KEY` and any encryption key, a leak in one area (e.g., Fernet credentials) could let an attacker forge Django cookies or CSRF tokens. Unique, random keys for each cryptographic use greatly reduce risk of whole-system compromise.
+
+Generate a new Django `SECRET_KEY`:
+
+```bash
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
+
+Generate a new `ENDPOINT_CREDENTIALS_KEY` (valid Fernet key):
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Set both values in your environment (for example `bfd9000_web/.env` when using docker-compose).
+
+---
+
+## Configuration: Environment Variables
+
+The web application is configured using the following environment variables. These can be provided via the environment, a `.env` file, or via Docker Compose.
+
+|        Variable Name        |   Required?    |                                 Description                                  |            Example / Default Value            |
+| --------------------------- | -------------- | ---------------------------------------------------------------------------- | --------------------------------------------- |
+| `SECRET_KEY`                | **Yes (prod)** | Django secret key for cryptographic signing.                                 | (must set in production)                      |
+| `DEBUG`                     | No             | Enable Django debug mode (do not enable in production).                      | `True` (default), `False`                     |
+| `DJANGO_ALLOWED_HOSTS`      | No             | Comma-separated hostnames Django will allow.                                 | `localhost,127.0.0.1`                         |
+| `APP_VERSION`               | No             | Set displayed app version; falls back to VERSION file or `nover`.            | `1.2.0` or blank                              |
+| `DJANGO_FORCE_SCRIPT_NAME`  | No             | Subpath hosting prefix (e.g., `/bfd9000`). Needed for reverse proxy support. | `/bfd9000` or blank                           |
+| `CORS_ALLOWED_ORIGINS`      | No             | Comma-separated list of CORS-allowed origins (frontend integration).         | `http://localhost:5173,http://127.0.0.1:5173` |
+| `SCANNER_API_BASE`          | No             | Base URL for scanner-side API calls.                                         | `http://localhost:5000`                       |
+| `SCANNER_DEVICE_ID`         | No             | Scanner hardware ID string.                                                  | `scanner-001`                                 |
+| `BFD9020_BASE_URL`          | No             | Endpoint for the BFD9020 AI microservice (magic AI button).                  | `https://wingate.case.edu/bfd9020`            |
+| `THUMBNAIL_MAX_WIDTH`       | No             | Maximum width for UI/API generated thumbnails (px).                          | `300`                                         |
+| `THUMBNAIL_MAX_HEIGHT`      | No             | Maximum height for UI/API generated thumbnails (px).                         | `300`                                         |
+| `THUMBNAIL_TARGET_BYTES`    | No             | Target file size for thumbnails, in bytes.                                   | `20480` (20 KB)                               |
+| `THUMBNAIL_HARD_MAX_BYTES`  | No             | Hard cap for thumbnail file size, in bytes.                                  | `102400` (100 KB)                             |
+| `THUMBNAIL_DEFAULT_QUALITY` | No             | Default thumbnail image quality (0-100).                                     | `75`                                          |
+| `THUMBNAIL_MIN_QUALITY`     | No             | Minimum allowed thumbnail quality (0-100).                                   | `40`                                          |
+
+**For subpath deployments**, you must set `DJANGO_FORCE_SCRIPT_NAME` to your public path prefix (e.g., `/bfd9000`) to ensure all static/media/API/navigation work behind a proxy that strips this prefix.
+
+A minimal `.env` example for development:
+
+```env
+DEBUG=True
+SECRET_KEY=your-generated-key
+DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+DJANGO_FORCE_SCRIPT_NAME=/bfd9000
+```
+
+---
+
+## Example: Nginx Reverse Proxy with Subpath (SCRIPT_NAME) Hosting
+
+To deploy the Django server under a subpath (e.g., `/bfd9000`), use the following Nginx configuration:
+
+```nginx
+# Redirect /bfd9000 to /bfd9000/ for consistency
+location = /bfd9000 {
+    return 301 /bfd9000/;
+}
+
+# Host Django at /bfd9000/
+location /bfd9000/ {
+    # Trailing slash strips /bfd9000/ before proxying
+    proxy_pass http://bfd9000:9000/;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    # Optionally inform upstream of prefix (most Django setups do NOT require this)
+    proxy_set_header X-Forwarded-Prefix /bfd9000;
+}
+```
+
+- Set `DJANGO_FORCE_SCRIPT_NAME=/bfd9000` in the environment so Django generates URLs with the correct prefix.
+- If your app listens on a different port (e.g., 8000), adjust `proxy_pass` accordingly.
+- This config ensures all app URLs, static/media, forms, and fetch endpoints work at `/bfd9000`, regardless of the upstream root path.
+
+---

@@ -83,7 +83,7 @@
             params.set("subject", subject);
         }
 
-        const response = await fetch(`/api/encounters/?${params}`);
+        const response = await fetch((window.script_name || '') + `/api/encounters/?${params}`);
         if (!response.ok) {
             throw new Error(`API error: ${response.status}`);
         }
@@ -139,7 +139,7 @@
                 encounterBtn.className = "btn btn-soft btn-xs";
                 encounterBtn.textContent = encounter.id;
                 encounterBtn.onclick = () =>
-                    (window.location.href = `/records?encounter=${encounter.id}`);
+                    (window.location.href = (window.script_name || '') + `/records?encounter=${encounter.id}`);
                 encounterId.appendChild(encounterBtn);
 
                 // Subject ID column with primary button
@@ -148,7 +148,7 @@
                 subjectBtn.className = "btn btn-soft btn-xs";
                 subjectBtn.textContent = encounter.subject_identifier || encounter.subject;
                 subjectBtn.onclick = () =>
-                    (window.location.href = `/encounters?subject=${encounter.subject}`);
+                    (window.location.href = (window.script_name || '') + `/encounters?subject=${encounter.subject}`);
                 subject.appendChild(subjectBtn);
 
                 // Records column with default button
@@ -157,7 +157,7 @@
                 recordsBtn.className = "btn btn-soft btn-xs";
                 recordsBtn.textContent = encounter.record_count;
                 recordsBtn.onclick = () =>
-                    (window.location.href = `/records?encounter=${encounter.id}`);
+                    (window.location.href = (window.script_name || '') + `/records?encounter=${encounter.id}`);
                 records.appendChild(recordsBtn);
 
                 // Date column (plain text)
