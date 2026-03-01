@@ -9,18 +9,27 @@ services:
     ports:
       - "9000:9000"
     # command: python manage.py runserver 0.0.0.0:9000
-    env_file:
-      - .env
+    # env_file:
+    #   - .env
     volumes:
       # Keep media files (uploads) persistent
       - media_volume:/app/media
       # Mount local SQLite database for persistence
-      - ./db.sqlite3:/app/db.sqlite3
-    # environment:
-    #   - DEBUG=1
-    #   - SECRET_KEY=dev_secret_key
-    #   - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,[::1],0.0.0.0
-    #   - ENDPOINT_CREDENTIALS_KEY=your_credentials_key_here
+      - ./db/db.sqlite3:/app/db/db.sqlite3
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=dev_secret_key
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,[::1],0.0.0.0
+      - ENDPOINT_CREDENTIALS_KEY=your_credentials_key_here
+      # Local mode (no proxy, direct access at http://localhost:9000/):
+      # - DJANGO_FORCE_SCRIPT_NAME=
+      # - SCRIPT_NAME=
+
+      # Subpath emulation mode (access app at http://localhost:9000/bfd9000/):
+      # Enable BOTH lines below to emulate a proxy-mounted prefix locally.
+      - DJANGO_FORCE_SCRIPT_NAME=/bfd9000
+      - SCRIPT_NAME=/bfd9000
+      - BFD9020_BASE_URL=http://bfd9020
 
 volumes:
   media_volume:

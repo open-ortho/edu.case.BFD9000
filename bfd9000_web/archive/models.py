@@ -317,7 +317,8 @@ class Subject(TimestampedModel):
 
     class Meta(TimestampedModel.Meta):
         """Model metadata."""
-        ordering = ['humanname_family', 'humanname_given']
+        # No default ordering: ordering by the preferred display identifier
+        # requires annotation subqueries and is applied explicitly in SubjectViewSet.
         indexes = [
             models.Index(fields=['birth_date']),
             models.Index(fields=['humanname_family', 'humanname_given']),

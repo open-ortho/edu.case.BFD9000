@@ -4,7 +4,7 @@
 <div class="flex-[1_1_0] flex flex-col overflow-auto p-6">
     <div class="mb-4">
         <div class="flex items-center gap-2 mb-2">
-            <a href="/subjects/" class="btn btn-sm btn-ghost">Back to Subjects</a>
+            <a href="{% url 'archive:subjects' %}" class="btn btn-sm btn-ghost">Back to Subjects</a>
             <h1 class="text-2xl font-bold">Subject #<span id="subject-id">{{ subject_id }}</span></h1>
         </div>
         <div id="loading" class="text-base-content/60">Loading subject details...</div>
@@ -104,7 +104,7 @@
 
     async function loadSubject() {
         try {
-            const response = await fetch(`/api/subjects/${subjectId}/`);
+            const response = await fetch((window.script_name || '') + `/api/subjects/${subjectId}/`);
             if (!response.ok) {
                 throw new Error(`Failed to load subject: ${response.status}`);
             }
