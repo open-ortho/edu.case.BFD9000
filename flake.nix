@@ -47,14 +47,17 @@
                             . .venv/bin/activate
 
                             req_file="bfd9000_web/requirements-dev.txt"
+                            base_req_file="bfd9000_web/requirements.txt"
                             stamp_file=".venv/.bfd9000_requirements_stamp"
-                            req_hash="$(python - "$req_file" <<'PY'
+                            req_hash="$(python - "$req_file" "$base_req_file" <<'PY'
               import hashlib
               import pathlib
               import sys
 
-              path = pathlib.Path(sys.argv[1])
-              print(hashlib.sha256(path.read_bytes()).hexdigest())
+              digest = hashlib.sha256()
+              for arg in sys.argv[1:]:
+                  digest.update(pathlib.Path(arg).read_bytes())
+              print(digest.hexdigest())
               PY
                             )"
 
@@ -72,7 +75,7 @@
                             fi
 
                             echo "[nix] .venv Python: $(python --version) deps: $deps_status"
-                            unset req_file stamp_file req_hash stamp_hash deps_status
+                            unset req_file base_req_file stamp_file req_hash stamp_hash deps_status
             '';
 
           };
