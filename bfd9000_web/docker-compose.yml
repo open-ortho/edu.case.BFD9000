@@ -20,6 +20,7 @@ services:
     #   - DEBUG=1
     #   - SECRET_KEY=dev_secret_key
     #   - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,[::1],0.0.0.0
+    #   - ENDPOINT_CREDENTIALS_KEY=your_credentials_key_here
 
 volumes:
   media_volume:

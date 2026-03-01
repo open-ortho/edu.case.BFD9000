@@ -51,3 +51,26 @@ Useful options:
 See full command help:
 
 `python bfd9000_web/manage.py help initialize`
+
+## Generating Security Keys
+
+When rotating keys, generate **two different values**:
+
+- `SECRET_KEY` for Django signing/session security.
+- `ENDPOINT_CREDENTIALS_KEY` for endpoint credential encryption (Fernet).
+
+Do **not** reuse one key for both variables.
+
+Generate a new Django `SECRET_KEY`:
+
+```bash
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
+
+Generate a new `ENDPOINT_CREDENTIALS_KEY` (valid Fernet key):
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Set both values in your environment (for example `bfd9000_web/.env` when using docker-compose).
