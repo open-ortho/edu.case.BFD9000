@@ -580,6 +580,11 @@ class RecordUploadSerializer(serializers.ModelSerializer):
                 encounter=encounter,
                 defaults={'collection': collection}
             )
+            # If the subject was moved to a different collection after the study was created,
+            # keep ImagingStudy.collection in sync to avoid collection-scoped query divergence.
+            if study.collection != collection:
+                study.collection = collection
+                study.save(update_fields=['collection'])
 
             # Get or create Series within the study
             series, _ = Series.objects.get_or_create(
