@@ -1,0 +1,29 @@
+{
+    "python.testing.unittestArgs": [
+        "-v",
+        "-s",
+        "./bbc2dcm/tests/",
+        "-p",
+        "test_*.py"
+    ],
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/bbc2dcm/",
+        "${workspaceFolder}/bfd9000_web"
+    ],
+    "python.testing.pytestEnabled": false,
+    "python.testing.unittestEnabled": true,
+    "cSpell.words": [
+        "Cephalogram",
+        "DICOM",
+        "FHIR",
+        "humanname",
+        "SERIESINSTANCEUID",
+        "SNOMED",
+        "SOPINSTANCEUID",
+        "STUDYINSTANCEUID",
+        "Valueset",
+        "Valuesets"
+    ],
+    "python-envs.defaultEnvManager": "ms-python.python:venv",
+    "python.analysis.diagnosticsSource": "Pyright"
+}

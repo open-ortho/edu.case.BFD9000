@@ -1,0 +1,5 @@
+-i https://pypi.org/simple
+imagecodecs
+numpy
+pillow
+pydicom

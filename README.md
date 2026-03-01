@@ -1,4 +1,6 @@
-# bbc2digital
+# BFD9000
+
+Contrary to popular belief, the BFD9000 stands for Bolton Files Dicomizer 9000. 9000 is just a huge version number, which is supposed to be intimidating.
 
 Tools and processes to convert the Bolton-Brush Collection to digital format.
 
@@ -20,3 +22,32 @@ The tools will also likely include a GUI for the operator, assisting them in add
 ## Future Uses
 
 Other collections, such as [the ones in the AAOF Legacy Collection](https://www.aaoflegacycollection.org/), may also benefit from these tools. If needed, they can utilize them to achieve an organization based on an open standard like DICOM. This uniform approach could greatly enhance the research community's access to consistent and standardized datasets.
+
+## Repository Structure
+
+- `bfd9000_web/`: Django application for managing and viewing the BFD9000 data.
+  To run the application, follow the instructions in `bfd9000_web/README.md`.
+
+## Django Bootstrap
+
+The archive app provides a convenience management command to initialize a local development database:
+
+`python bfd9000_web/manage.py initialize`
+
+This runs:
+
+- `migrate`
+- `createsuperuser`
+- `import_subjects` (Bolton + Lancaster by default)
+
+Useful options:
+
+- `--skip-migrate`
+- `--skip-superuser`
+- `--skip-import`
+- `--import-source {all,bolton,lancaster}`
+- `--non-interactive --superuser-username ... --superuser-email ... --superuser-password ...`
+
+See full command help:
+
+`python bfd9000_web/manage.py help initialize`

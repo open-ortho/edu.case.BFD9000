@@ -1,5 +1,5 @@
 # Byte-compiled / optimized / DLL files
-__pycache__/
+__pycache__
 *.py[cod]
 *$py.class
 
@@ -127,3 +127,22 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Docker
+.docker/
+docker-compose.override.yml
+
+# Copilot Prompts
+.github/prompts/
+
+# Media files
+bfd9000_web/media/
+# DaisyUI
+daisyui.mjs
+daisyui-theme.mjs
+tailwindcss
+tailwindcss.exe
+
+.direnv/
+tmp/
+.DS_Store

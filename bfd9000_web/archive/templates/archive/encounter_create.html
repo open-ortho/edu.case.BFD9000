@@ -1,0 +1,273 @@
+{% extends 'archive/base_index.html' %}
+
+{% block content %}
+<div class="flex-[1_1_0] flex flex-col overflow-x-auto p-8">
+    <div class="max-w-2xl mx-auto w-full">
+        <div class="prose prose-sm mb-6">
+            <h2 class="!mt-0">New Encounter</h2>
+        </div>
+
+        <form id="encounter-form" class="space-y-4">
+            <div class="form-control w-full">
+                <label class="label">
+                    <span class="label-text">Subject Identifier</span>
+                </label>
+                <input
+                    type="text"
+                    id="subject_id"
+                    name="subject_id"
+                    class="input input-bordered w-full"
+                    placeholder="Subject Identifier (e.g., B0001)"
+                    required
+                />
+                <label class="label">
+                    <span class="label-text-alt">Enter the subject this encounter belongs to</span>
+                </label>
+            </div>
+
+            <div class="form-control w-full">
+                <label class="label">
+                    <span class="label-text">Encounter Date</span>
+                </label>
+                <input
+                    type="date"
+                    id="date"
+                    name="date"
+                    class="input input-bordered w-full"
+                    required
+                />
+            </div>
+
+            <div class="form-control w-full">
+                <label class="label">
+                    <span class="label-text">Procedure</span>
+                </label>
+                <select id="procedure-code" class="select select-bordered w-full" required>
+                    <option value="">Loading procedures...</option>
+                </select>
+            </div>
+
+            <div class="form-control w-full">
+                <!-- <label class="label">
+                    <span class="label-text">Age at Encounter (Optional)</span>
+                </label>
+                <div class="flex gap-2">
+                    <input
+                        type="number"
+                        id="age_years"
+                        name="age_years"
+                        class="input input-bordered flex-1"
+                        placeholder="Years"
+                        min="0"
+                        max="150"
+                    />
+                    <input
+                        type="number"
+                        id="age_months"
+                        name="age_months"
+                        class="input input-bordered flex-1"
+                        placeholder="Months"
+                        min="0"
+                        max="11"
+                    />
+                    <input
+                        type="number"
+                        id="age_days"
+                        name="age_days"
+                        class="input input-bordered flex-1"
+                        placeholder="Days"
+                        min="0"
+                        max="30"
+                    />
+                </div>
+                <label class="label">
+                    <span class="label-text-alt">Specify age in years, months, and/or days</span>
+                </label>
+            </div> -->
+
+            <div
+                id="error-message"
+                class="alert alert-error hidden"
+                role="alert"
+            >
+                <span id="error-text"></span>
+            </div>
+
+            <div class="flex gap-4 pt-4">
+                <button type="submit" class="btn btn-primary" id="submit-btn">
+                    Create Encounter
+                </button>
+                <a href="{% url 'archive:encounters' %}" class="btn btn-ghost">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block head %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const form = document.getElementById('encounter-form');
+        const submitBtn = document.getElementById('submit-btn');
+        const errorMessage = document.getElementById('error-message');
+        const errorText = document.getElementById('error-text');
+
+        async function searchSubjects(query) {
+            const params = new URLSearchParams({
+                search: query,
+                page_size: '20',
+            });
+            const response = await fetch(`/api/subjects/?${params}`);
+            if (!response.ok) {
+                throw new Error(`Failed to search subjects: ${response.status}`);
+            }
+            const data = await response.json();
+            return data.results || [];
+        }
+
+        async function fetchValueset(type) {
+            const response = await fetch(`/api/valuesets/?type=${type}`);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch valueset: ${type}`);
+            }
+            return await response.json();
+        }
+
+        function populateSelect(selectId, options) {
+            const select = document.getElementById(selectId);
+            select.innerHTML = '<option value="">Select...</option>';
+            options.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.id;
+                option.textContent = opt.display;
+                select.appendChild(option);
+            });
+        }
+
+        async function init() {
+            try {
+                const procedures = await fetchValueset('procedures');
+                populateSelect('procedure-code', procedures);
+            } catch (error) {
+                errorText.textContent = `Failed to load procedures: ${error.message}`;
+                errorMessage.classList.remove('hidden');
+            }
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            // Disable submit button
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="loading loading-spinner"></span> Creating...';
+
+            // Hide any previous errors
+            errorMessage.classList.add('hidden');
+
+            // Get form data
+            const subjectIdentifier = document.getElementById('subject_id').value.trim();
+            const encounterDate = document.getElementById('date').value;
+            const procedureCode = document.getElementById('procedure-code').value;
+
+            if (!subjectIdentifier) {
+                errorText.textContent = 'Subject identifier is required.';
+                errorMessage.classList.remove('hidden');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Encounter';
+                return;
+            }
+
+            let subjectId = null;
+            try {
+                const subjects = await searchSubjects(subjectIdentifier);
+                const normalized = subjectIdentifier.toLowerCase();
+                const exact = subjects.find((subject) =>
+                    (subject.subject_identifier || '').toLowerCase() === normalized
+                );
+                subjectId = (exact || subjects[0])?.id || null;
+            } catch (error) {
+                errorText.textContent = `Subject lookup failed: ${error.message}`;
+                errorMessage.classList.remove('hidden');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Encounter';
+                return;
+            }
+
+            if (!subjectId) {
+                errorText.textContent = 'Subject not found.';
+                errorMessage.classList.remove('hidden');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Encounter';
+                return;
+            }
+
+            const formData = {
+                subject: subjectId,
+                actual_period_start: encounterDate,
+                procedure_code: procedureCode,
+            };
+
+            /*// Build age_at_encounter string if any age fields are provided
+            const ageYears = document.getElementById('age_years').value;
+            const ageMonths = document.getElementById('age_months').value;
+            const ageDays = document.getElementById('age_days').value;
+
+            if (ageYears || ageMonths || ageDays) {
+                const ageParts = [];
+                if (ageYears) ageParts.push(`${ageYears}Y`);
+                if (ageMonths) ageParts.push(`${ageMonths}M`);
+                if (ageDays) ageParts.push(`${ageDays}D`);
+                formData.age_at_encounter = ageParts.join('');
+            }*/
+
+            try {
+                const response = await fetch('/api/encounters/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}',
+                    },
+                    body: JSON.stringify(formData),
+                });
+
+                if (response.ok) {
+                    // Success - redirect to encounters page
+                    window.location.href = '{% url "archive:encounters" %}';
+                } else {
+                    // Handle error
+                    const errorData = await response.json();
+                    let errorMsg = 'Failed to create encounter. ';
+
+                    if (errorData.error) {
+                        errorMsg += errorData.error.message || '';
+                        if (errorData.error.details) {
+                            errorMsg += ' ' + JSON.stringify(errorData.error.details);
+                        }
+                    } else if (typeof errorData === 'object') {
+                        const details = Object.entries(errorData)
+                            .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+                            .join('; ');
+                        errorMsg += details;
+                    }
+
+                    errorText.textContent = errorMsg;
+                    errorMessage.classList.remove('hidden');
+
+                    // Re-enable submit button
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Create Encounter';
+                }
+            } catch (error) {
+                errorText.textContent = 'Network error: ' + error.message;
+                errorMessage.classList.remove('hidden');
+
+                // Re-enable submit button
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Encounter';
+            }
+        });
+
+        init();
+    });
+</script>
+{% endblock %}
