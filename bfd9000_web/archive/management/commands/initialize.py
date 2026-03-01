@@ -107,6 +107,15 @@ class Command(BaseCommand):
         call_command("createsuperuser", verbosity=verbosity)
 
     def _set_superuser_env(self, options: dict) -> None:
+        """Set environment variables required by Django's createsuperuser --noinput.
+
+        Security note: This method writes the plaintext password to
+        ``os.environ["DJANGO_SUPERUSER_PASSWORD"]``, which is visible in
+        ``/proc/<pid>/environ`` on Linux and is commonly captured in process
+        listings and CI logs.  This command is intended for **local development
+        and CI bootstrapping only** — never use it in a shared or production
+        environment where the process environment may be logged or inspected.
+        """
         username = options.get("superuser_username")
         email = options.get("superuser_email")
         password = options.get("superuser_password")
