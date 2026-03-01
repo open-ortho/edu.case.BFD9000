@@ -231,9 +231,11 @@ class SeriesViewSet(viewsets.ModelViewSet):
     ViewSet for Series model.
 
     Exposes series grouped under imaging studies. Standard CRUD.
+    Requires authentication to prevent unauthenticated enumeration of all series.
     """
     queryset = Series.objects.select_related('imaging_study', 'record_type', 'modality').prefetch_related('records')
     serializer_class = SeriesSerializer
+    permission_classes = [IsAuthenticated]
 
 
 class EndpointViewSet(viewsets.ModelViewSet):
