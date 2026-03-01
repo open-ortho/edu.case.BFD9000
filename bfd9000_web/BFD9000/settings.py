@@ -216,6 +216,15 @@ CORS_ALLOWED_ORIGINS = os.environ.get(
     "http://localhost:5173,http://127.0.0.1:5173"
 ).split(',')
 
+# CSRF trusted origins — required when Django is accessed from a different
+# origin or behind a reverse proxy. This is separate from CORS_ALLOWED_ORIGINS:
+# CORS_ALLOWED_ORIGINS controls cross-origin response headers (django-cors-headers),
+# while CSRF_TRUSTED_ORIGINS is checked by Django's own CsrfViewMiddleware on
+# every unsafe request (POST, PUT, PATCH, DELETE).
+# Must include scheme, e.g.: https://example.com
+_csrf_trusted = os.environ.get('CSRF_TRUSTED_ORIGINS', '').strip()
+CSRF_TRUSTED_ORIGINS: list[str] = [o.strip() for o in _csrf_trusted.split(',') if o.strip()]
+
 SCANNER_API_BASE = os.environ.get('SCANNER_API_BASE', 'http://localhost:5000')
 SCANNER_DEVICE_ID = os.environ.get('SCANNER_DEVICE_ID', 'scanner-001')
 BFD9020_BASE_URL = os.environ.get(
