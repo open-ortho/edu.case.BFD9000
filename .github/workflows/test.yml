@@ -3,11 +3,8 @@ name: Run Django Tests
 # AI should know how to fix it.
 
 on:
-  push:
-    branches: [main, master, develop]
-  pull_request:
-    # Run on all PRs, regardless of target branch
-    types: [opened, synchronize, reopened, ready_for_review]
+  # Run manually only; automated tests run as part of the publish-ghcr workflow before deployment
+  workflow_dispatch:
 
 jobs:
   test:

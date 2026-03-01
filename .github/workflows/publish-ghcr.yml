@@ -15,8 +15,26 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+
+      - name: Set up Nix Flake environment
+        run: nix develop --command true
+
+      - name: Run Django tests
+        run: |
+          nix develop --command python bfd9000_web/manage.py test --verbosity=2
+
   build-and-push:
     runs-on: ubuntu-latest
+    needs: [test]
 
     steps:
       - name: Checkout repository
@@ -40,6 +58,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Only produce the exact version tag (e.g. "1.2.3" from tag "v1.2.3").
+          # The metadata-action defaults generate 3 tags (version, major.minor, and ref),
+          # causing 3 separate image assets per release. This restricts output to one.
+          tags: |
+            type=semver,pattern={{version}}
 
       - name: Cache Docker layers
         uses: actions/cache@v4
