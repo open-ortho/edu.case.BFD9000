@@ -4,9 +4,11 @@ from django.contrib import admin
 
 from .models import (
     Address,
+    ArchiveLocation,
     Coding,
     Collection,
     Encounter,
+    Endpoint,
     Identifier,
     ImagingStudy,
     Location,
@@ -237,6 +239,15 @@ class SeriesAdmin(TimestampedAdmin):
     )
 
 
+class ArchiveLocationInline(admin.TabularInline):
+    """Inline archive locations for record admin pages."""
+
+    model = ArchiveLocation
+    extra = 1
+    autocomplete_fields = ("endpoint",)
+    fields = ("endpoint", "assigned_id", "status", "archived_at")
+
+
 @admin.register(Record)
 class RecordAdmin(TimestampedAdmin):
     """Admin settings for records and linked imaging studies."""
@@ -257,9 +268,10 @@ class RecordAdmin(TimestampedAdmin):
     )
     autocomplete_fields = ("series", "scan_operator", "image_type")
     filter_horizontal = ("identifiers",)
+    inlines = (ArchiveLocationInline,)
     fieldsets = (
         (None, {"fields": ("series", "image_type", "sop_instance_uid")}),
-        ("Acquisition", {"fields": ("acquisition_datetime", "scan_operator", "source_file", "thumbnail", "endpoint")}),
+        ("Acquisition", {"fields": ("acquisition_datetime", "scan_operator", "source_file", "thumbnail")}),
         ("Image Processing", {"fields": ("patient_orientation", "image_transform_ops")}),
         (
             "Physical Location",
@@ -284,3 +296,32 @@ class RecordAdmin(TimestampedAdmin):
     @admin.display(description="Modality")
     def modality_display(self, obj):
         return getattr(getattr(obj, "series", None), "modality", None)
+
+
+@admin.register(Endpoint)
+class EndpointAdmin(TimestampedAdmin):
+    """Admin settings for archive endpoints."""
+
+    list_display = ("name", "connection_type", "status", "address", "created_at")
+    list_filter = ("status", "connection_type")
+    list_editable = ("status",)
+    search_fields = ("name", "address")
+    fieldsets = (
+        (None, {"fields": ("name", "connection_type", "status")}),
+        ("Connection", {"fields": ("address",)}),
+        ("Configuration", {"fields": ("config", "credentials_encrypted")}),
+    )
+
+
+@admin.register(ArchiveLocation)
+class ArchiveLocationAdmin(TimestampedAdmin):
+    """Admin settings for archived record locations."""
+
+    list_display = ("record", "endpoint", "assigned_id", "status", "archived_at", "created_at")
+    list_filter = ("status", "endpoint__connection_type", "endpoint__status")
+    search_fields = ("assigned_id", "record__id", "endpoint__name", "endpoint__address")
+    autocomplete_fields = ("record", "endpoint")
+    fieldsets = (
+        (None, {"fields": ("record", "endpoint", "assigned_id")}),
+        ("State", {"fields": ("status", "archived_at")}),
+    )

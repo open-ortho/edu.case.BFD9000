@@ -114,7 +114,7 @@ class ApiFlowTests(CleanupAPITestCase):
         # New model: record belongs to a series -> imaging_study
         self.assertIsNotNone(record.series)
         self.assertIsNotNone(record.series.imaging_study)
-        self.assertTrue(record.source_file or record.thumbnail or record.endpoint)
+        self.assertTrue(record.source_file or record.thumbnail)
         self.assertEqual(record.series.record_type.code, self.rt.code)
 
         # 5. Verify Image Download

@@ -9,7 +9,16 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from PIL import Image
 from rest_framework import status
-from archive.models import Subject, Encounter, Record, Coding, Collection, ImagingStudy
+from archive.models import (
+    ArchiveLocation,
+    Collection,
+    Coding,
+    Encounter,
+    Endpoint,
+    ImagingStudy,
+    Record,
+    Subject,
+)
 from archive.constants import (
     SYSTEM_RECORD_TYPE,
     SYSTEM_ORIENTATION,
@@ -636,3 +645,61 @@ class RecordTests(CleanupAPITestCase):
             study_response.data['scan_operator_username'], 'testuser')
         self.assertEqual(
             study_response.data['scan_operator_display'], 'Test User (testuser)')
+
+    def test_record_detail_includes_archive_locations(self):
+        """Record detail payload should include nested archive locations."""
+        upload_url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+
+        create_response = self.client.post(
+            upload_url,
+            {
+                "file": file,
+                "record_type": self.rt_lateral.code,
+                "modality": "RG",
+            },
+            format='multipart',
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        record_id = create_response.data['id']
+
+        endpoint = Endpoint.objects.create(
+            name='PACS-A',
+            status=Endpoint.Status.ACTIVE,
+            connection_type=Endpoint.ConnectionType.DICOM_STOW_RS,
+            address='https://pacs.example.org/dicomweb',
+        )
+        ArchiveLocation.objects.create(
+            record_id=record_id,
+            endpoint=endpoint,
+            assigned_id='1.2.840.10008.5.1.4',
+            status=ArchiveLocation.Status.ARCHIVED,
+            archived_at=datetime.datetime.now(datetime.timezone.utc),
+        )
+
+        detail_url = reverse('archive:record-detail', kwargs={'pk': record_id})
+        detail_response = self.client.get(detail_url)
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertIn('archive_locations', detail_response.data)
+        self.assertEqual(len(detail_response.data['archive_locations']), 1)
+        location_payload = detail_response.data['archive_locations'][0]
+        self.assertEqual(location_payload['assigned_id'], '1.2.840.10008.5.1.4')
+        self.assertEqual(location_payload['endpoint']['name'], 'PACS-A')
+        self.assertEqual(location_payload['endpoint']['connection_type'], Endpoint.ConnectionType.DICOM_STOW_RS)
+
+    def test_endpoint_credentials_round_trip(self):
+        """Endpoint credentials should encrypt and decrypt through model helpers."""
+        endpoint = Endpoint.objects.create(
+            name='Drive-A',
+            status=Endpoint.Status.ACTIVE,
+            connection_type=Endpoint.ConnectionType.DRIVE,
+            address='https://drive.example.org',
+        )
+        payload = {'token': 'secret-token', 'user': 'archive-bot'}
+        endpoint.set_credentials(payload)
+        endpoint.save()
+
+        endpoint.refresh_from_db()
+        self.assertNotEqual(endpoint.credentials_encrypted, '')
+        self.assertNotIn('secret-token', endpoint.credentials_encrypted)
+        self.assertEqual(endpoint.get_credentials(), payload)

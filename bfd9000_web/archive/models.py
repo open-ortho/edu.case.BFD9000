@@ -5,6 +5,12 @@ This module defines the database schema for the BFD9000 system, including
 core entities like Subject, Encounter, ImagingStudy, and Record, as well as
 supporting entities like Coding, Identifier, and Collection.
 """
+import base64
+import hashlib
+import json
+from typing import Any
+
+from cryptography.fernet import Fernet, InvalidToken
 from django.db import models
 from .media_utils import generate_dicom_uid
 from django.db.models import QuerySet
@@ -525,6 +531,67 @@ class Series(TimestampedModel):
         super().save(*args, **kwargs)
 
 
+class Endpoint(TimestampedModel):
+    """Configurable archive destination for one or more record copies."""
+
+    class Status(models.TextChoices):
+        ACTIVE = 'active', 'active'
+        SUSPENDED = 'suspended', 'suspended'
+        OFF = 'off', 'off'
+
+    class ConnectionType(models.TextChoices):
+        DICOM_STOW_RS = 'dicom-stow-rs', 'dicom-stow-rs'
+        DICOM_DIMSE = 'dicom-dimse', 'dicom-dimse'
+        SMB = 'smb', 'smb'
+        BOX = 'box', 'box'
+        DRIVE = 'drive', 'drive'
+        FILE = 'file', 'file'
+        OTHER = 'other', 'other'
+
+    name = models.CharField(max_length=255, unique=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    connection_type = models.CharField(max_length=32, choices=ConnectionType.choices)
+    address = models.CharField(max_length=500, blank=True)
+    config = models.JSONField(default=dict, blank=True)
+    credentials_encrypted = models.TextField(blank=True)
+
+    class Meta(TimestampedModel.Meta):
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['status', 'connection_type']),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.connection_type})"
+
+    def _get_fernet(self) -> Fernet:
+        configured_key = str(getattr(settings, 'ENDPOINT_CREDENTIALS_KEY', '') or '').strip()
+        if configured_key:
+            key_bytes = configured_key.encode('utf-8')
+        else:
+            digest = hashlib.sha256(settings.SECRET_KEY.encode('utf-8')).digest()
+            key_bytes = base64.urlsafe_b64encode(digest)
+        return Fernet(key_bytes)
+
+    def set_credentials(self, payload: dict[str, Any]) -> None:
+        serialized = json.dumps(payload, sort_keys=True, separators=(',', ':'))
+        token = self._get_fernet().encrypt(serialized.encode('utf-8'))
+        self.credentials_encrypted = token.decode('utf-8')
+
+    def get_credentials(self) -> dict[str, Any]:
+        if not self.credentials_encrypted:
+            return {}
+        try:
+            plaintext = self._get_fernet().decrypt(self.credentials_encrypted.encode('utf-8'))
+        except InvalidToken as exc:
+            raise ValidationError('Endpoint credentials cannot be decrypted with current key') from exc
+
+        data = json.loads(plaintext.decode('utf-8'))
+        if not isinstance(data, dict):
+            raise ValidationError('Endpoint credentials payload must be a JSON object')
+        return data
+
+
 class Record(TimestampedModel):
     """
     Physical or digital artifact instance. Corresponds to DICOM Instance.
@@ -562,10 +629,6 @@ class Record(TimestampedModel):
         upload_to='thumbnails/',
         null=True, blank=True,
         help_text='Compressed preview image (target 20KB, hard limit 100KB JPEG). Persists for browse UX.'
-    )
-    endpoint = models.URLField(
-        max_length=500, blank=True,
-        help_text='URL of the permanently archived virtual record (DICOMweb, Box, PACS, etc.)'
     )
     # Legacy/local image type coding
     image_type = models.ForeignKey(
@@ -622,3 +685,43 @@ class Record(TimestampedModel):
             # DICOM SOPInstanceUID (official DICOM keyword)
             self.sop_instance_uid = generate_dicom_uid(SOPINSTANCEUID_ROOT)
         super().save(*args, **kwargs)
+
+
+class ArchiveLocation(TimestampedModel):
+    """One concrete archived copy of a record stored at an endpoint."""
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'pending'
+        ARCHIVED = 'archived', 'archived'
+        FAILED = 'failed', 'failed'
+        VERIFIED = 'verified', 'verified'
+
+    record = models.ForeignKey(
+        Record,
+        on_delete=models.CASCADE,
+        related_name='archive_locations',
+        help_text='Record represented by this archived copy',
+    )
+    endpoint = models.ForeignKey(
+        Endpoint,
+        on_delete=models.PROTECT,
+        related_name='archive_locations',
+        help_text='Archive endpoint where the record copy is stored',
+    )
+    assigned_id = models.CharField(
+        max_length=500,
+        help_text='Endpoint-assigned identifier (UID, file id, path, etc.)',
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta(TimestampedModel.Meta):
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['record']),
+            models.Index(fields=['endpoint']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self) -> str:
+        return f"ArchiveLocation record={self.record_id} endpoint={self.endpoint_id}"

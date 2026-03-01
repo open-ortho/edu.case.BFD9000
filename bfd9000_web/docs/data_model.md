@@ -68,10 +68,11 @@ Owns grouping/classification fields:
 [Endpoint]
     - id
     - status        (active | suspended | off)
-    - connection_type  (dicom-stow-rs | dicom-dimse | smb | box | drive | ...)
+    - connection_type  (dicom-stow-rs | dicom-dimse | smb | box | drive | file | ...)
     - address       (base URI/address)
     - name
-    - config        (JSON blob: AE title, auth tokens, port overrides, etc.)
+    - config        (JSON blob: AE title, port overrides, non-secret settings)
+    - credentials_encrypted (encrypted secret payload, not exposed via API)
 ```
 
 FHIR Mapping When You Plug In Later
@@ -91,7 +92,8 @@ Owns per-instance/acquisition fields:
 
 - `sop_instance_uid` (instance UID)
 - acquisition metadata (`acquisition_datetime`, `scan_operator`)
-- file/preview/archive linkage (`source_file`, `thumbnail`, `endpoint`)
+- file/preview linkage (`source_file`, `thumbnail`)
+- archive linkage via `ArchiveLocation` rows
 - transform and orientation metadata (`patient_orientation`, `image_transform_ops`)
 - physical storage details (`physical_location_*`)
 - optional capture `device`
@@ -122,9 +124,9 @@ These are different concepts and must never be substituted.
 `Record` can represent physical artifacts, virtual artifacts, or both:
 
 - Physical location: represented by structured archive fields and optional address link.
-- Virtual location: represented by `endpoint` for permanent retrieval target.
-
-Current schema supports one canonical endpoint per record. If multiple virtual endpoints are required later, add a separate child model instead of overloading existing fields.
+- Virtual location: represented by one or more `ArchiveLocation` rows, each referencing an `Endpoint`.
+- `Endpoint` stores connection definition (`connection_type`, `address`, `config`, status).
+- `ArchiveLocation` stores record-specific assignment (`assigned_id`, status, `archived_at`).
 
 ## Staging vs archival storage
 

@@ -21,9 +21,11 @@ from .models import (
     Coding,
     Identifier,
     Address,
+    ArchiveLocation,
     Collection,
     Subject,
     Encounter,
+    Endpoint,
     Location,
     ImagingStudy,
     Series,
@@ -274,6 +276,25 @@ class ImagingStudySerializer(serializers.ModelSerializer):
             return f"{full_name} ({operator.username})"
         return operator.username
 
+
+class EndpointSerializer(serializers.ModelSerializer):
+    """Serializer for Endpoint model."""
+
+    class Meta:
+        model = Endpoint
+        fields = ('id', 'name', 'status', 'connection_type', 'address', 'config')
+
+
+class ArchiveLocationSerializer(serializers.ModelSerializer):
+    """Serializer for ArchiveLocation model."""
+
+    endpoint = EndpointSerializer(read_only=True)
+    endpoint_id = serializers.IntegerField(source='endpoint.id', read_only=True)
+
+    class Meta:
+        model = ArchiveLocation
+        fields = '__all__'
+
 class RecordSerializer(serializers.ModelSerializer):
     """Serializer for Record model."""
     identifiers = IdentifierSerializer(many=True, read_only=True)
@@ -303,6 +324,7 @@ class RecordSerializer(serializers.ModelSerializer):
     image_type = CodingSerializer(read_only=True)
     thumbnail_url = serializers.SerializerMethodField()
     image_url = serializers.SerializerMethodField()
+    archive_locations = ArchiveLocationSerializer(many=True, read_only=True)
 
     class Meta:
         """Serializer metadata."""
@@ -363,7 +385,7 @@ class RecordSerializer(serializers.ModelSerializer):
                 return obj.source_file.url
             except Exception:
                 return None
-        return getattr(obj, 'endpoint', None)
+        return None
 
 class RecordUploadSerializer(serializers.ModelSerializer):
     """

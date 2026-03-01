@@ -25,12 +25,12 @@ from django.shortcuts import render
 from django.views.decorators.http import require_POST
 from .models import (
     Coding, Identifier, Address, Collection, Subject,
-    Encounter, Location, ImagingStudy, Series, Record, ValueSet
+    ArchiveLocation, Encounter, Endpoint, Location, ImagingStudy, Series, Record, ValueSet
 )
 from .serializers import (
     CodingSerializer, IdentifierSerializer, AddressSerializer,
-    CollectionSerializer, SubjectSerializer, EncounterSerializer,
-    LocationSerializer, ImagingStudySerializer, RecordSerializer,
+    ArchiveLocationSerializer, CollectionSerializer, SubjectSerializer, EncounterSerializer,
+    EndpointSerializer, LocationSerializer, ImagingStudySerializer, RecordSerializer,
     RecordUploadSerializer, SeriesSerializer
 )
 from .constants import (
@@ -236,6 +236,24 @@ class SeriesViewSet(viewsets.ModelViewSet):
     serializer_class = SeriesSerializer
 
 
+class EndpointViewSet(viewsets.ModelViewSet):
+    """ViewSet for archive Endpoint definitions."""
+
+    queryset = Endpoint.objects.all()
+    serializer_class = EndpointSerializer
+    filterset_fields = ['status', 'connection_type']
+    search_fields = ['name', 'address']
+
+
+class ArchiveLocationViewSet(viewsets.ModelViewSet):
+    """ViewSet for archived storage locations of records."""
+
+    queryset = ArchiveLocation.objects.select_related('record', 'endpoint')
+    serializer_class = ArchiveLocationSerializer
+    filterset_fields = ['record', 'endpoint', 'status', 'endpoint__connection_type']
+    search_fields = ['assigned_id', 'record__id', 'endpoint__name', 'endpoint__address']
+
+
 class RecordViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Record model.
@@ -250,6 +268,7 @@ class RecordViewSet(viewsets.ModelViewSet):
         'series__modality'
     ).prefetch_related(
         'series__imaging_study__encounter__subject__identifiers',
+        'archive_locations__endpoint',
         'identifiers'
     )
     serializer_class = RecordSerializer
