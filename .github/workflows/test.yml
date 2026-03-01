@@ -3,7 +3,10 @@ name: Run Django Tests
 # AI should know how to fix it.
 
 on:
-  # Run manually only; automated tests run as part of the publish-ghcr workflow before deployment
+  pull_request:
+    # Run on all PRs, regardless of target branch
+    types: [opened, synchronize, reopened, ready_for_review]
+  # Allow manual runs as well
   workflow_dispatch:
 
 jobs:
@@ -23,3 +26,24 @@ jobs:
       - name: Run Django tests
         run: |
           nix develop --command python bfd9000_web/manage.py test --verbosity=2
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (no push)
+        # Build only to verify the Dockerfile is valid; image is discarded after this job.
+        uses: docker/build-push-action@v5
+        with:
+          context: ./bfd9000_web
+          file: ./bfd9000_web/Dockerfile
+          push: false
