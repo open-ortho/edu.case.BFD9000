@@ -6,6 +6,7 @@ to and from native Python datatypes that can then be easily rendered into JSON, 
 It includes specialized logic for file uploads and validation.
 """
 import datetime
+import logging
 import os
 import importlib
 import json
@@ -17,6 +18,8 @@ except ImportError:
     magic = None
 from django.db import transaction
 from rest_framework import serializers
+
+logger = logging.getLogger(__name__)
 from .models import (
     Coding,
     Identifier,
@@ -626,8 +629,8 @@ class RecordUploadSerializer(serializers.ModelSerializer):
                     thumb_name = f"{record.id}.jpg"
                     record.thumbnail.save(thumb_name, thumb_content, save=False)
             except Exception:
-                # On failure, skip thumbnail generation
-                pass
+                # On failure, skip thumbnail generation but log so failures are observable
+                logger.warning("Thumbnail generation failed for record %s", record.pk, exc_info=True)
 
             record.save()
 
