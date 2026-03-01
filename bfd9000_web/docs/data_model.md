@@ -2,12 +2,14 @@
 
 This document defines the archive concepts and rationale used by the Django models.
 
+
 ## Core hierarchy
 
 Imaging data is organized as:
 
-`Encounter 1 -> 1 ImagingStudy 1 -> N Series 1 -> N Record`
+`Subject 1 -> N Encounter 1 -> 1 ImagingStudy 1 -> N Series 1 -> N Record`
 
+- `Subject`: human/animal originator of the data, that the data represents
 - `Encounter`: clinical event context.
 - `ImagingStudy`: one study wrapper per encounter.
 - `Series`: grouping of records with shared modality and clinical study type.
@@ -53,6 +55,38 @@ Owns grouping/classification fields:
 
 ### Record
 
+```text
+[Record]
+    - id
+    - (clinical metadata: sop_instance_uid, series, date, etc.)
+[ArchiveLocation]
+    - record_id     FK → Record
+    - endpoint_id   FK → Endpoint
+    - assigned_id   string (UID, Box file ID, SMB path, whatever)
+    - status        (pending | archived | failed | verified)
+    - archived_at   timestamp
+[Endpoint]
+    - id
+    - status        (active | suspended | off)
+    - connection_type  (dicom-stow-rs | dicom-dimse | smb | box | drive | ...)
+    - address       (base URI/address)
+    - name
+    - config        (JSON blob: AE title, auth tokens, port overrides, etc.)
+```
+
+FHIR Mapping When You Plug In Later
+
+|   Your table    |               FHIR                |                         Notes                         |
+| --------------- | --------------------------------- | ----------------------------------------------------- |
+| Endpoint        | Endpoint                          | Nearly 1:1. config blob maps to header[] + extensions |
+| Record          | ImagingStudy or DocumentReference | Depends on content type                               |
+| ArchiveLocation | No native resource                | Gap — use extension or one-DocRef-per-copy pattern    |
+
+For ArchiveLocation, the cleanest FHIR mapping when the time comes will be one DocumentReference per row, where:
+
+- content[0].attachment.url = the full resolved URL (base address + assigned_id, composed at query time or stored directly)
+- An extension holds the Endpoint reference + raw assigned_id separately if you need them decomposed
+The relatesTo chain links all copies back to the canonical record.
 Owns per-instance/acquisition fields:
 
 - `sop_instance_uid` (instance UID)
