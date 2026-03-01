@@ -1,5 +1,6 @@
 """Utilities for media processing and transformations."""
 
+import logging
 import os
 import uuid
 from io import BytesIO
@@ -7,6 +8,8 @@ from typing import Any, Optional
 
 from django.conf import settings
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 try:
     from pydicom.uid import generate_uid as pydicom_generate_uid  # type: ignore[import-not-found]
@@ -120,7 +123,7 @@ def generate_thumbnail_jpeg_bytes(
             img = apply_transform_ops(img, transform_ops)
         return _render_thumbnail_from_raster(img)
     except Exception:
-        pass
+        logger.warning("Thumbnail generation failed for %s", filename, exc_info=True)
     return None
 
 
