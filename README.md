@@ -27,3 +27,27 @@ Other collections, such as [the ones in the AAOF Legacy Collection](https://www.
 
 - `bfd9000_web/`: Django application for managing and viewing the BFD9000 data.
   To run the application, follow the instructions in `bfd9000_web/README.md`.
+
+## Django Bootstrap
+
+The archive app provides a convenience management command to initialize a local development database:
+
+`python bfd9000_web/manage.py initialize`
+
+This runs:
+
+- `migrate`
+- `createsuperuser`
+- `import_subjects` (Bolton + Lancaster by default)
+
+Useful options:
+
+- `--skip-migrate`
+- `--skip-superuser`
+- `--skip-import`
+- `--import-source {all,bolton,lancaster}`
+- `--non-interactive --superuser-username ... --superuser-email ... --superuser-password ...`
+
+See full command help:
+
+`python bfd9000_web/manage.py help initialize`

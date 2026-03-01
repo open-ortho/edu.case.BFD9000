@@ -198,4 +198,16 @@ CORS_ALLOWED_ORIGINS = os.environ.get(
 
 SCANNER_API_BASE = os.environ.get('SCANNER_API_BASE', 'http://localhost:5000')
 SCANNER_DEVICE_ID = os.environ.get('SCANNER_DEVICE_ID', 'scanner-001')
-BFD9020_BASE_URL = os.environ.get('BFD9020_BASE_URL', 'https://wingate.case.edu/bfd9020')
+BFD9020_BASE_URL = os.environ.get(
+    'BFD9020_BASE_URL', 'https://wingate.case.edu/bfd9020')
+
+# Thumbnail generation policy (staging and UI previews)
+THUMBNAIL_MAX_WIDTH = int(os.environ.get('THUMBNAIL_MAX_WIDTH', '300'))
+THUMBNAIL_MAX_HEIGHT = int(os.environ.get('THUMBNAIL_MAX_HEIGHT', '300'))
+THUMBNAIL_TARGET_BYTES = int(os.environ.get(
+    'THUMBNAIL_TARGET_BYTES', str(20 * 1024)))
+THUMBNAIL_HARD_MAX_BYTES = int(os.environ.get(
+    'THUMBNAIL_HARD_MAX_BYTES', str(100 * 1024)))
+THUMBNAIL_DEFAULT_QUALITY = int(
+    os.environ.get('THUMBNAIL_DEFAULT_QUALITY', '75'))
+THUMBNAIL_MIN_QUALITY = int(os.environ.get('THUMBNAIL_MIN_QUALITY', '40'))

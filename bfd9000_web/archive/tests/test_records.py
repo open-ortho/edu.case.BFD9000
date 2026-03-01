@@ -9,7 +9,16 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from PIL import Image
 from rest_framework import status
-from archive.models import Subject, Encounter, Record, Coding, Collection, ImagingStudy
+from archive.models import (
+    ArchiveLocation,
+    Collection,
+    Coding,
+    Encounter,
+    Endpoint,
+    ImagingStudy,
+    Record,
+    Subject,
+)
 from archive.constants import (
     SYSTEM_RECORD_TYPE,
     SYSTEM_ORIENTATION,
@@ -20,8 +29,10 @@ from archive.constants import (
 )
 from .base import CleanupAPITestCase
 
+
 class RecordTests(CleanupAPITestCase):
     """Validate record creation, upload, and retrieval behavior."""
+
     def setUp(self):
         # Create user for authentication
         self.user = User.objects.create_user(
@@ -99,13 +110,16 @@ class RecordTests(CleanupAPITestCase):
         )
 
         tiff_buf = io.BytesIO()
-        Image.new('RGB', (1, 1), color=(255, 255, 255)).save(tiff_buf, format='TIFF')
+        Image.new('RGB', (1, 1), color=(255, 255, 255)
+                  ).save(tiff_buf, format='TIFF')
         self.tiff_content = tiff_buf.getvalue()
 
     def test_create_record_with_file(self):
         """Should create record with file upload"""
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.png", self.image_content, content_type="image/png")
 
         data = {
             "file": file,
@@ -117,7 +131,8 @@ class RecordTests(CleanupAPITestCase):
 
         response = self.client.post(url, data, format='multipart')
         if response.status_code != status.HTTP_201_CREATED:
-            print(f"Record creation failed: {response.status_code} - {response.data}")
+            print(
+                f"Record creation failed: {response.status_code} - {response.data}")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn('id', response.data)
         # Verify record was created successfully
@@ -125,8 +140,10 @@ class RecordTests(CleanupAPITestCase):
 
     def test_create_record_with_tiff_file(self):
         """Should create record with TIFF upload."""
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.tiff", self.tiff_content, content_type="image/tiff")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.tiff", self.tiff_content, content_type="image/tiff")
 
         data = {
             "file": file,
@@ -141,7 +158,8 @@ class RecordTests(CleanupAPITestCase):
 
     def test_create_record_missing_file(self):
         """Should return 400 if file is missing"""
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
         data = {
             "record_type": self.rt_lateral.code,
             "orientation": "left",
@@ -154,8 +172,10 @@ class RecordTests(CleanupAPITestCase):
 
     def test_create_record_missing_required_metadata(self):
         """Should return 400 if required metadata is missing"""
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.png", self.image_content, content_type="image/png")
 
         data = {
             "file": file,
@@ -167,8 +187,10 @@ class RecordTests(CleanupAPITestCase):
 
     def test_create_record_invalid_encounter(self):
         """Should return 404 for non-existent encounter"""
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': 99999})
-        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': 99999})
+        file = SimpleUploadedFile(
+            "test.png", self.image_content, content_type="image/png")
 
         data = {
             "file": file,
@@ -183,9 +205,11 @@ class RecordTests(CleanupAPITestCase):
     def test_list_records_for_encounter(self):
         """Should list all records for an encounter"""
         # Create records
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
         for i in range(2):
-            file = SimpleUploadedFile(f"test{i}.png", self.image_content, content_type="image/png")
+            file = SimpleUploadedFile(
+                f"test{i}.png", self.image_content, content_type="image/png")
             data = {
                 "file": file,
                 "record_type": self.rt_lateral.code,
@@ -202,8 +226,10 @@ class RecordTests(CleanupAPITestCase):
     def test_get_record_detail(self):
         """Should retrieve specific record details"""
         # Create a record
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.png", self.image_content, content_type="image/png")
         data = {
             "file": file,
             "record_type": self.rt_lateral.code,
@@ -229,8 +255,10 @@ class RecordTests(CleanupAPITestCase):
     def test_update_record_metadata(self):
         """Should update record metadata"""
         # Create a record
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.png", self.image_content, content_type="image/png")
         data = {
             "file": file,
             "record_type": self.rt_lateral.code,
@@ -252,8 +280,10 @@ class RecordTests(CleanupAPITestCase):
     def test_delete_record(self):
         """Should delete record"""
         # Create a record
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.png", self.image_content, content_type="image/png")
         data = {
             "file": file,
             "record_type": self.rt_lateral.code,
@@ -274,8 +304,10 @@ class RecordTests(CleanupAPITestCase):
     def test_get_record_image(self):
         """Should serve full record image"""
         # Create a record
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.png", self.image_content, content_type="image/png")
         data = {
             "file": file,
             "record_type": self.rt_lateral.code,
@@ -291,10 +323,12 @@ class RecordTests(CleanupAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('image/', response['Content-Type'])
 
-    def test_get_record_image_converts_tiff_to_png(self):
-        """Record image endpoint should return browser-friendly PNG for TIFF source."""
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.tiff", self.tiff_content, content_type="image/tiff")
+    def test_get_record_image_returns_raw_tiff(self):
+        """Record image endpoint should passthrough TIFF source unmodified."""
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.tiff", self.tiff_content, content_type="image/tiff")
         data = {
             "file": file,
             "record_type": self.rt_lateral.code,
@@ -307,12 +341,14 @@ class RecordTests(CleanupAPITestCase):
         image_url = reverse('archive:record-image', kwargs={'pk': record_id})
         response = self.client.get(image_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response['Content-Type'], 'image/png')
+        self.assertEqual(response['Content-Type'], 'image/tiff')
 
     def test_create_record_sets_default_patient_orientation_for_lateral_image_type(self):
         """Lateral image type should default PatientOrientation to A\\F."""
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.tiff", self.tiff_content, content_type="image/tiff")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.tiff", self.tiff_content, content_type="image/tiff")
         data = {
             "file": file,
             "record_type": self.rt_lateral.code,
@@ -323,20 +359,23 @@ class RecordTests(CleanupAPITestCase):
 
         create_response = self.client.post(url, data, format='multipart')
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(create_response.data['patient_orientation'], ['A', 'F'])
+        self.assertEqual(
+            create_response.data['patient_orientation'], ['A', 'F'])
 
         record = Record.objects.get(pk=create_response.data['id'])
         self.assertEqual(record.patient_orientation, 'A\\F')
 
-    def test_record_image_applies_saved_transform_ops(self):
-        """Image endpoint should apply persisted transform operations."""
+    def test_record_image_ignores_saved_transform_ops(self):
+        """Image endpoint should serve raw source regardless of transform ops."""
         img = Image.new('RGB', (2, 1), color=(255, 255, 255))
         buf = io.BytesIO()
         img.save(buf, format='PNG')
         png_content = buf.getvalue()
 
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.png", png_content, content_type="image/png")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.png", png_content, content_type="image/png")
         data = {
             "file": file,
             "record_type": self.rt_lateral.code,
@@ -348,19 +387,23 @@ class RecordTests(CleanupAPITestCase):
         create_response = self.client.post(url, data, format='multipart')
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
 
-        image_url = reverse('archive:record-image', kwargs={'pk': create_response.data['id']})
+        image_url = reverse('archive:record-image',
+                            kwargs={'pk': create_response.data['id']})
         response = self.client.get(image_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response['Content-Type'], 'image/png')
 
-        transformed = Image.open(io.BytesIO(response.content))
-        self.assertEqual(transformed.size, (1, 2))
+        payload = b''.join(response.streaming_content) if hasattr(
+            response, 'streaming_content') else response.content
+        raw = Image.open(io.BytesIO(payload))
+        self.assertEqual(raw.size, (2, 1))
 
     def test_get_record_thumbnail(self):
-        """Should serve record thumbnail"""
-        # Create a record
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        """Should serve record thumbnail (raster image)"""
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.png", self.image_content, content_type="image/png")
         data = {
             "file": file,
             "record_type": self.rt_lateral.code,
@@ -369,19 +412,73 @@ class RecordTests(CleanupAPITestCase):
         }
         create_response = self.client.post(url, data, format='multipart')
         record_id = create_response.data['id']
-
-        # Get thumbnail
         url = reverse('archive:record-thumbnail', kwargs={'pk': record_id})
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('image/', response['Content-Type'])
+        self.assertEqual(response['Content-Type'], 'image/jpeg')
+        payload = b''.join(response.streaming_content) if hasattr(
+            response, 'streaming_content') else response.content
+        self.assertTrue(payload.startswith(b'\xff\xd8'))  # JPEG SOI
+
+    def test_get_record_thumbnail_for_3d_file(self):
+        """Should serve static fallback JPEG for 3D file (e.g., STL)"""
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        stl_content = b"solid ascii\nendsolid"
+        file = SimpleUploadedFile(
+            "test.stl", stl_content, content_type="application/octet-stream")
+        data = {
+            "file": file,
+            "record_type": self.rt_lateral.code,
+            "orientation": "left",
+            "modality": "RG",
+        }
+        create_response = self.client.post(url, data, format='multipart')
+        record_id = create_response.data['id']
+        url = reverse('archive:record-thumbnail', kwargs={'pk': record_id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response['Content-Type'], 'image/jpeg')
+        self.assertTrue(response.content.startswith(b'\xff\xd8'))
+
+        # 3D inputs should not generate a persisted thumbnail yet
+        record = Record.objects.get(pk=record_id)
+        self.assertFalse(bool(record.thumbnail))
+
+    def test_create_record_uses_thumbnail_preview_when_provided(self):
+        """3D source can still store thumbnail when thumbnail_preview is provided."""
+        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        stl_file = SimpleUploadedFile(
+            "model.stl",
+            b"solid ascii\nendsolid",
+            content_type="application/octet-stream",
+        )
+        preview_png = SimpleUploadedFile(
+            "preview.png",
+            self.image_content,
+            content_type="image/png",
+        )
+        data = {
+            "file": stl_file,
+            "thumbnail_preview": preview_png,
+            "record_type": self.rt_lateral.code,
+            "orientation": "left",
+            "modality": "RG",
+        }
+        create_response = self.client.post(url, data, format='multipart')
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        record = Record.objects.get(pk=create_response.data['id'])
+        self.assertTrue(bool(record.thumbnail))
 
     def test_filter_records_by_record_type(self):
         """Should filter records by record type"""
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
 
         # Create records with different types
-        file1 = SimpleUploadedFile("test1.png", self.image_content, content_type="image/png")
+        file1 = SimpleUploadedFile(
+            "test1.png", self.image_content, content_type="image/png")
         data1 = {
             "file": file1,
             "record_type": self.rt_lateral.code,
@@ -398,19 +495,24 @@ class RecordTests(CleanupAPITestCase):
         self.assertGreater(len(response.data['results']), 0)
         for record in response.data['results']:
             # record_type is a nested object with code field
-            self.assertEqual(record['record_type']['code'], self.rt_lateral.code)
+            self.assertEqual(record['record_type']
+                             ['code'], self.rt_lateral.code)
 
     def test_unauthenticated_access(self):
         """Should return 401/403 if not authenticated"""
         self.client.logout()
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
         response = self.client.get(url)
-        self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
+        self.assertIn(response.status_code, [
+                      status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
 
     def test_record_response_structure(self):
         """Should return record with expected fields"""
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.png", self.image_content, content_type="image/png")
         data = {
             "file": file,
             "record_type": self.rt_lateral.code,
@@ -420,7 +522,8 @@ class RecordTests(CleanupAPITestCase):
 
         response = self.client.post(url, data, format='multipart')
         if response.status_code != status.HTTP_201_CREATED:
-            print(f"Record creation failed: {response.status_code} - {response.data}")
+            print(
+                f"Record creation failed: {response.status_code} - {response.data}")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         # Check for expected fields (fields that exist on Record model)
@@ -430,8 +533,10 @@ class RecordTests(CleanupAPITestCase):
 
     def test_record_includes_encounter_date(self):
         """Should expose encounter date in record response."""
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.png", self.image_content, content_type="image/png")
         data = {
             "file": file,
             "record_type": self.rt_lateral.code,
@@ -451,8 +556,10 @@ class RecordTests(CleanupAPITestCase):
             procedure_code=self.procedure,
             procedure_occurrence_age=None,
         )
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': encounter.id})
-        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': encounter.id})
+        file = SimpleUploadedFile(
+            "test.png", self.image_content, content_type="image/png")
         data = {
             "file": file,
             "record_type": self.rt_lateral.code,
@@ -462,17 +569,22 @@ class RecordTests(CleanupAPITestCase):
 
         create_response = self.client.post(url, data, format='multipart')
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
-        self.assertAlmostEqual(create_response.data['age_at_encounter'], 20.45, delta=0.05)
+        self.assertAlmostEqual(
+            create_response.data['age_at_encounter'], 20.45, delta=0.05)
 
-        detail_url = reverse('archive:record-detail', kwargs={'pk': create_response.data['id']})
+        detail_url = reverse('archive:record-detail',
+                             kwargs={'pk': create_response.data['id']})
         detail_response = self.client.get(detail_url)
         self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
-        self.assertAlmostEqual(detail_response.data['age_at_encounter'], 20.45, delta=0.05)
+        self.assertAlmostEqual(
+            detail_response.data['age_at_encounter'], 20.45, delta=0.05)
 
     def test_upload_preserves_acquisition_date(self):
         """Should return the same acquisition date submitted on upload."""
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.png", self.image_content, content_type="image/png")
 
         data = {
             "file": file,
@@ -488,8 +600,10 @@ class RecordTests(CleanupAPITestCase):
 
     def test_create_record_rejects_body_site_code_as_record_type(self):
         """Should reject body-site coding when submitted as record_type."""
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.png", self.image_content, content_type="image/png")
         body_site, _ = Coding.objects.get_or_create(
             system=SYSTEM_BODY_SITE,
             code='69536005',
@@ -509,8 +623,10 @@ class RecordTests(CleanupAPITestCase):
 
     def test_imaging_study_operator_display_fields(self):
         """Imaging study API should expose username and full display for operator."""
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        url = reverse('archive:encounter-records-list',
+                      kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile(
+            "test.png", self.image_content, content_type="image/png")
         data = {
             "file": file,
             "record_type": self.rt_lateral.code,
@@ -521,8 +637,69 @@ class RecordTests(CleanupAPITestCase):
         create_response = self.client.post(url, data, format='multipart')
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
 
-        study_url = reverse('archive:imagingstudy-detail', kwargs={'pk': create_response.data['imaging_study']})
+        study_url = reverse('archive:imagingstudy-detail',
+                            kwargs={'pk': create_response.data['imaging_study']})
         study_response = self.client.get(study_url)
         self.assertEqual(study_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(study_response.data['scan_operator_username'], 'testuser')
-        self.assertEqual(study_response.data['scan_operator_display'], 'Test User (testuser)')
+        self.assertEqual(
+            study_response.data['scan_operator_username'], 'testuser')
+        self.assertEqual(
+            study_response.data['scan_operator_display'], 'Test User (testuser)')
+
+    def test_record_detail_includes_archive_locations(self):
+        """Record detail payload should include nested archive locations."""
+        upload_url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+
+        create_response = self.client.post(
+            upload_url,
+            {
+                "file": file,
+                "record_type": self.rt_lateral.code,
+                "modality": "RG",
+            },
+            format='multipart',
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        record_id = create_response.data['id']
+
+        endpoint = Endpoint.objects.create(
+            name='PACS-A',
+            status=Endpoint.Status.ACTIVE,
+            connection_type=Endpoint.ConnectionType.DICOM_STOW_RS,
+            address='https://pacs.example.org/dicomweb',
+        )
+        ArchiveLocation.objects.create(
+            record_id=record_id,
+            endpoint=endpoint,
+            assigned_id='1.2.840.10008.5.1.4',
+            status=ArchiveLocation.Status.ARCHIVED,
+            archived_at=datetime.datetime.now(datetime.timezone.utc),
+        )
+
+        detail_url = reverse('archive:record-detail', kwargs={'pk': record_id})
+        detail_response = self.client.get(detail_url)
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertIn('archive_locations', detail_response.data)
+        self.assertEqual(len(detail_response.data['archive_locations']), 1)
+        location_payload = detail_response.data['archive_locations'][0]
+        self.assertEqual(location_payload['assigned_id'], '1.2.840.10008.5.1.4')
+        self.assertEqual(location_payload['endpoint']['name'], 'PACS-A')
+        self.assertEqual(location_payload['endpoint']['connection_type'], Endpoint.ConnectionType.DICOM_STOW_RS)
+
+    def test_endpoint_credentials_round_trip(self):
+        """Endpoint credentials should encrypt and decrypt through model helpers."""
+        endpoint = Endpoint.objects.create(
+            name='Drive-A',
+            status=Endpoint.Status.ACTIVE,
+            connection_type=Endpoint.ConnectionType.DRIVE,
+            address='https://drive.example.org',
+        )
+        payload = {'token': 'secret-token', 'user': 'archive-bot'}
+        endpoint.set_credentials(payload)
+        endpoint.save()
+
+        endpoint.refresh_from_db()
+        self.assertNotEqual(endpoint.credentials_encrypted, '')
+        self.assertNotIn('secret-token', endpoint.credentials_encrypted)
+        self.assertEqual(endpoint.get_credentials(), payload)

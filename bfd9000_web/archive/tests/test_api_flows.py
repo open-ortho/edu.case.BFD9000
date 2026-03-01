@@ -99,7 +99,6 @@ class ApiFlowTests(CleanupAPITestCase):
         data = {
             "file": file,
             "record_type": self.rt.code,
-            "orientation": "left",
             "modality": "RG",
             "operator": "TestOp"
         }
@@ -112,9 +111,11 @@ class ApiFlowTests(CleanupAPITestCase):
 
         # 4. Verify Record
         record = Record.objects.get(pk=record_id)
-        self.assertTrue(record.imaging_study)
-        self.assertTrue(record.imaging_study.source_file)
-        self.assertEqual(record.record_type.code, self.rt.code)
+        # New model: record belongs to a series -> imaging_study
+        self.assertIsNotNone(record.series)
+        self.assertIsNotNone(record.series.imaging_study)
+        self.assertTrue(record.source_file or record.thumbnail)
+        self.assertEqual(record.series.record_type.code, self.rt.code)
 
         # 5. Verify Image Download
         url = reverse('archive:record-image', kwargs={'pk': record_id})

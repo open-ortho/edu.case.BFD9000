@@ -18,7 +18,10 @@ router.register(r'collections', views.CollectionViewSet)
 router.register(r'subjects', views.SubjectViewSet)
 router.register(r'encounters', views.EncounterViewSet)
 router.register(r'imaging-studies', views.ImagingStudyViewSet)
+router.register(r'endpoints', views.EndpointViewSet)
+router.register(r'archive-locations', views.ArchiveLocationViewSet)
 router.register(r'records', views.RecordViewSet)
+router.register(r'series', views.SeriesViewSet)
 router.register(r'valuesets', views.ValuesetViewSet, basename='valuesets')
 
 # Nested routers
@@ -33,6 +36,10 @@ encounters_router = routers.NestedDefaultRouter(
     router, r'encounters', lookup='encounter')
 encounters_router.register(
     r'records', views.RecordViewSet, basename='encounter-records')
+
+imaging_router = routers.NestedDefaultRouter(
+    router, r'imaging-studies', lookup='imaging_study')
+imaging_router.register(r'series', views.SeriesViewSet, basename='imagingstudy-series')
 
 # Django expects `app_name` for namespacing URLs.
 # pylint: disable=invalid-name
@@ -54,4 +61,5 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('api/', include(subjects_router.urls)),
     path('api/', include(encounters_router.urls)),
+    path('api/', include(imaging_router.urls)),
 ]

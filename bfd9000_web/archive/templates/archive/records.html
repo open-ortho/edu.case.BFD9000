@@ -95,10 +95,10 @@
             params.set("search", search);
         }
         if (subject) {
-            params.set("encounter__subject", subject);
+            params.set("series__imaging_study__encounter__subject", subject);
         }
         if (encounter) {
-            params.set("encounter", encounter);
+            params.set("series__imaging_study__encounter__id", encounter);
         }
 
         const response = await fetch(`/api/records/?${params}`);
@@ -190,7 +190,7 @@
 
                 // Image type column (plain text)
                 const imageType = document.createElement("td");
-                imageType.textContent = record.image_type || "-";
+                imageType.textContent = record.image_type?.display || "-";
 
                 row.replaceChildren(
                     recordId,
