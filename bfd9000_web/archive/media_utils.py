@@ -140,9 +140,14 @@ def _render_thumbnail_from_raster(img: Image.Image) -> Optional[bytes]:
     min_quality: int = int(getattr(settings, 'THUMBNAIL_MIN_QUALITY', 40))
 
     processed: Image.Image = img.copy()
-    if processed.mode not in ('RGB', 'RGBA'):
+    if processed.mode == 'RGBA':
         processed = processed.convert('RGB')
-    elif processed.mode == 'RGBA':
+    elif processed.mode not in ('RGB',):
+        # Pillow cannot convert some modes (e.g. 'I;16' from 16-bit PNGs) directly to
+        # RGB.  Convert via 'I' (32-bit grayscale) first as an intermediate step that
+        # Pillow supports for all raw/16-bit modes.
+        if processed.mode != 'I':
+            processed = processed.convert('I')
         processed = processed.convert('RGB')
 
     processed.thumbnail((max_width, max_height))
