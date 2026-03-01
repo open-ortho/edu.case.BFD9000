@@ -92,6 +92,7 @@ The web application is configured using the following environment variables. The
 | `THUMBNAIL_HARD_MAX_BYTES`  | No             | Hard cap for thumbnail file size, in bytes.                                  | `102400` (100 KB)                             |
 | `THUMBNAIL_DEFAULT_QUALITY` | No             | Default thumbnail image quality (0-100).                                     | `75`                                          |
 | `THUMBNAIL_MIN_QUALITY`     | No             | Minimum allowed thumbnail quality (0-100).                                   | `40`                                          |
+| `CSRF_TRUSTED_ORIGINS`      | No             | Comma-separated list of trusted origins for Django's CSRF check (scheme required). | `https://example.com` or blank          |
 
 **For subpath deployments**, you must set `DJANGO_FORCE_SCRIPT_NAME` to your public path prefix (e.g., `/bfd9000`) to ensure all static/media/API/navigation work behind a proxy that strips this prefix.
 
@@ -102,6 +103,7 @@ DEBUG=True
 SECRET_KEY=your-generated-key
 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
 CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+CSRF_TRUSTED_ORIGINS=https://your-public-hostname.example.com
 DJANGO_FORCE_SCRIPT_NAME=/bfd9000
 ```
 
