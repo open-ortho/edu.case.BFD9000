@@ -26,6 +26,13 @@ SECRET_KEY = os.environ.get(
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+APP_VERSION_FILE = BASE_DIR / 'VERSION'
+APP_VERSION = os.environ.get('APP_VERSION')
+if not APP_VERSION:
+    try:
+        APP_VERSION = APP_VERSION_FILE.read_text(encoding='utf-8').strip()
+    except OSError:
+        APP_VERSION = 'nover'
 
 if not DEBUG and 'SECRET_KEY' not in os.environ:
     raise RuntimeError('SECRET_KEY must be set when DEBUG=False')
@@ -78,6 +85,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "BFD9000.context_processors.app_version",
             ],
         },
     },
