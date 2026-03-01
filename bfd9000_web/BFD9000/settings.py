@@ -86,6 +86,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "BFD9000.context_processors.app_version",
+                "BFD9000.context_processors.script_name_prefix",
             ],
         },
     },
@@ -139,7 +140,18 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+# Subpath hosting config (DJANGO_FORCE_SCRIPT_NAME env)
+FORCE_SCRIPT_NAME = os.environ.get('DJANGO_FORCE_SCRIPT_NAME', None)
+if FORCE_SCRIPT_NAME == '' or FORCE_SCRIPT_NAME is None:
+    FORCE_SCRIPT_NAME = None
+
+# Prefix-aware STATIC_URL and MEDIA_URL
+def _prefix_url(path):
+    if FORCE_SCRIPT_NAME:
+        return f"{FORCE_SCRIPT_NAME.rstrip('/')}/{path.lstrip('/')}"
+    return f"/{path.lstrip('/')}"
+
+STATIC_URL = _prefix_url('static/')
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 STORAGES = {
@@ -152,7 +164,7 @@ STORAGES = {
 }
 
 # Media files (Uploads)
-MEDIA_URL = '/media/'
+MEDIA_URL = _prefix_url('media/')
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
@@ -195,7 +207,7 @@ SPECTACULAR_SETTINGS = {
 }
 
 # Authentication
-LOGIN_REDIRECT_URL = '/'
+LOGIN_REDIRECT_URL = 'archive:index'  # Named route, prefix-safe
 LOGIN_URL = 'login'
 
 # CORS Configuration
