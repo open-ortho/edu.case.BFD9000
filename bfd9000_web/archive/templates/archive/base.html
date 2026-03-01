@@ -20,6 +20,10 @@
         {% block styles %}{% endblock %}
     </style>
     
+    <script>
+      // Global for subpath hosting; used in nav and all JS
+      window.script_name = "{{ script_name }}";
+    </script>
     {% block head %}{% endblock %}
 </head>
 <body class="bg-neutral-content md:p-8 p-4 min-h-screen flex flex-col">

@@ -221,7 +221,7 @@
             }*/
 
             try {
-                const response = await fetch('/api/encounters/', {
+                const response = await fetch((window.script_name || '') + '/api/encounters/', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
