@@ -164,7 +164,7 @@ class SubjectTests(CleanupAPITestCase):
         self.assertEqual(response.data['humanname_family'], 'Updated')
 
     def test_delete_subject(self):
-        """Should delete subject"""
+        """Non-superuser should not delete subject."""
         subject = Subject.objects.create(
             humanname_family="Doe",
             humanname_given="John",
@@ -174,10 +174,45 @@ class SubjectTests(CleanupAPITestCase):
 
         url = reverse('archive:subject-detail', kwargs={'pk': subject.id})
         response = self.client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-        # Verify deletion
+        # Verify subject still exists
+        self.assertTrue(Subject.objects.filter(pk=subject.id).exists())
+
+    def test_superuser_can_delete_subject(self):
+        """Superuser should be able to delete subject."""
+        subject = Subject.objects.create(
+            humanname_family="Doe",
+            humanname_given="John",
+            gender="male",
+            birth_date="2000-01-01"
+        )
+        superuser = User.objects.create_superuser(
+            username="admin",
+            password="adminpass",
+            email="admin@example.com",
+        )
+
+        self.client.force_authenticate(user=superuser)
+        url = reverse('archive:subject-detail', kwargs={'pk': subject.id})
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(Subject.objects.filter(pk=subject.id).exists())
+
+    def test_regular_user_without_subject_perms_cannot_create_subject(self):
+        """Regular authenticated user should not create subject."""
+        regular_user = User.objects.create_user(username='regular', password='testpassword')
+        self.client.force_authenticate(user=regular_user)
+
+        url = reverse('archive:subject-list')
+        data = {
+            "humanname_family": "Doe",
+            "humanname_given": "John",
+            "gender": "male",
+            "birth_date": "2000-01-01"
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_search_subjects(self):
         """Should search subjects by query parameter"""

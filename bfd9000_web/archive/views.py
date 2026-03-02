@@ -13,6 +13,7 @@ from rest_framework import viewsets, serializers
 from rest_framework.decorators import action
 from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
+from .permissions import CuratorOrSuperuserEditPermission, RecordPermission
 from rest_framework.request import Request
 from rest_framework.response import Response
 from drf_spectacular.types import OpenApiTypes
@@ -144,6 +145,7 @@ class CollectionViewSet(viewsets.ModelViewSet):
 
 
 class SubjectViewSet(viewsets.ModelViewSet):
+    permission_classes = [CuratorOrSuperuserEditPermission]
     """
     ViewSet for Subject model.
 
@@ -179,6 +181,7 @@ class SubjectViewSet(viewsets.ModelViewSet):
 
 
 class EncounterViewSet(viewsets.ModelViewSet):
+    permission_classes = [CuratorOrSuperuserEditPermission]
     """
     ViewSet for Encounter model.
 
@@ -267,6 +270,7 @@ class ArchiveLocationViewSet(viewsets.ModelViewSet):
 
 
 class RecordViewSet(viewsets.ModelViewSet):
+    permission_classes = [RecordPermission]
     """
     ViewSet for Record model.
 

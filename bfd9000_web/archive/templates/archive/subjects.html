@@ -46,11 +46,12 @@
         </table>
     </div>
     <div class="bg-base-300 p-2 flex items-center gap-3">
+        {% if perms.archive.add_subject %}
         <a
             href="{% url 'archive:subject_create' %}"
             class="btn btn-primary rounded-full"
-            >New Subject</a
-        >
+            >New Subject</a>
+        {% endif %}
         <div class="grow"></div>
         <span class="text-sm text-base-content/60">
             <span id="subject-count-badge"></span>

@@ -210,7 +210,7 @@ class EncounterTests(CleanupAPITestCase):
         self.assertEqual(response.data['actual_period_start'], '2020-02-01')
 
     def test_delete_encounter(self):
-        """Should delete encounter"""
+        """Non-superuser should not delete encounter."""
         # Create encounter via API
         url = reverse('archive:subject-encounters-list', kwargs={'subject_pk': self.subject.id})
         create_response = self.client.post(url, {
@@ -221,10 +221,43 @@ class EncounterTests(CleanupAPITestCase):
 
         url = reverse('archive:encounter-detail', kwargs={'pk': encounter_id})
         response = self.client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-        # Verify deletion
+        # Verify encounter still exists
+        self.assertTrue(Encounter.objects.filter(pk=encounter_id).exists())
+
+    def test_superuser_can_delete_encounter(self):
+        """Superuser should be able to delete encounter."""
+        url = reverse('archive:subject-encounters-list', kwargs={'subject_pk': self.subject.id})
+        create_response = self.client.post(url, {
+            "actual_period_start": "2020-01-01",
+            "procedure_code": self.procedure.id
+        }, format='json')
+        encounter_id = create_response.data['id']
+
+        superuser = User.objects.create_superuser(
+            username="admin",
+            password="adminpass",
+            email="admin@example.com",
+        )
+        self.client.force_authenticate(user=superuser)
+        detail_url = reverse('archive:encounter-detail', kwargs={'pk': encounter_id})
+        response = self.client.delete(detail_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(Encounter.objects.filter(pk=encounter_id).exists())
+
+    def test_regular_user_without_encounter_perms_cannot_create_encounter(self):
+        """Regular authenticated user should not create encounter."""
+        regular_user = User.objects.create_user(username='regular', password='testpassword')
+        self.client.force_authenticate(user=regular_user)
+
+        url = reverse('archive:subject-encounters-list', kwargs={'subject_pk': self.subject.id})
+        data = {
+            "actual_period_start": "2020-01-01",
+            "procedure_code": self.procedure.id
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_encounter_age_calculation(self):
         """Should automatically calculate age_at_encounter from subject birth_date"""
