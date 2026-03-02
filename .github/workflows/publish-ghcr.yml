@@ -1,10 +1,12 @@
 name: Publish Docker image to GHCR
+# type: line; This workflow intentionally only builds+pushes on semver tags for releases, to avoid multiple image artifacts and ensure clarity.
 
 on:
+  # Only run on v* semver tags (release publish)
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - 'v*' # type: line; Only semver tags (v*) publish image, not branches/other refs.
+    # If no version tag is present, the workflow is inert. # type: line; Ensures job only acts when a semver tag is present.
 
 permissions:
   contents: read
