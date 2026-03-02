@@ -237,8 +237,6 @@
         aiFile: null,
         requiresServerTransform: false,
         transformOps: [],
-        aiImageTypeCode: null,
-        aiPatientOrientation: null,
         valuesets: {
             image_types: [],
             record_types: [],
@@ -574,8 +572,6 @@
         state.aiFile = file;
         state.requiresServerTransform = false;
         state.transformOps = [];
-        state.aiImageTypeCode = null;
-        state.aiPatientOrientation = null;
         showFilePreview(file, file);
         updateSubmitButton();
     }
@@ -897,8 +893,6 @@
             state.aiFile = null;
             state.requiresServerTransform = false;
             state.transformOps = [];
-            state.aiImageTypeCode = null;
-            state.aiPatientOrientation = null;
             document.getElementById('file-preview').classList.add('hidden');
             clearFormFields();
             updateSubmitButton();
@@ -928,8 +922,6 @@
 
         state.file = file;
         state.transformOps = [];
-        state.aiImageTypeCode = null;
-        state.aiPatientOrientation = null;
         if (ext === 'png') {
             state.requiresServerTransform = false;
             state.previewFile = file;
@@ -1017,8 +1009,6 @@
                 const imageTypeSelect = document.getElementById('image-type');
                 if (id) {
                     imageTypeSelect.value = id;
-                    state.aiImageTypeCode = id;
-                    state.aiPatientOrientation = null; // TODO: does this do anything?
                 }
             }
 
@@ -1088,10 +1078,6 @@
             }
             formData.append('image_type', image_type);
 
-            if (state.aiPatientOrientation && state.aiPatientOrientation.length === 2) {
-                formData.append('patient_orientation', state.aiPatientOrientation[0]);
-                formData.append('patient_orientation', state.aiPatientOrientation[1]);
-            }
             if (state.requiresServerTransform && state.transformOps.length > 0) {
                 formData.append('image_transform_ops', JSON.stringify(state.transformOps));
             }
@@ -1147,8 +1133,6 @@
         state.aiFile = null;
         state.requiresServerTransform = false;
         state.transformOps = [];
-        state.aiImageTypeCode = null;
-        state.aiPatientOrientation = null;
         document.getElementById('file-upload').value = '';
         document.getElementById('file-preview').classList.add('hidden');
         document.getElementById('scan-status').textContent = '';
