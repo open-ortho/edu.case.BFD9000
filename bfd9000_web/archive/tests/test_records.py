@@ -278,7 +278,7 @@ class RecordTests(CleanupAPITestCase):
         self.assertEqual(response.data['device'], 'NewScanner')
 
     def test_delete_record(self):
-        """Should delete record"""
+        """Non-superuser should not delete record."""
         # Create a record
         url = reverse('archive:encounter-records-list',
                       kwargs={'encounter_pk': self.encounter.id})
@@ -296,10 +296,50 @@ class RecordTests(CleanupAPITestCase):
         # Delete record
         url = reverse('archive:record-detail', kwargs={'pk': record_id})
         response = self.client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-        # Verify deletion
+        # Verify record still exists
+        self.assertTrue(Record.objects.filter(pk=record_id).exists())
+
+    def test_superuser_can_delete_record(self):
+        """Superuser should be able to delete record."""
+        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        data = {
+            "file": file,
+            "record_type": self.rt_lateral.code,
+            "orientation": "left",
+            "modality": "RG",
+        }
+        create_response = self.client.post(url, data, format='multipart')
+        record_id = create_response.data['id']
+
+        superuser = User.objects.create_superuser(
+            username="admin",
+            password="adminpass",
+            email="admin@example.com",
+        )
+        self.client.force_authenticate(user=superuser)
+        detail_url = reverse('archive:record-detail', kwargs={'pk': record_id})
+        response = self.client.delete(detail_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(Record.objects.filter(pk=record_id).exists())
+
+    def test_regular_user_without_model_perms_can_create_record(self):
+        """Regular authenticated user can still create record in scan workflow."""
+        regular_user = User.objects.create_user(username='regular', password='testpassword')
+        self.client.force_authenticate(user=regular_user)
+
+        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
+        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
+        data = {
+            "file": file,
+            "record_type": self.rt_lateral.code,
+            "orientation": "left",
+            "modality": "RG",
+        }
+        response = self.client.post(url, data, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_get_record_image(self):
         """Should serve full record image"""
