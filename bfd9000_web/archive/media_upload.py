@@ -21,6 +21,11 @@ from BFD9000.settings import (
 
 logger = logging.getLogger(__name__)
 
+# Cache for folder/file lookups: {(parent_folder_id, item_name): (item_id, item_type) | None}
+# This persists across multiple file uploads within the same worker session
+# Using dynamic programming to avoid repeated API calls
+_item_cache: dict[tuple[str, str], tuple[str, str] | None] = {}
+
 
 def _get_box_client() -> BoxClient:
     """Get an authenticated Box client."""
@@ -128,7 +133,14 @@ def upload_file(file_path: Path) -> bool:
             except BoxAPIError as e:
                 if e.response_info.status_code == 409:
                     logger.debug(f"File already exists! deleting {file_name}...")
-                    client.files.delete_file_by_id(e.response_info.context_info['conflicts']['id'])  # pyright: ignore
+                    file_id = e.response_info.context_info['conflicts']['id']  # pyright: ignore[reportTypedDictNotRequiredAccess]
+                    client.files.delete_file_by_id(file_id)
+
+                    # Invalidate cache for this file
+                    cache_key = (current_folder_id, file_name)
+                    if cache_key in _item_cache:
+                        del _item_cache[cache_key]
+                        logger.debug(f"Invalidated cache for deleted file: {file_name}")
                 else:
                     logger.error(f"Preflight check failed: {e}")
                     return False
@@ -161,33 +173,77 @@ def upload_file(file_path: Path) -> bool:
 
 
 def _get_item_by_name(client: BoxClient, folder_id: str, name: str) -> Item | None:
+    """
+    Get an item (file or folder) by name within a parent folder.
+
+    Uses dynamic programming (memoization) to cache results and avoid repeated API calls.
+    Cache stores (item_id, item_type) tuples to minimize API queries.
+    """
+    cache_key = (folder_id, name)
+
+    # Check cache first
+    if cache_key in _item_cache:
+        cached_data = _item_cache[cache_key]
+        if cached_data is None:
+            logger.debug(f"Cache hit (not found): {name} in folder {folder_id}")
+            return None
+
+        cached_id, cached_type = cached_data
+        logger.debug(f"Cache hit: {name} -> {cached_id} (type: {cached_type})")
+
+        # Create a minimal Item object from cached data
+        # This avoids another API call to fetch the full item
+        item = Item(id=cached_id, type=cached_type)  # pyright: ignore[reportCallIssue]
+        return item
+
+    # Cache miss - query Box API
     try:
         items = client.folders.get_folder_items(folder_id)
 
         while True:
             for item in items.entries or []:
                 if item.name == name:
-                    logger.debug(f"Found item by name: {item.id} {name}")
+                    logger.debug(f"Found item by name: {item.id} {name} (type: {item.type})")
+                    # Cache the result as (id, type) tuple
+                    _item_cache[cache_key] = (item.id, item.type)  # pyright: ignore[reportArgumentType]
                     return item
             if items.next_marker is None:
                 break
             items = client.folders.get_folder_items(folder_id, marker=items.next_marker)
+
+        # Item not found, cache the negative result
+        logger.debug(f"Item not found (caching negative result): {name} in folder {folder_id}")
+        _item_cache[cache_key] = None
     except BoxAPIError as e:
         logger.error(f"Box API error getting item by name: {e}", exc_info=True)
     except Exception as e:
         logger.error(f"Error getting item by name: {e}", exc_info=True)
+
     return None
 
 def _get_or_create_folder(client: BoxClient, parent_folder_id: str, folder_name: str) -> str | None:
+    """
+    Get existing folder ID or create it if it doesn't exist.
+
+    Uses cached results from _get_item_by_name and updates cache when creating new folders.
+    """
     try:
         item = _get_item_by_name(client, parent_folder_id, folder_name)
         if item is None:
             # Folder doesn't exist, create it
             subfolder = client.folders.create_folder(name=folder_name, parent=CreateFolderParent(id=parent_folder_id))
             logger.debug(f"Created folder: {folder_name} (ID: {subfolder.id})")
+
+            # Update cache with newly created folder
+            cache_key = (parent_folder_id, folder_name)
+            _item_cache[cache_key] = (subfolder.id, 'folder')  # pyright: ignore[reportArgumentType]
+
             return subfolder.id
         elif item.type == 'folder':
             return item.id
+        else:
+            logger.error(f"Item '{folder_name}' exists but is not a folder (type: {item.type})")
+            return None
     except BoxAPIError as e:
         logger.error(f"Box API error creating folder {folder_name}: {e}", exc_info=True)
         return None
