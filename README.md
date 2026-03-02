@@ -28,6 +28,12 @@ Other collections, such as [the ones in the AAOF Legacy Collection](https://www.
 - `bfd9000_web/`: Django application for managing and viewing the BFD9000 data.
   To run the application, follow the instructions in `bfd9000_web/README.md`.
 
+## Docker Notes
+
+When you run the app with Docker you will need a one-time volume ownership fix so the app's non-root user can write media files.
+
+See `docker.md` for the exact commands and troubleshooting steps.
+
 ## Django Bootstrap
 
 The archive app provides a convenience management command to initialize a local development database:
