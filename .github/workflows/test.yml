@@ -3,11 +3,9 @@ name: Run Django Tests
 # AI should know how to fix it.
 
 on:
+  # Only run when a review is requested on a PR (not on push, open, etc)
   pull_request:
-    # Run on all PRs, regardless of target branch
-    types: [opened, synchronize, reopened, ready_for_review]
-  # Allow manual runs as well
-  workflow_dispatch:
+    types: [review_requested]
 
 jobs:
   test:
