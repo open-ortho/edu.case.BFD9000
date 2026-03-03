@@ -141,7 +141,7 @@
                     <!-- Image Type -->
                     <div class="form-control">
                         <label class="label">
-                            <span class="label-text">Image Type<span class="text-error">*</span></span>
+                            <span class="label-text">Image Type <span class="text-error">*</span></span>
                         </label>
                         <select id="image-type" class="select select-bordered select-sm">
                             <option value="">Loading...</option>
@@ -1004,7 +1004,6 @@
             // Map AI type_prediction to image_type select value
             if (result.type_prediction) {
                 let id = state.valuesets.image_types.find(x => x.display === result.type_prediction).id;
-                console.log(id);
 
                 const imageTypeSelect = document.getElementById('image-type');
                 if (id) {
@@ -1050,9 +1049,11 @@
             // Find any modality where x.id == 'RG'
 
             const set_record_type_and_modality = (record_type, modality) => {
-                console.assert(state.valuesets.record_types.find(x => x.id === record_type), `Expected record type ${record_type} to exist is valueset record_types`);
+                if (!state.valuesets.record_types.find(x => x.id === record_type))
+                    throw new Error(`Expected record type ${record_type} to exist in valueset record_types`)
                 formData.append('record_type', record_type);
-                console.assert(state.valuesets.modalities.find(x => x.id === modality), `Expected modality ${modality} to exist in valueset modalities`);
+                if (!state.valuesets.modalities.find(x => x.id === modality))
+                    throw new Error(`Expected modality ${modality} to exist in valueset modalities`)
                 formData.append('modality', modality);
                 console.log(`Record type: ${record_type}, Modality: ${modality}`);
             };
