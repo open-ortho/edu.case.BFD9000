@@ -20,7 +20,13 @@ class CuratorOrSuperuserEditPermission(BasePermission):
         if request.method == "DELETE":
             return False
 
-        model: type[Model] | None = getattr(getattr(view, "queryset", None), "model", None)
+        qs = getattr(view, "queryset", None)
+        if qs is None and hasattr(view, "get_queryset"):
+            try:
+                qs = view.get_queryset()
+            except Exception:
+                qs = None
+        model: type[Model] | None = getattr(qs, "model", None)
         if model is None:
             return False
 

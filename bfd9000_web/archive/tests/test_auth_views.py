@@ -15,6 +15,7 @@ class AuthViewTests(TestCase):
         response = self.client.get(reverse("logout"))
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("login"))
+        self.assertNotIn('_auth_user_id', self.client.session)
 
     def test_logout_post_logs_user_out(self):
         user = User.objects.create_user(username="testuser", password="testpassword")

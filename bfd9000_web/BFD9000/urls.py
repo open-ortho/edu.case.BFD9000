@@ -27,9 +27,8 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, Spec
 
 
 def logout_view(request: HttpRequest) -> HttpResponse:
-    """Log out on POST, redirect on GET."""
-    if request.method == 'POST':
-        logout(request)
+    """Log out on any request method and redirect to login."""
+    logout(request)
     return redirect('login')
 
 urlpatterns = [
