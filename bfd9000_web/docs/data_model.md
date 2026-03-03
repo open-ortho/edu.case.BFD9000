@@ -103,7 +103,7 @@ Owns per-instance/acquisition fields:
 These are different concepts and must never be substituted.
 
 - `record_type`:
-  - SNOMED clinical study type.
+  - CWRU record type code (ValueSet: `https://orthodontics.case.edu/fhir/cwru-ortho-record-types`).
   - Owned by `Series`.
   - Used for clinical grouping/filtering.
 - `image_type`:

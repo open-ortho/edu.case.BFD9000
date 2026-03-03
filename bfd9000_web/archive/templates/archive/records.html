@@ -28,7 +28,7 @@
                     <th>Subject</th>
                     <th>Age</th>
                     <th>File Size</th>
-                    <th>Image Type</th>
+                    <th>Modality</th>
                 </tr>
             </thead>
             <tbody id="record_table_body">
@@ -189,9 +189,9 @@
                 const fileSize = document.createElement("td");
                 fileSize.textContent = formatFileSize(record.file_size);
 
-                // Image type column (plain text)
-                const imageType = document.createElement("td");
-                imageType.textContent = record.image_type?.display || "-";
+                // Modality column (plain text)
+                const modality = document.createElement("td");
+                modality.textContent = record.series_modality?.display || "-";
 
                 row.replaceChildren(
                     recordId,
@@ -199,7 +199,7 @@
                     subject,
                     age,
                     fileSize,
-                    imageType
+                    modality
                 );
                 return row;
             });

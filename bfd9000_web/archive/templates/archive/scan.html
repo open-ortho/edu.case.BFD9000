@@ -138,12 +138,12 @@
                             min-width: 8rem;
                         }
                     </style>
-                    <!-- Image Type -->
+                    <!-- Record Type -->
                     <div class="form-control">
                         <label class="label">
-                            <span class="label-text">Image Type <span class="text-error">*</span></span>
+                            <span class="label-text">Record Type <span class="text-error">*</span></span>
                         </label>
-                        <select id="image-type" class="select select-bordered select-sm">
+                        <select id="record-type" class="select select-bordered select-sm">
                             <option value="">Loading...</option>
                         </select>
                     </div>
@@ -238,9 +238,7 @@
         requiresServerTransform: false,
         transformOps: [],
         valuesets: {
-            image_types: [],
             record_types: [],
-            modalities: []
         }
     };
     const defaultOperatorDisplay = "{{ operator_display|default:''|escapejs }}";
@@ -379,7 +377,12 @@
         const r = await resp2.json();
         console.log(r);
 
-        return result;
+        return {
+            ...result,
+            class_code: r.code,
+            class_prediction: r.prediction,
+            class_probability: r.probability,
+        };
     }
 
     async function performScannerScan() {
@@ -665,7 +668,7 @@
     }
 
     function clearFormFields() {
-        document.getElementById('image-type').value = '';
+        document.getElementById('record-type').value = '';
         document.getElementById('operator').value = defaultOperatorDisplay;
         // Reset acquisition date to today
         document.getElementById('acquisition-date').valueAsDate = new Date();
@@ -677,9 +680,9 @@
         const hasSubject = state.subject !== null;
         const hasEncounter = state.encounter !== null;
         const hasFile = state.file !== null;
-        const hasImageType = document.getElementById('image-type').value !== '';
+        const hasRecordType = document.getElementById('record-type').value !== '';
 
-        const canSubmit = hasSubject && hasEncounter && hasFile && hasImageType;
+        const canSubmit = hasSubject && hasEncounter && hasFile && hasRecordType;
         document.getElementById('submit-button').disabled = !canSubmit;
 
         // Update AI and image manipulation buttons (need file and must be PNG)
@@ -1001,13 +1004,17 @@
         try {
             const result = await queryAI(state.aiFile);
 
-            // Map AI type_prediction to image_type select value
-            if (result.type_prediction) {
-                let id = state.valuesets.image_types.find(x => x.display === result.type_prediction).id;
-
-                const imageTypeSelect = document.getElementById('image-type');
-                if (id) {
-                    imageTypeSelect.value = id;
+            const recordTypeSelect = document.getElementById('record-type');
+            const aiCode = result.code || result.record_type || result.prediction || result.class_code || result.class_prediction;
+            if (aiCode) {
+                const option = state.valuesets.record_types.find(x => x.id === aiCode);
+                if (option) {
+                    recordTypeSelect.value = aiCode;
+                }
+            } else if (result.type_prediction) {
+                const option = state.valuesets.record_types.find(x => x.display === result.type_prediction);
+                if (option) {
+                    recordTypeSelect.value = option.id;
                 }
             }
 
@@ -1044,40 +1051,14 @@
                 formData.append('thumbnail_preview', state.previewFile, 'thumbnail_preview.png');
             }
 
-            // FIXME: currently this is sorta hardcoded because we only support dental scans rn but this should
-            //        be updated with more logic if we support more types of scans
-            // Find any modality where x.id == 'RG'
-
-            const set_record_type_and_modality = (record_type, modality) => {
-                if (!state.valuesets.record_types.find(x => x.id === record_type))
-                    throw new Error(`Expected record type ${record_type} to exist in valueset record_types`)
-                formData.append('record_type', record_type);
-                if (!state.valuesets.modalities.find(x => x.id === modality))
-                    throw new Error(`Expected modality ${modality} to exist in valueset modalities`)
-                formData.append('modality', modality);
-                console.log(`Record type: ${record_type}, Modality: ${modality}`);
-            };
-
-            let image_type = document.getElementById('image-type').value;
-            switch (image_type) {
-                // Skeletal X-ray of ankle and foot, Radiographic imaging
-                case 'FA': set_record_type_and_modality('1597004', 'RG'); break;
-                // Skeletal X-ray of wrist and hand, Radiographic imaging
-                case 'H': set_record_type_and_modality('39714003', 'RG'); break;
-                // Cephalogram, Radiographic imaging
-                case 'L': set_record_type_and_modality('201456002', 'RG'); break;
-                // Pelvis X-ray, Radiographic imaging
-                case 'P': set_record_type_and_modality('268425006', 'RG'); break;
-                // Dental model, 3D Manufacturing Modeling System
-                case 'SM': set_record_type_and_modality('302189007', 'M3D'); break;
-                case 'FM':
-                case 'F':
-                    throw new Error('Image type has no match in record type codings');
-                default:
-                    throw new Error(`Unexpected image type ${image_type}. This is a bug.`);
-
+            const recordType = document.getElementById('record-type').value;
+            if (!recordType) {
+                throw new Error('Record type is required.');
             }
-            formData.append('image_type', image_type);
+            if (!state.valuesets.record_types.find(x => x.id === recordType)) {
+                throw new Error(`Expected record type ${recordType} to exist in valueset record_types`);
+            }
+            formData.append('record_type', recordType);
 
             if (state.requiresServerTransform && state.transformOps.length > 0) {
                 formData.append('image_transform_ops', JSON.stringify(state.transformOps));
@@ -1157,18 +1138,12 @@
 
         // Load valuesets
         try {
-            const [image_types, record_types, modalities] = await Promise.all([
-                fetchValueset('image_types'),
-                fetchValueset('record_types'),
-                fetchValueset('modalities'),
-            ]);
+            const record_types = await fetchValueset('record_types');
 
-            state.valuesets.image_types = image_types;
             state.valuesets.record_types = record_types;
-            state.valuesets.modalities = modalities;
             console.log(state.valuesets);
 
-            populateSelect('image-type', image_types);
+            populateSelect('record-type', record_types);
         } catch (error) {
             console.error('Failed to load valuesets:', error);
             alert('Failed to load form options. Please refresh the page.');
@@ -1194,7 +1169,7 @@
         });
 
         // Watch form fields for changes
-        ['image-type'].forEach(id => {
+        ['record-type'].forEach(id => {
             document.getElementById(id).addEventListener('change', updateSubmitButton);
         });
 

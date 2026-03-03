@@ -75,6 +75,9 @@ class Command(BaseCommand):
             self.stdout.write(self.style.NOTICE("Running migrate..."))
             call_command("migrate", verbosity=verbosity)
 
+            self.stdout.write(self.style.NOTICE("Importing record types..."))
+            call_command("import_record_types", verbosity=verbosity)
+
         if not options["skip_superuser"]:
             self._run_createsuperuser(options, verbosity)
 

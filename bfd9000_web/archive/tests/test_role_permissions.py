@@ -38,8 +38,8 @@ class RolePermissionTests(CleanupAPITestCase):
         )
         self.record_type, _ = Coding.objects.get_or_create(
             system=SYSTEM_RECORD_TYPE,
-            code="201456002",
-            defaults={"display": "Cephalogram"},
+            code="L",
+            defaults={"display": "Lateral Cephalogram"},
         )
         self.orientation, _ = Coding.objects.get_or_create(
             system=SYSTEM_ORIENTATION,

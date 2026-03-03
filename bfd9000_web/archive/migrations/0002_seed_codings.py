@@ -9,14 +9,6 @@ IMAGE_TYPE_SYSTEM = "https://orthodontics.case.edu/fhir/identifier-system/image-
 
 VALUESETS = [
     {
-        "slug": "record_types",
-        "url": "https://orthodontics.case.edu/fhir/ValueSet/record-types",
-        "name": "RecordTypes",
-        "title": "Record types",
-        "status": "active",
-        "publisher": "Case Western Reserve University",
-    },
-    {
         "slug": "orientations",
         "url": "https://orthodontics.case.edu/fhir/ValueSet/orientations",
         "name": "Orientations",
@@ -88,13 +80,6 @@ VALUESETS = [
 
 
 CODINGS = {
-    "record_types": [
-        (SCT, "201456002", "Cephalogram", ""),
-        (SCT, "268425006", "Pelvis X-ray", ""),
-        (SCT, "39714003", "Skeletal X-ray of wrist and hand", ""),
-        (SCT, "1597004", "Skeletal X-ray of ankle and foot", ""),
-        (SCT, "302189007", "Dental model", ""),
-    ],
     "orientations": [
         (SCT, "399198007", "Right lateral projection", ""),
         (SCT, "399173006", "Left lateral projection", ""),
@@ -221,7 +206,6 @@ def unseed_valuesets_and_codings(apps, schema_editor):
     ValueSet = apps.get_model("archive", "ValueSet")
     ValueSet.objects.filter(
         slug__in=[
-            "record_types",
             "orientations",
             "modalities",
             "body_sites",

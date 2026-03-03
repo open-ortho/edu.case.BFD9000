@@ -33,8 +33,8 @@ class ApiFlowTests(CleanupAPITestCase):
         # Ensure codings exist
         self.rt, _ = Coding.objects.get_or_create(
             system=SYSTEM_RECORD_TYPE,
-            code='201456002',
-            defaults={'display': 'Cephalogram'},
+            code='L',
+            defaults={'display': 'Lateral Cephalogram'},
         )
         self.orient, _ = Coding.objects.get_or_create(
             system=SYSTEM_ORIENTATION,

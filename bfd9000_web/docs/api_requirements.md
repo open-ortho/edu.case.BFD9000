@@ -222,7 +222,7 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 
 **Supported Valueset Types**:
 
-- **`record_types`**: Available record type options
+- **`record_types`**: Available record type options (CWRU Ortho Record Types ValueSet: `https://orthodontics.case.edu/fhir/cwru-ortho-record-types`)
 - **`orientations`**: Available orientation options
 - **`collections`**: Available collection names
 - **`sex_options`**: Available sex/gender options
@@ -232,9 +232,9 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
 
 ```json
 [
-  {"id": "lateral", "display": "Lateral"},
-  {"id": "pa", "display": "PA"},
-  {"id": "hand", "display": "Hand"}
+  {"id": "L", "display": "Lateral Cephalogram"},
+  {"id": "F", "display": "Frontal Cephalogram"},
+  {"id": "H", "display": "Radiograph of Hand & Wrist"}
 ]
 ```
 
@@ -321,7 +321,7 @@ Based on the use cases defined in `use_cases.md`, the following API endpoints ar
   - `thumbnail_preview` (file upload, optional): preprocessed preview PNG from UI pipeline; used as thumbnail source when provided
   - `record_type` (string, required): value from `/api/valuesets/?type=record_types`
   - `orientation` (string, required): value from `/api/valuesets/?type=orientations`
-  - `modality` (string, required): value from `/api/valuesets/?type=modalities`
+  - `modality` (string, optional): value from `/api/valuesets/?type=modalities` (if omitted, inferred from `record_type`)
   - `operator` (string, optional - defaults to authenticated user)
   - `acquisition_date` (date, optional - defaults to today)
   - `notes` (string, optional)
@@ -614,7 +614,7 @@ All error responses follow this structure:
 - Maximum file size: 100MB (configurable)
 - `record_type` must be a valid value from `/api/valuesets/?type=record_types`
 - `orientation` must be a valid value from `/api/valuesets/?type=orientations`
-- `modality` must be a valid value from `/api/valuesets/?type=modalities`
+- `modality` must be a valid value from `/api/valuesets/?type=modalities` when provided; otherwise it is inferred from `record_type`
 - Encounter subject must already belong to a valid collection; uploads are rejected otherwise
 - `acquisition_date` cannot be in the future
 - File content must match file extension (validated via magic bytes)
