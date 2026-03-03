@@ -55,7 +55,7 @@ urlpatterns = [
     path('encounters/create/', views.encounter_create, name='encounter_create'),
     path('records/', views.records, name='records'),
     path('records/<str:record_id>/', views.record_detail, name='record_detail'),
-    path('scan/', views.scan, name='scan'),
+    path('records/create/', views.scan, name='record_create'),
     path('api/scan/tiff-preview/', views.scan_tiff_preview, name='scan_tiff_preview'),
     # API routes
     path('api/', include(router.urls)),
