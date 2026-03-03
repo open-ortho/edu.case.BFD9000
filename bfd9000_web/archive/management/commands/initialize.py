@@ -77,11 +77,10 @@ class Command(BaseCommand):
             self.stdout.write(self.style.NOTICE("Running migrate..."))
             call_command("migrate", verbosity=verbosity)
 
-            self.stdout.write(self.style.NOTICE("Importing record types..."))
+            self.stdout.write(self.style.NOTICE("Importing all valuesets..."))
             call_command(
                 "import_valuesets",
-                slug="record_types",
-                expand_url=VALUESET_EXPAND_URLS["record_types"],
+                "--all",
                 verbosity=verbosity,
             )
 
