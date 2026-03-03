@@ -11,6 +11,9 @@ SYSTEM_IDENTIFIER_LANCASTER_SUBJECT = 'https://cleftclinic.org/fhir/identifier-s
 SYSTEM_IDENTIFIER_IMAGE_TYPE = 'https://orthodontics.case.edu/fhir/identifier-system/image-type'
 
 RECORD_TYPE_MODALITY_MAP = {
+    # Map CWRU record type codes to DICOM modality codes.
+    # Used when creating records if modality is not supplied.
+    # Update this if new record types are added or modality rules change.
     'L': 'RG',
     'F': 'RG',
     'P': 'RG',
@@ -25,6 +28,12 @@ RECORD_TYPE_MODALITY_MAP = {
     'SU': 'OSS',
     'SL': 'OSS',
     'FM': 'OSS',
+}
+
+VALUESET_EXPAND_URLS = {
+    # FHIR $expand endpoints used by import_valuesets.
+    # Update when valueset locations move or new valuesets are added.
+    'record_types': 'http://terminology.open-ortho.org/fhir/cwru-ortho-record-types/$expand',
 }
 
 BFD9000_ROOT_UID = "1.3.6.1.4.1.61741.11.8"

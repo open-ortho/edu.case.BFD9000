@@ -1,47 +1,44 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, List
 from urllib.request import urlopen
 
 from archive.models import Coding, ValueSet, ValueSetConcept
 
-
-EXPAND_URL = "http://terminology.open-ortho.org/fhir/cwru-ortho-record-types/$expand"
-VALUESET_SLUG = "record_types"
-
-
-def import_record_types(expand_url: str = EXPAND_URL) -> int:
+def import_valueset(expand_url: str, slug: str) -> int:
+    """
+    Import a FHIR ValueSet via $expand, upsert ValueSet and Coding rows,
+    and sync ValueSetConcept join links. Returns count of codings.
+    """
     payload = _fetch_valueset(expand_url)
-    valueset = _upsert_valueset(payload)
+    valueset = _upsert_valueset(payload, slug)
     codings = _upsert_codings(valueset, payload)
     _sync_valueset_links(valueset, codings)
     return len(codings)
 
-
 def _fetch_valueset(url: str) -> Dict[str, Any]:
     with urlopen(url) as response:
-        raw = response.read().decode("utf-8")
+        raw = response.read().decode("ascii", errors="ignore")
     data: Dict[str, Any] = json.loads(raw)
     return data
 
-
-def _upsert_valueset(payload: Dict[str, Any]) -> ValueSet:
+def _upsert_valueset(payload: Dict[str, Any], slug: str) -> ValueSet:
     compose = payload.get("compose") or {}
-    include: List[Dict[str, Any]] = list(compose.get("include") or [])
+    include = list(compose.get("include") or [])
     code_system_url = None
     if include:
         code_system_url = include[0].get("system")
     expansion = payload.get("expansion") or {}
-    contains: List[Dict[str, Any]] = list(expansion.get("contains") or [])
+    contains = list(expansion.get("contains") or [])
     if contains and not code_system_url:
         code_system_url = contains[0].get("system")
 
     valueset, created = ValueSet.objects.get_or_create(
-        slug=VALUESET_SLUG,
+        slug=slug,
         defaults={
             "url": payload.get("url", ""),
-            "name": payload.get("name", VALUESET_SLUG),
+            "name": payload.get("name", slug),
             "title": payload.get("title", ""),
             "description": payload.get("description", ""),
             "version": payload.get("version", ""),
@@ -54,7 +51,7 @@ def _upsert_valueset(payload: Dict[str, Any]) -> ValueSet:
     if not created:
         updates: Dict[str, str] = {
             "url": payload.get("url", ""),
-            "name": payload.get("name", VALUESET_SLUG),
+            "name": payload.get("name", slug),
             "title": payload.get("title", ""),
             "description": payload.get("description", ""),
             "version": payload.get("version", ""),
@@ -72,10 +69,9 @@ def _upsert_valueset(payload: Dict[str, Any]) -> ValueSet:
 
     return valueset
 
-
 def _upsert_codings(valueset: ValueSet, payload: Dict[str, Any]) -> List[Coding]:
     expansion = payload.get("expansion") or {}
-    contains: Iterable[Dict[str, Any]] = expansion.get("contains") or []
+    contains = expansion.get("contains") or []
     codings: List[Coding] = []
 
     for concept in contains:
@@ -105,7 +101,6 @@ def _upsert_codings(valueset: ValueSet, payload: Dict[str, Any]) -> List[Coding]
         codings.append(coding)
 
     return codings
-
 
 def _sync_valueset_links(valueset: ValueSet, codings: List[Coding]) -> None:
     for coding in codings:

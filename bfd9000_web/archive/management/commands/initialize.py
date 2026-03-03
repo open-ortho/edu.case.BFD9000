@@ -9,6 +9,8 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import BaseCommand, CommandError, call_command
 
+from archive.constants import VALUESET_EXPAND_URLS
+
 
 class Command(BaseCommand):
     """Run migrate, create superuser, and import seed subject datasets."""
@@ -76,7 +78,12 @@ class Command(BaseCommand):
             call_command("migrate", verbosity=verbosity)
 
             self.stdout.write(self.style.NOTICE("Importing record types..."))
-            call_command("import_record_types", verbosity=verbosity)
+            call_command(
+                "import_valuesets",
+                slug="record_types",
+                expand_url=VALUESET_EXPAND_URLS["record_types"],
+                verbosity=verbosity,
+            )
 
         if not options["skip_superuser"]:
             self._run_createsuperuser(options, verbosity)
