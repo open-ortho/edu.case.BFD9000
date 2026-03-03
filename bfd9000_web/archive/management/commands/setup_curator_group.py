@@ -5,7 +5,12 @@ from django.core.management.base import BaseCommand
 from archive.models import Encounter, Record, Subject
 
 class Command(BaseCommand):
-    help = "Create or update the Curator group with correct permissions. Safe to rerun."
+    help = (
+        "Create or update the Curator group with required add/change permissions. "
+        "Safe to rerun: removes delete_* and auth.* permissions on each run, "
+        "but does not remove other manually granted permissions. "
+        "See docs/permissions.md for the full policy."
+    )
 
     def handle(self, *args, **options):
         group, _ = Group.objects.get_or_create(name="Curator")
