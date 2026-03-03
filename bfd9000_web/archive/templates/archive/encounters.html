@@ -46,7 +46,9 @@
         </table>
     </div>
     <div class="bg-base-300 p-2 flex items-center gap-3">
+        {% if perms.archive.add_encounter %}
         <a href="{% url 'archive:encounter_create' %}" class="btn btn-primary rounded-full">New Encounter</a>
+        {% endif %}
         <div class="grow"></div>
         <span class="text-sm text-base-content/60">
             <span id="encounter-count-badge"></span>
