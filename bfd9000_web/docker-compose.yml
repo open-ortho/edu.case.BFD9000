@@ -1,5 +1,20 @@
 name: bfd9000
 services:
+  db:
+    image: postgres:17-alpine
+    container_name: bfd9000_db
+    environment:
+      POSTGRES_DB: bfd9000
+      POSTGRES_USER: bfd9000
+      POSTGRES_PASSWORD: bfd9000_dev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bfd9000"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   bfd9000:
     image: ghcr.io/open-ortho/edu.case.bfd9000:local
     container_name: bfd9000
@@ -8,19 +23,26 @@ services:
       dockerfile: Dockerfile
     ports:
       - "9000:9000"
-    # command: python manage.py runserver 0.0.0.0:9000
+    depends_on:
+      db:
+        condition: service_healthy
     # env_file:
     #   - .env
     volumes:
       # Keep media files (uploads) persistent
       - media_volume:/app/media
-      # Mount local SQLite database for persistence
-      - ./db/db.sqlite3:/app/db/db.sqlite3
     environment:
       - DEBUG=True
       - SECRET_KEY=dev_secret_key
       - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,[::1],0.0.0.0
       - ENDPOINT_CREDENTIALS_KEY=your_credentials_key_here
+      # Database (PostgreSQL)
+      - DB_ENGINE=django.db.backends.postgresql
+      - DB_NAME=bfd9000
+      - DB_USER=bfd9000
+      - DB_PASSWORD=bfd9000_dev
+      - DB_HOST=db
+      - DB_PORT=5432
       # Local mode (no proxy, direct access at http://localhost:9000/):
       # - DJANGO_FORCE_SCRIPT_NAME=
       # - SCRIPT_NAME=
@@ -44,3 +66,4 @@ services:
 
 volumes:
   media_volume:
+  postgres_data:
