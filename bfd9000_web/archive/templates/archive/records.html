@@ -189,9 +189,14 @@
                 const fileSize = document.createElement("td");
                 fileSize.textContent = formatFileSize(record.file_size);
 
-                // Modality column (plain text)
+                // Modality column (code with full term tooltip)
                 const modality = document.createElement("td");
-                modality.textContent = record.series_modality?.display || "-";
+                const modalityCode = record.series_modality?.code || "-";
+                const modalityDisplay = record.series_modality?.display;
+                modality.textContent = modalityCode;
+                if (modalityDisplay) {
+                    modality.title = modalityDisplay;
+                }
 
                 row.replaceChildren(
                     recordId,
