@@ -165,6 +165,6 @@ class RolePermissionTests(CleanupAPITestCase):
         self.assertEqual(created_record.status_code, status.HTTP_201_CREATED)
 
         delete_record = self.client.delete(
-            reverse("archive:record-detail", kwargs={"pk": created_record.data["id"]})
+            reverse("archive:digitalrecord-detail", kwargs={"pk": created_record.data["id"]})
         )
         self.assertEqual(delete_record.status_code, status.HTTP_403_FORBIDDEN)
