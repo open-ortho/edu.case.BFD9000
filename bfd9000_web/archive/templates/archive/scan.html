@@ -1012,10 +1012,6 @@
             const recordTypeSelect = document.getElementById('record-type');
             const aiCode = result.class_code || result.code;
             if (aiCode) {
-                // If no valid code, classification failed
-            } else {
-                showAIStatus('AI classification failed: no valid code returned. Please classify manually.', true);
-            }
                 const option = state.valuesets.record_types.find(x => x.id === aiCode);
                 if (option) {
                     recordTypeSelect.value = aiCode;
@@ -1025,6 +1021,8 @@
                 if (option) {
                     recordTypeSelect.value = option.id;
                 }
+            } else {
+                showAIStatus('AI classification failed: no valid code returned. Please classify manually.', true);
             }
 
             if (result.flip || result.rotation) {
