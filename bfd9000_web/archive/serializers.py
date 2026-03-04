@@ -428,6 +428,11 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
         write_only=True
     )
 
+    # Device info from the acquisition scanner (optional)
+    device_serial = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    device_manufacturer = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    device_model = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
     class Meta:
         model = DigitalRecord
         fields = [
@@ -440,6 +445,9 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
             'encounter',
             'patient_orientation',
             'image_transform_ops',
+            'device_serial',
+            'device_manufacturer',
+            'device_model',
         ]
 
     def validate_patient_orientation(self, value: Any) -> Any:
@@ -541,12 +549,29 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
         patient_orientation = validated_data.pop('patient_orientation', None)
         transform_ops = validated_data.pop('image_transform_ops', [])
 
+        device_serial: str = validated_data.pop('device_serial', '').strip()
+        device_manufacturer: str = validated_data.pop('device_manufacturer', '').strip()
+        device_model: str = validated_data.pop('device_model', '').strip()
+
         encounter = validated_data.pop('encounter', None)
         if not encounter:
             encounter = self.context.get('encounter')
 
         if not encounter:
             raise serializers.ValidationError({"encounter": "This field is required (either in URL or body)."})
+
+        # Resolve or auto-create Device by (serial, model) when serial is provided
+        device: Optional[Device] = None
+        if device_serial:
+            display_name = ' '.join(filter(None, [device_manufacturer, device_model])) or device_serial
+            device, _ = Device.objects.get_or_create(
+                identifier=device_serial,
+                model_number=device_model,
+                defaults={
+                    'display_name': display_name,
+                    'manufacturer': device_manufacturer,
+                },
+            )
 
         request = self.context.get('request')
         operator = None
@@ -591,6 +616,7 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
                     record_type=rt_coding,
                     encounter=encounter,
                     operator="Unknown",
+                    device=device,
                 )
 
             digital_record = DigitalRecord.objects.create(
@@ -601,6 +627,7 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
                 operator=operator,
                 patient_orientation=_encode_patient_orientation(patient_orientation),
                 image_transform_ops=transform_ops,
+                device=device,
             )
 
             ext = os.path.splitext(file_obj.name)[1].lower()

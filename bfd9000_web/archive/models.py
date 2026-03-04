@@ -622,6 +622,13 @@ class Device(TimestampedModel):
     class Meta(TimestampedModel.Meta):
         """Model metadata."""
         ordering = ['display_name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['identifier', 'model_number'],
+                condition=models.Q(identifier__gt=''),
+                name='unique_device_identifier_model',
+            )
+        ]
 
     def __str__(self) -> str:
         parts = [self.display_name]
