@@ -13,7 +13,9 @@ from .models import (
     ImagingStudy,
     Location,
     Series,
-    Record,
+    PhysicalRecord,
+    DigitalRecord,
+    Device,
     Subject,
 )
 
@@ -219,83 +221,106 @@ class SeriesAdmin(TimestampedAdmin):
     """Admin settings for series."""
     list_display = (
         "imaging_study",
-        "record_type",
         "modality",
         "series_instance_uid",
         "created_at",
     )
-    list_filter = ("record_type", "modality", "created_at")
+    list_filter = ("modality", "created_at")
     search_fields = (
         "series_instance_uid",
         "description",
         "imaging_study__encounter__subject__humanname_family",
         "imaging_study__encounter__subject__humanname_given",
     )
-    autocomplete_fields = ("imaging_study", "record_type", "modality", "acquisition_location")
+    autocomplete_fields = ("imaging_study", "modality", "acquisition_location")
     fieldsets = (
         (None, {"fields": ("imaging_study", "series_instance_uid")}),
-        ("Classification", {"fields": ("record_type", "modality", "description")}),
+        ("Classification", {"fields": ("modality", "description")}),
         ("Acquisition", {"fields": ("acquisition_location",)}),
     )
 
 
-class ArchiveLocationInline(admin.TabularInline):
-    """Inline archive locations for record admin pages."""
-
-    model = ArchiveLocation
-    extra = 1
-    autocomplete_fields = ("endpoint",)
-    fields = ("endpoint", "assigned_id", "status", "archived_at")
 
 
-@admin.register(Record)
-class RecordAdmin(TimestampedAdmin):
-    """Admin settings for records and linked imaging studies."""
-    list_display = (
-        "series",
-        "record_type_display",
-        "modality_display",
-        "acquisition_datetime",
-        "created_at",
-    )
-    list_filter = ("series__record_type", "series__modality", "created_at")
-    search_fields = (
-        "series__imaging_study__encounter__subject__humanname_family",
-        "series__imaging_study__encounter__subject__humanname_given",
-        "sop_instance_uid",
-        "physical_location_box",
-        "physical_location_shelf",
-    )
-    autocomplete_fields = ("series", "scan_operator", "image_type")
-    filter_horizontal = ("identifiers",)
-    inlines = (ArchiveLocationInline,)
+
+@admin.register(PhysicalRecord)
+class PhysicalRecordAdmin(admin.ModelAdmin):
+    list_display = ['id', 'encounter', 'record_type_display', 'acquisition_datetime', 'operator']
+    list_filter = ['record_type']
+    search_fields = [
+        'id',
+        'physical_location_box',
+        'physical_location_shelf',
+        'encounter__subject__humanname_family',
+        'encounter__subject__humanname_given',
+    ]
+    autocomplete_fields = ['encounter', 'record_type', 'device', 'physical_location']
+    filter_horizontal = ['identifiers']
     fieldsets = (
-        (None, {"fields": ("series", "image_type", "sop_instance_uid")}),
-        ("Acquisition", {"fields": ("acquisition_datetime", "scan_operator", "source_file", "thumbnail")}),
-        ("Image Processing", {"fields": ("patient_orientation", "image_transform_ops")}),
-        (
-            "Physical Location",
-            {
-                "fields": (
-                    "physical_location",
-                    "physical_location_box",
-                    "physical_location_shelf",
-                    "physical_location_tray",
-                    "physical_location_compartment",
-                )
-            },
-        ),
-        ("Other", {"fields": ("device",)}),
-        ("Identifiers", {"fields": ("identifiers",)}),
+        (None, {
+            'fields': ('encounter', 'record_type', 'identifiers')
+        }),
+        ('Acquisition', {
+            'fields': ('acquisition_datetime', 'operator', 'device')
+        }),
+        ('Physical Location', {
+            'fields': (
+                'physical_location',
+                'physical_location_box',
+                'physical_location_shelf',
+                'physical_location_tray',
+                'physical_location_compartment',
+            )
+        }),
     )
 
-    @admin.display(description="Record Type")
-    def record_type_display(self, obj):
-        return getattr(getattr(obj, "series", None), "record_type", None)
+    def record_type_display(self, obj: PhysicalRecord) -> str:
+        return str(obj.record_type) if obj.record_type else '—'
+    record_type_display.short_description = 'Record Type'  # type: ignore[attr-defined]
 
-    @admin.display(description="Modality")
-    def modality_display(self, obj):
-        return getattr(getattr(obj, "series", None), "modality", None)
+
+class ArchiveLocationInline(admin.TabularInline):
+    model = ArchiveLocation
+    extra = 0
+    readonly_fields = ['assigned_id', 'status', 'archived_at', 'endpoint']
+    can_delete = False
+
+
+@admin.register(DigitalRecord)
+class DigitalRecordAdmin(admin.ModelAdmin):
+    list_display = ['id', 'series', 'record_type', 'acquisition_datetime', 'operator']
+    list_filter = ['record_type', 'series__modality']
+    search_fields = [
+        'id',
+        'sop_instance_uid',
+        'series__imaging_study__encounter__subject__humanname_family',
+        'series__imaging_study__encounter__subject__humanname_given',
+    ]
+    autocomplete_fields = ['series', 'record_type', 'physical_record', 'operator', 'device']
+    filter_horizontal = ['identifiers']
+    readonly_fields = ['sop_instance_uid']
+    inlines = [ArchiveLocationInline]
+    fieldsets = (
+        (None, {
+            'fields': ('sop_instance_uid', 'series', 'physical_record', 'record_type', 'identifiers')
+        }),
+        ('Acquisition', {
+            'fields': ('acquisition_datetime', 'operator', 'device')
+        }),
+        ('Image Processing', {
+            'fields': ('patient_orientation', 'image_transform_ops')
+        }),
+        ('Files', {
+            'fields': ('source_file', 'thumbnail')
+        }),
+    )
+
+
+@admin.register(Device)
+class DeviceAdmin(admin.ModelAdmin):
+    list_display = ['display_name', 'manufacturer', 'model_number', 'version']
+    search_fields = ['display_name', 'manufacturer', 'model_number', 'identifier']
+    filter_horizontal = ['modalities']
 
 
 @admin.register(Endpoint)
@@ -317,11 +342,11 @@ class EndpointAdmin(TimestampedAdmin):
 class ArchiveLocationAdmin(TimestampedAdmin):
     """Admin settings for archived record locations."""
 
-    list_display = ("record", "endpoint", "assigned_id", "status", "archived_at", "created_at")
+    list_display = ("digital_record", "endpoint", "assigned_id", "status", "archived_at", "created_at")
     list_filter = ("status", "endpoint__connection_type", "endpoint__status")
-    search_fields = ("assigned_id", "record__id", "endpoint__name", "endpoint__address")
-    autocomplete_fields = ("record", "endpoint")
+    search_fields = ("assigned_id", "digital_record__id", "endpoint__name", "endpoint__address")
+    autocomplete_fields = ("digital_record", "endpoint")
     fieldsets = (
-        (None, {"fields": ("record", "endpoint", "assigned_id")}),
+        (None, {"fields": ("digital_record", "endpoint", "assigned_id")}),
         ("State", {"fields": ("status", "archived_at")}),
     )

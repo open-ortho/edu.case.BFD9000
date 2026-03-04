@@ -5,7 +5,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from rest_framework import status
-from archive.models import Record, Collection, Coding, Subject, Encounter
+from archive.models import DigitalRecord, Collection, Coding, Subject, Encounter
 from archive.constants import SYSTEM_RECORD_TYPE, SYSTEM_ORIENTATION, SYSTEM_MODALITY, SYSTEM_PROCEDURE
 from .base import CleanupAPITestCase
 
@@ -16,7 +16,7 @@ class ApiFlowTests(CleanupAPITestCase):
         self.user = User.objects.create_user(username='testuser', password='testpassword')
 
         # Add necessary permissions
-        models = [Subject, Encounter, Record]
+        models = [Subject, Encounter, DigitalRecord]
         for model in models:
             content_type = ContentType.objects.get_for_model(model)
             permissions = Permission.objects.filter(content_type=content_type)
@@ -100,7 +100,6 @@ class ApiFlowTests(CleanupAPITestCase):
             "file": file,
             "record_type": self.rt.code,
             "modality": "RG",
-            "operator": "TestOp"
         }
 
         response = self.client.post(url, data, format='multipart')
@@ -110,19 +109,19 @@ class ApiFlowTests(CleanupAPITestCase):
         record_id = response.data['id']
 
         # 4. Verify Record
-        record = Record.objects.get(pk=record_id)
+        record: DigitalRecord = DigitalRecord.objects.get(pk=record_id)
         # New model: record belongs to a series -> imaging_study
         self.assertIsNotNone(record.series)
         self.assertIsNotNone(record.series.imaging_study)
         self.assertTrue(record.source_file or record.thumbnail)
-        self.assertEqual(record.series.record_type.code, self.rt.code)
+        self.assertEqual(record.record_type.code, self.rt.code)
 
         # 5. Verify Image Download
-        url = reverse('archive:record-image', kwargs={'pk': record_id})
+        url = reverse('archive:digitalrecord-image', kwargs={'pk': record_id})
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # 6. Verify Thumbnail
-        url = reverse('archive:record-thumbnail', kwargs={'pk': record_id})
+        url = reverse('archive:digitalrecord-thumbnail', kwargs={'pk': record_id})
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)

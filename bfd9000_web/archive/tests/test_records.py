@@ -13,10 +13,10 @@ from archive.models import (
     ArchiveLocation,
     Collection,
     Coding,
+    DigitalRecord,
     Encounter,
     Endpoint,
     ImagingStudy,
-    Record,
     Subject,
 )
 from archive.constants import (
@@ -25,7 +25,6 @@ from archive.constants import (
     SYSTEM_MODALITY,
     SYSTEM_PROCEDURE,
     SYSTEM_BODY_SITE,
-    SYSTEM_IDENTIFIER_IMAGE_TYPE,
 )
 from .base import CleanupAPITestCase
 
@@ -46,7 +45,7 @@ class RecordTests(CleanupAPITestCase):
         )
 
         # Add necessary permissions
-        for model in [Subject, Encounter, Record, ImagingStudy]:
+        for model in [Subject, Encounter, DigitalRecord, ImagingStudy]:
             content_type = ContentType.objects.get_for_model(model)
             permissions = Permission.objects.filter(content_type=content_type)
             self.user.user_permissions.add(*permissions)
@@ -97,11 +96,6 @@ class RecordTests(CleanupAPITestCase):
             system=SYSTEM_MODALITY,
             code='RG',
             defaults={'display': 'Radiography'}
-        )
-        self.image_type_lateral, _ = Coding.objects.get_or_create(
-            system=SYSTEM_IDENTIFIER_IMAGE_TYPE,
-            code='L',
-            defaults={'display': 'Lateral'},
         )
 
         # Create a valid PNG image

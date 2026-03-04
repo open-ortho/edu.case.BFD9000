@@ -123,7 +123,7 @@
                                     <td id="acquisition-datetime">-</td>
                                 </tr>
                                 <tr>
-                                    <th>Scan Operator</th>
+                                    <th>Operator</th>
                                     <td id="scan-operator">-</td>
                                 </tr>
                             </tbody>
@@ -171,7 +171,7 @@
         document.getElementById('age-at-encounter').textContent = formatAge(record);
 
         // Record Details
-        document.getElementById('record-type').textContent = record.series_record_type?.display || '-';
+        document.getElementById('record-type').textContent = record.record_type?.display || '-';
         document.getElementById('created-at').textContent = record.created_at 
             ? new Date(record.created_at).toLocaleString()
             : '-';
@@ -184,7 +184,7 @@
         document.getElementById('acquisition-datetime').textContent = record.acquisition_datetime
             ? new Date(record.acquisition_datetime).toLocaleString()
             : '-';
-        document.getElementById('scan-operator').textContent = record.scan_operator || '-';
+        document.getElementById('scan-operator').textContent = record.operator || '-';
         renderArchiveLocations(record.archive_locations || []);
         setupDownloadButton(record);
     }
@@ -275,7 +275,7 @@
         if (!btn) return;
 
         const subjectId = record.subject_identifier || record.subject_id || "";
-        const imageType = record.image_type ? record.image_type.code : "";
+        const imageType = record.record_type ? record.record_type.code : "";
         const ageFloat = record.age_at_encounter !== undefined ? parseFloat(record.age_at_encounter) : null;
 
         // Get extension from image_url
