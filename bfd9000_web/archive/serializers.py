@@ -32,7 +32,9 @@ from .models import (
     Location,
     ImagingStudy,
     Series,
-    Record,
+    PhysicalRecord,
+    DigitalRecord,
+    Device,
 )
 from .constants import (
     SYSTEM_ORIENTATION,
@@ -78,9 +80,19 @@ def _get_preferred_identifier(identifiers) -> Optional[str]:
 class CodingSerializer(serializers.ModelSerializer):
     """Serializer for Coding model."""
     class Meta:
-        """Serializer metadata."""
         model = Coding
         fields = '__all__'
+
+class DeviceSerializer(serializers.ModelSerializer):
+    modalities: serializers.SerializerMethodField = serializers.SerializerMethodField()
+
+    def get_modalities(self, obj: Device):
+        return [dict(c) for c in CodingSerializer(obj.modalities.all(), many=True).data]
+
+    class Meta:
+        model = Device
+        fields = ['id', 'identifier', 'display_name', 'manufacturer', 'model_number', 'version', 'modalities']
+
 
 class IdentifierSerializer(serializers.ModelSerializer):
     """Serializer for Identifier model."""
@@ -117,7 +129,6 @@ class CollectionSerializer(serializers.ModelSerializer):
 
 class SeriesSerializer(serializers.ModelSerializer):
     """Serializer for Series model."""
-    record_type = CodingSerializer(read_only=True)
     modality = CodingSerializer(read_only=True)
     acquisition_location = LocationSerializer(read_only=True)
 
@@ -239,25 +250,39 @@ class ImagingStudySerializer(serializers.ModelSerializer):
     scan_operator_display = serializers.SerializerMethodField()
 
     class Meta:
-        """Serializer metadata."""
         model = ImagingStudy
         fields = '__all__'
 
     def get_series(self, obj: ImagingStudy):
         # Return list of series summaries
-        qs = obj.series.all().select_related('record_type', 'modality')
+        qs = obj.series.all().select_related('modality') if hasattr(obj, 'series') else []
         from .serializers import SeriesSerializer  # local import to avoid cycle
         return SeriesSerializer(qs, many=True, context=self.context).data
 
     def _latest_operator(self, obj: ImagingStudy):
-        record = (
-            Record.objects
-            .filter(series__imaging_study=obj, scan_operator__isnull=False)
-            .select_related('scan_operator')
-            .order_by('-created_at')
-            .first()
-        )
-        return getattr(record, 'scan_operator', None)
+        # Use prefetched _operator_records if available (set by ImagingStudyViewSet)
+        # to avoid N+1 queries when serializing lists.
+        all_records = []
+        for series in obj.series.all():
+            prefetched = getattr(series, '_operator_records', None)
+            if prefetched is not None:
+                all_records.extend(prefetched)
+            else:
+                # Fallback for non-prefetched usage (e.g. detail view or tests)
+                dr = (
+                    DigitalRecord.objects
+                    .filter(series=series, operator__isnull=False)
+                    .select_related('operator')
+                    .order_by('-created_at')
+                    .first()
+                )
+                if dr:
+                    all_records.append(dr)
+        if not all_records:
+            return None
+        # Sort in Python to get the latest across all series
+        all_records.sort(key=lambda r: r.created_at, reverse=True)
+        return all_records[0].operator
 
     def get_scan_operator_username(self, obj: ImagingStudy) -> Optional[str]:
         operator = self._latest_operator(obj)
@@ -286,22 +311,22 @@ class ArchiveLocationSerializer(serializers.ModelSerializer):
 
     endpoint = EndpointSerializer(read_only=True)
     endpoint_id = serializers.IntegerField(source='endpoint.id', read_only=True)
+    digital_record = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = ArchiveLocation
         fields = '__all__'
 
-class RecordSerializer(serializers.ModelSerializer):
-    """Serializer for Record model."""
+class DigitalRecordSerializer(serializers.ModelSerializer):
+    """Serializer for DigitalRecord model."""
     identifiers = IdentifierSerializer(many=True, read_only=True)
-    # Expose series and related summary fields
     series_id = serializers.IntegerField(source='series.id', read_only=True)
-    record_type = CodingSerializer(source='series.record_type', read_only=True)
-    series_record_type = CodingSerializer(source='series.record_type', read_only=True)
+    record_type = CodingSerializer(read_only=True)
     series_modality = CodingSerializer(source='series.modality', read_only=True)
-    physical_location = AddressSerializer(read_only=True)
+    physical_record_id = serializers.PrimaryKeyRelatedField(read_only=True, allow_null=True)
+    device = DeviceSerializer(read_only=True)
+    operator = serializers.StringRelatedField(read_only=True)
 
-    # Add nested encounter and subject data
     encounter_id = serializers.IntegerField(source='series.imaging_study.encounter.id', read_only=True)
     encounter = serializers.IntegerField(source='series.imaging_study.encounter.id', read_only=True)
     imaging_study = serializers.IntegerField(source='series.imaging_study.id', read_only=True)
@@ -312,23 +337,18 @@ class RecordSerializer(serializers.ModelSerializer):
     actual_period_start_uncertain = serializers.BooleanField(source='series.imaging_study.encounter.actual_period_start_uncertain', read_only=True)
     age_at_encounter = serializers.SerializerMethodField()
     patient_orientation = serializers.SerializerMethodField()
-
-    # Add imaging study fields for display
     acquisition_datetime = serializers.DateTimeField(read_only=True)
     acquisition_date = serializers.SerializerMethodField()
     file_size = serializers.SerializerMethodField()
-    image_type = CodingSerializer(read_only=True)
     thumbnail_url = serializers.SerializerMethodField()
     image_url = serializers.SerializerMethodField()
     archive_locations = ArchiveLocationSerializer(many=True, read_only=True)
 
     class Meta:
-        """Serializer metadata."""
-        model = Record
+        model = DigitalRecord
         fields = '__all__'
 
     def get_age_at_encounter(self, obj):
-        """Get age at encounter in years."""
         encounter = getattr(obj.series.imaging_study, 'encounter', None)
         subject = getattr(encounter, 'subject', None)
         birth_date = getattr(subject, 'birth_date', None)
@@ -341,8 +361,7 @@ class RecordSerializer(serializers.ModelSerializer):
             return round(days / 365.25, 2)
         return None
 
-    def get_subject_identifier(self, obj: Record) -> Optional[str]:
-        """Return the preferred identifier for the record's subject."""
+    def get_subject_identifier(self, obj) -> Optional[str]:
         encounter = getattr(obj.series.imaging_study, 'encounter', None)
         subject = getattr(encounter, 'subject', None)
         if not subject:
@@ -350,13 +369,12 @@ class RecordSerializer(serializers.ModelSerializer):
         return _get_preferred_identifier(subject.identifiers.all())
 
     def get_acquisition_date(self, obj):
-        # acquisition datetime now stored on Record itself
         acquisition_datetime = getattr(obj, 'acquisition_datetime', None)
         if not acquisition_datetime:
             return None
         return acquisition_datetime.date()
 
-    def get_file_size(self, obj: Record) -> Optional[int]:
+    def get_file_size(self, obj) -> Optional[int]:
         if getattr(obj, 'source_file', None):
             try:
                 return obj.source_file.size
@@ -364,10 +382,10 @@ class RecordSerializer(serializers.ModelSerializer):
                 return None
         return None
 
-    def get_patient_orientation(self, obj: Record) -> list[str]:
+    def get_patient_orientation(self, obj) -> list[str]:
         return _decode_patient_orientation(str(getattr(obj, 'patient_orientation', '') or ''))
 
-    def get_thumbnail_url(self, obj: Record) -> Optional[str]:
+    def get_thumbnail_url(self, obj) -> Optional[str]:
         if getattr(obj, 'thumbnail', None):
             try:
                 return obj.thumbnail.url
@@ -375,7 +393,7 @@ class RecordSerializer(serializers.ModelSerializer):
                 return None
         return None
 
-    def get_image_url(self, obj: Record) -> Optional[str]:
+    def get_image_url(self, obj) -> Optional[str]:
         if getattr(obj, 'source_file', None):
             try:
                 return obj.source_file.url
@@ -383,12 +401,12 @@ class RecordSerializer(serializers.ModelSerializer):
                 return None
         return None
 
-class RecordUploadSerializer(serializers.ModelSerializer):
+class DigitalRecordUploadSerializer(serializers.ModelSerializer):
     """
-    Serializer for uploading records with files.
+    Serializer for uploading digital records with files.
 
     Handles file validation, metadata extraction, and creation of related
-    ImagingStudy and Record objects within a transaction.
+    ImagingStudy, Series, PhysicalRecord, and DigitalRecord objects within a transaction.
     """
     file = serializers.FileField(write_only=True)
     thumbnail_preview = serializers.FileField(required=False, write_only=True)
@@ -408,13 +426,6 @@ class RecordUploadSerializer(serializers.ModelSerializer):
     )
 
     acquisition_date = serializers.DateField(required=False, write_only=True)
-    image_type = serializers.SlugRelatedField(
-        slug_field='code',
-        queryset=Coding.objects.filter(system=SYSTEM_IDENTIFIER_IMAGE_TYPE),
-        required=False,
-        allow_null=True,
-        write_only=True,
-    )
     patient_orientation = serializers.ListField(
         child=serializers.CharField(max_length=1),
         min_length=2,
@@ -432,8 +443,7 @@ class RecordUploadSerializer(serializers.ModelSerializer):
     )
 
     class Meta:
-        """Serializer metadata."""
-        model = Record
+        model = DigitalRecord
         fields = [
             'id',
             'file',
@@ -442,7 +452,6 @@ class RecordUploadSerializer(serializers.ModelSerializer):
             'modality',
             'acquisition_date',
             'encounter',
-            'image_type',
             'patient_orientation',
             'image_transform_ops',
         ]
@@ -497,12 +506,11 @@ class RecordUploadSerializer(serializers.ModelSerializer):
             })
         return modality
 
-    def to_representation(self, instance: Record) -> Dict[str, Any]:
-        """Use standard RecordSerializer for response."""
-        return cast(Dict[str, Any], RecordSerializer(instance, context=self.context).data)
+    def to_representation(self, instance: DigitalRecord) -> Dict[str, Any]:
+        # Return as dict, not DRF ReturnDict, for typing compatibility
+        return dict(DigitalRecordSerializer(instance, context=self.context).data)
 
     def validate_file(self, value: Any) -> Any:
-        """Validate uploaded file size, extension, and MIME type."""
         if value.size > 100 * 1024 * 1024:
             raise serializers.ValidationError("File too large (max 100MB)")
 
@@ -519,49 +527,34 @@ class RecordUploadSerializer(serializers.ModelSerializer):
             try:
                 mime = magic.from_buffer(value.read(2048), mime=True)
 
-                # Validate MIME type matches extension
                 if ext == 'png' and mime != 'image/png':
                     raise serializers.ValidationError(f"Invalid MIME type for PNG: {mime}")
                 if ext in ['tif', 'tiff'] and mime != 'image/tiff':
                     raise serializers.ValidationError(f"Invalid MIME type for TIFF: {mime}")
                 if ext == 'stl' and mime not in ['application/octet-stream', 'model/stl', 'text/plain']:
-                    # STL can be binary (octet-stream/model/stl) or ASCII (text/plain)
                     raise serializers.ValidationError(f"Invalid MIME type for STL: {mime}")
 
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                # python-magic emits varied errors; fall back to extension-only validation.
-                # If validation fails explicitly, re-raise
+            except Exception as e:
                 if isinstance(e, serializers.ValidationError):
                     raise e
-                # Otherwise ignore magic errors and trust extension
                 pass
             finally:
-                # Always reset file position after MIME inspection
                 value.seek(initial_pos)
         else:
-            # If magic is not available, reset position before returning
             value.seek(initial_pos)
         return value
 
-    def create(self, validated_data: Dict[str, Any]) -> Record:
-        """
-        Create Record and associated ImagingStudy.
-
-        Wraps creation in a transaction to ensure data integrity.
-        """
+    def create(self, validated_data: Dict[str, Any]) -> DigitalRecord:
         file_obj = validated_data.pop('file')
         thumbnail_preview = validated_data.pop('thumbnail_preview', None)
 
-        # These are now Coding objects, not strings!
         rt_coding = validated_data.pop('record_type')
         mod_coding = validated_data.pop('modality', None)
 
         acquisition_date = validated_data.pop('acquisition_date', None)
-        image_type = validated_data.pop('image_type', None)
         patient_orientation = validated_data.pop('patient_orientation', None)
         transform_ops = validated_data.pop('image_transform_ops', [])
 
-        # Resolve encounter: check body first, then context
         encounter = validated_data.pop('encounter', None)
         if not encounter:
             encounter = self.context.get('encounter')
@@ -569,11 +562,10 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         if not encounter:
             raise serializers.ValidationError({"encounter": "This field is required (either in URL or body)."})
 
-        # Try to get user from request
         request = self.context.get('request')
-        scan_operator = None
+        operator = None
         if request and getattr(request, 'user', None) and request.user.is_authenticated:
-            scan_operator = request.user
+            operator = request.user
 
         if patient_orientation is None and getattr(rt_coding, 'code', None) == LATERAL_RECORD_TYPE_CODE:
             patient_orientation = ['A', 'F']
@@ -586,13 +578,10 @@ class RecordUploadSerializer(serializers.ModelSerializer):
                     "collection": f"Subject {subject.id} must be assigned to a collection before uploading records."
                 })
 
-            # Get or create ImagingStudy for this encounter
             study, _ = ImagingStudy.objects.get_or_create(
                 encounter=encounter,
                 defaults={'collection': collection}
             )
-            # If the subject was moved to a different collection after the study was created,
-            # keep ImagingStudy.collection in sync to avoid collection-scoped query divergence.
             if study.collection != collection:
                 study.collection = collection
                 study.save(update_fields=['collection'])
@@ -600,30 +589,40 @@ class RecordUploadSerializer(serializers.ModelSerializer):
             if mod_coding is None:
                 mod_coding = self._infer_modality(rt_coding)
 
-            # Get or create Series within the study
+            # Series is now identified only by modality+imaging_study
             series, _ = Series.objects.get_or_create(
                 imaging_study=study,
-                record_type=rt_coding,
                 modality=mod_coding,
             )
 
-            # Create record instance first (without file fields)
-            record = Record.objects.create(
+            # PHYSICAL RECORD: Get or create by (record_type, encounter)
+            physical_record = PhysicalRecord.objects.filter(
+                record_type=rt_coding,
+                encounter=encounter
+            ).first()
+            if not physical_record:
+                physical_record = PhysicalRecord.objects.create(
+                    record_type=rt_coding,
+                    encounter=encounter,
+                    operator="Unknown",
+                )
+
+            digital_record = DigitalRecord(
                 series=series,
+                physical_record=physical_record,
+                record_type=rt_coding,
                 acquisition_datetime=(datetime.datetime.combine(acquisition_date, datetime.time.min, tzinfo=datetime.timezone.utc) if acquisition_date else None),
-                scan_operator=scan_operator,
-                image_type=image_type,
+                operator=operator,
                 patient_orientation=_encode_patient_orientation(patient_orientation),
                 image_transform_ops=transform_ops,
             )
+            digital_record.full_clean()
+            digital_record.save()
 
-            # Save uploaded file to source_file
-            # Use a stable filename
             ext = os.path.splitext(file_obj.name)[1].lower()
-            filename = f"{record.id}{ext}"
-            record.source_file.save(filename, file_obj, save=False)
+            filename = f"{getattr(digital_record, 'pk', digital_record.id)}{ext}"
+            digital_record.source_file.save(filename, file_obj, save=False)
 
-            # Generate thumbnail (JPEG) using unified utility (raster only)
             try:
                 thumb_bytes = None
                 if thumbnail_preview is not None:
@@ -633,11 +632,11 @@ class RecordUploadSerializer(serializers.ModelSerializer):
                         transform_ops=None,
                     )
                 else:
-                    file_stream = record.source_file.open('rb')
+                    file_stream = digital_record.source_file.open('rb')
                     try:
                         thumb_bytes = generate_thumbnail_jpeg_bytes(
                             file_stream,
-                            record.source_file.name,
+                            digital_record.source_file.name,
                             transform_ops=transform_ops,
                         )
                     finally:
@@ -645,12 +644,11 @@ class RecordUploadSerializer(serializers.ModelSerializer):
 
                 if thumb_bytes:
                     thumb_content = ContentFile(thumb_bytes)
-                    thumb_name = f"{record.id}.jpg"
-                    record.thumbnail.save(thumb_name, thumb_content, save=False)
+                    thumb_name = f"{getattr(digital_record, 'pk', digital_record.id)}.jpg"
+                    digital_record.thumbnail.save(thumb_name, thumb_content, save=False)
             except Exception:
-                # On failure, skip thumbnail generation but log so failures are observable
-                logger.warning("Thumbnail generation failed for record %s", record.pk, exc_info=True)
+                logger.warning("Thumbnail generation failed for digital_record %s", digital_record.pk, exc_info=True)
 
-            record.save()
+            digital_record.save()
 
-            return record
+            return digital_record

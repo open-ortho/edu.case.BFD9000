@@ -83,9 +83,10 @@ def _upsert_codings(valueset: ValueSet, payload: Dict[str, Any]) -> List[Coding]
         if not system or not code:
             continue
 
+        version = str(concept.get("version") or "").strip()
         coding, _ = Coding.objects.get_or_create(
             system=system,
-            version="",
+            version=version,
             code=code,
             defaults={"display": display, "meaning": definition},
         )
