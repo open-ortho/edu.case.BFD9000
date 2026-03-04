@@ -20,7 +20,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.db.models import Case, CharField, Count, OuterRef, QuerySet, Subquery, When
+from django.db.models import Case, CharField, Count, OuterRef, QuerySet, Subquery, When, Prefetch
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_POST
@@ -231,10 +231,16 @@ class EncounterViewSet(viewsets.ModelViewSet):
 class ImagingStudyViewSet(viewsets.ModelViewSet):
     """
     ViewSet for ImagingStudy model.
-
+    
     Manages the technical details of an imaging session.
     """
-    queryset = ImagingStudy.objects.all()
+    queryset = ImagingStudy.objects.prefetch_related(
+        Prefetch(
+            'series__digital_records',
+            queryset=DigitalRecord.objects.filter(operator__isnull=False).select_related('operator').order_by('-created_at'),
+            to_attr='_operator_records',
+        )
+    )
     serializer_class = ImagingStudySerializer
     filterset_fields = ['encounter', 'collection']
 
@@ -246,7 +252,7 @@ class SeriesViewSet(viewsets.ModelViewSet):
     Exposes series grouped under imaging studies. Standard CRUD.
     Requires authentication to prevent unauthenticated enumeration of all series.
     """
-    queryset = Series.objects.select_related('imaging_study', 'record_type', 'modality').prefetch_related('records')
+    queryset = Series.objects.select_related('imaging_study', 'modality').prefetch_related('digital_records')
     serializer_class = SeriesSerializer
     permission_classes = [IsAuthenticated]
 

@@ -260,14 +260,29 @@ class ImagingStudySerializer(serializers.ModelSerializer):
         return SeriesSerializer(qs, many=True, context=self.context).data
 
     def _latest_operator(self, obj: ImagingStudy):
-        digital_record = (
-            DigitalRecord.objects
-            .filter(series__imaging_study=obj, operator__isnull=False)
-            .select_related('operator')
-            .order_by('-created_at')
-            .first()
-        )
-        return getattr(digital_record, 'operator', None)
+        # Use prefetched _operator_records if available (set by ImagingStudyViewSet)
+        # to avoid N+1 queries when serializing lists.
+        all_records = []
+        for series in obj.series.all():
+            prefetched = getattr(series, '_operator_records', None)
+            if prefetched is not None:
+                all_records.extend(prefetched)
+            else:
+                # Fallback for non-prefetched usage (e.g. detail view or tests)
+                dr = (
+                    DigitalRecord.objects
+                    .filter(series=series, operator__isnull=False)
+                    .select_related('operator')
+                    .order_by('-created_at')
+                    .first()
+                )
+                if dr:
+                    all_records.append(dr)
+        if not all_records:
+            return None
+        # Sort in Python to get the latest across all series
+        all_records.sort(key=lambda r: r.created_at, reverse=True)
+        return all_records[0].operator
 
     def get_scan_operator_username(self, obj: ImagingStudy) -> Optional[str]:
         operator = self._latest_operator(obj)
@@ -308,7 +323,6 @@ class DigitalRecordSerializer(serializers.ModelSerializer):
     series_id = serializers.IntegerField(source='series.id', read_only=True)
     record_type = CodingSerializer(read_only=True)
     series_modality = CodingSerializer(source='series.modality', read_only=True)
-    physical_location = AddressSerializer(read_only=True)
     physical_record_id = serializers.PrimaryKeyRelatedField(read_only=True, allow_null=True)
     device = DeviceSerializer(read_only=True)
     operator = serializers.StringRelatedField(read_only=True)
@@ -593,7 +607,7 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
                     operator="Unknown",
                 )
 
-            digital_record = DigitalRecord.objects.create(
+            digital_record = DigitalRecord(
                 series=series,
                 physical_record=physical_record,
                 record_type=rt_coding,
@@ -602,6 +616,8 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
                 patient_orientation=_encode_patient_orientation(patient_orientation),
                 image_transform_ops=transform_ops,
             )
+            digital_record.full_clean()
+            digital_record.save()
 
             ext = os.path.splitext(file_obj.name)[1].lower()
             filename = f"{getattr(digital_record, 'pk', digital_record.id)}{ext}"
