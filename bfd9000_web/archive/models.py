@@ -77,7 +77,7 @@ class Coding(TimestampedModel):
         ordering = ['system', 'code']
 
     def __str__(self) -> str:
-        return f"{self.system}#{self.code}" if self.code else self.system
+        return f"[{self.code}] - {self.display or self.meaning or 'No display'}"
 
 
 class ValueSet(TimestampedModel):

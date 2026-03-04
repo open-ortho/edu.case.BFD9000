@@ -275,7 +275,7 @@ class PhysicalRecordAdmin(admin.ModelAdmin):
     )
 
     def record_type_display(self, obj: PhysicalRecord) -> str:
-        return str(obj.record_type) if obj.record_type else '—'
+        return obj.record_type.code if obj.record_type else '—'
     record_type_display.short_description = 'Record Type'  # type: ignore[attr-defined]
 
 
@@ -288,7 +288,7 @@ class ArchiveLocationInline(admin.TabularInline):
 
 @admin.register(DigitalRecord)
 class DigitalRecordAdmin(admin.ModelAdmin):
-    list_display = ['id', 'series', 'record_type', 'acquisition_datetime', 'operator']
+    list_display = ['id', 'series', 'record_type_display', 'acquisition_datetime', 'operator']
     list_filter = ['record_type', 'series__modality']
     search_fields = [
         'id',
@@ -314,6 +314,10 @@ class DigitalRecordAdmin(admin.ModelAdmin):
             'fields': ('source_file', 'thumbnail')
         }),
     )
+
+    def record_type_display(self, obj: DigitalRecord) -> str:
+        return obj.record_type.code if obj.record_type else '—'
+    record_type_display.short_description = 'Record Type'  # type: ignore[attr-defined]
 
 
 @admin.register(Device)
