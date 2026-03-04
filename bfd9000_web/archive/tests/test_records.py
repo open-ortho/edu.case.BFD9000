@@ -85,8 +85,8 @@ class RecordTests(CleanupAPITestCase):
         # Create codings
         self.rt_lateral, _ = Coding.objects.get_or_create(
             system=SYSTEM_RECORD_TYPE,
-            code='201456002',
-            defaults={'display': 'Cephalogram'}
+            code='L',
+            defaults={'display': 'Lateral Cephalogram'}
         )
         self.orient_left, _ = Coding.objects.get_or_create(
             system=SYSTEM_ORIENTATION,

@@ -143,17 +143,7 @@
                         <label class="label">
                             <span class="label-text">Record Type <span class="text-error">*</span></span>
                         </label>
-                        <select id="record-type" class="select select-bordered select-sm">
-                            <option value="">Loading...</option>
-                        </select>
-                    </div>
-
-                    <!-- Modality -->
-                    <div class="form-control">
-                        <label class="label">
-                            <span class="label-text">Modality <span class="text-error">*</span></span>
-                        </label>
-                        <select id="modality" class="select select-bordered select-sm">
+                        <select id="record-type" class="select select-bordered select-sm font-mono">
                             <option value="">Loading...</option>
                         </select>
                     </div>
@@ -247,11 +237,8 @@
         aiFile: null,
         requiresServerTransform: false,
         transformOps: [],
-        aiImageTypeCode: null,
-        aiPatientOrientation: null,
         valuesets: {
             record_types: [],
-            modalities: []
         }
     };
     const defaultOperatorDisplay = "{{ operator_display|default:''|escapejs }}";
@@ -306,7 +293,7 @@
 
     async function createRecord(encounterId, formData) {
         const csrftoken = getCsrfToken();
-        
+
         const response = await fetch((window.script_name || '') + `/api/encounters/${encounterId}/records/`, {
             method: 'POST',
             headers: {
@@ -390,7 +377,12 @@
         const r = await resp2.json();
         console.log(r);
 
-        return result;
+        return {
+            ...result,
+            class_code: r.code,
+            class_prediction: r.prediction,
+            class_probability: r.probability,
+        };
     }
 
     async function performScannerScan() {
@@ -583,36 +575,8 @@
         state.aiFile = file;
         state.requiresServerTransform = false;
         state.transformOps = [];
-        state.aiImageTypeCode = null;
-        state.aiPatientOrientation = null;
         showFilePreview(file, file);
         updateSubmitButton();
-    }
-
-    function mapAIType(typePrediction) {
-        const mapping = {
-            'Lateral': {
-                recordType: '201456002',
-                imageType: 'L',
-                patientOrientation: ['A', 'F'],
-            },
-            'Hip & Pelvis': {
-                recordType: '268425006',
-                imageType: 'P',
-                patientOrientation: null,
-            },
-            'Foot & Ankle': {
-                recordType: '1597004',
-                imageType: 'FA',
-                patientOrientation: null,
-            },
-            'Hand & Wrist': {
-                recordType: '39714003',
-                imageType: 'H',
-                patientOrientation: null,
-            },
-        };
-        return mapping[typePrediction] || null;
     }
 
     // ========================================
@@ -695,17 +659,21 @@
     function populateSelect(selectId, options) {
         const select = document.getElementById(selectId);
         select.innerHTML = '<option value="">Select...</option>';
+        const maxCodeLength = Math.max(
+            1,
+            ...options.map(opt => String(opt.id || '').length)
+        );
         options.forEach(opt => {
             const option = document.createElement('option');
             option.value = opt.id;
-            option.textContent = opt.display;
+            const code = String(opt.id || '').padEnd(maxCodeLength, ' ');
+            option.textContent = `[${code}] - ${opt.display}`;
             select.appendChild(option);
         });
     }
 
     function clearFormFields() {
         document.getElementById('record-type').value = '';
-        document.getElementById('modality').value = '';
         document.getElementById('operator').value = defaultOperatorDisplay;
         // Reset acquisition date to today
         document.getElementById('acquisition-date').valueAsDate = new Date();
@@ -718,9 +686,8 @@
         const hasEncounter = state.encounter !== null;
         const hasFile = state.file !== null;
         const hasRecordType = document.getElementById('record-type').value !== '';
-        const hasModality = document.getElementById('modality').value !== '';
 
-        const canSubmit = hasSubject && hasEncounter && hasFile && hasRecordType && hasModality;
+        const canSubmit = hasSubject && hasEncounter && hasFile && hasRecordType;
         document.getElementById('submit-button').disabled = !canSubmit;
 
         // Update AI and image manipulation buttons (need file and must be PNG)
@@ -792,7 +759,7 @@
     // ========================================
     // IMAGE MANIPULATION FUNCTIONS
     // ========================================
-    
+
     // modify image by rotating / flipping
     async function modifyImage(degrees, flip = false) {
         if (!state.aiFile) return;
@@ -934,8 +901,6 @@
             state.aiFile = null;
             state.requiresServerTransform = false;
             state.transformOps = [];
-            state.aiImageTypeCode = null;
-            state.aiPatientOrientation = null;
             document.getElementById('file-preview').classList.add('hidden');
             clearFormFields();
             updateSubmitButton();
@@ -965,8 +930,6 @@
 
         state.file = file;
         state.transformOps = [];
-        state.aiImageTypeCode = null;
-        state.aiPatientOrientation = null;
         if (ext === 'png') {
             state.requiresServerTransform = false;
             state.previewFile = file;
@@ -1046,17 +1009,22 @@
         try {
             const result = await queryAI(state.aiFile);
 
-            // Map AI type_prediction to record_type select value
-            if (result.type_prediction) {
-                const mapped = mapAIType(result.type_prediction);
-                const recordTypeSelect = document.getElementById('record-type');
-                if (mapped && mapped.recordType) {
-                    recordTypeSelect.value = mapped.recordType;
-                    state.aiImageTypeCode = mapped.imageType;
-                    state.aiPatientOrientation = mapped.patientOrientation;
+            const recordTypeSelect = document.getElementById('record-type');
+            const aiCode = result.class_code || result.code;
+            if (aiCode) {
+                const option = state.valuesets.record_types.find(x => x.id === aiCode);
+                if (option) {
+                    recordTypeSelect.value = aiCode;
                 }
+            } else if (result.type_prediction) {
+                const option = state.valuesets.record_types.find(x => x.display === result.type_prediction);
+                if (option) {
+                    recordTypeSelect.value = option.id;
+                }
+            } else {
+                showAIStatus('AI classification failed: no valid code returned. Please classify manually.', true);
             }
-            
+
             if (result.flip || result.rotation) {
                 try {
                     await modifyImage(result.rotation || 0, result.flip || false);
@@ -1065,7 +1033,7 @@
                 }
             }
 
-            showAIStatus(`Fields populated from AI analysis. Confidence: ${result.type_probability.toFixed(2)}`);
+            showAIStatus(`Fields populated from AI analysis. Confidence: ${(result.class_probability ?? result.type_probability)?.toFixed(2) ?? 'N/A'}`);
             updateSubmitButton();
         } catch (error) {
             showAIStatus('AI processing failed: ' + error.message, true);
@@ -1089,16 +1057,16 @@
             if (state.previewFile) {
                 formData.append('thumbnail_preview', state.previewFile, 'thumbnail_preview.png');
             }
-            formData.append('record_type', document.getElementById('record-type').value);
-            formData.append('modality', document.getElementById('modality').value);
 
-            if (state.aiImageTypeCode) {
-                formData.append('image_type', state.aiImageTypeCode);
+            const recordType = document.getElementById('record-type').value;
+            if (!recordType) {
+                throw new Error('Record type is required.');
             }
-            if (state.aiPatientOrientation && state.aiPatientOrientation.length === 2) {
-                formData.append('patient_orientation', state.aiPatientOrientation[0]);
-                formData.append('patient_orientation', state.aiPatientOrientation[1]);
+            if (!state.valuesets.record_types.find(x => x.id === recordType)) {
+                throw new Error(`Expected record type ${recordType} to exist in valueset record_types`);
             }
+            formData.append('record_type', recordType);
+
             if (state.requiresServerTransform && state.transformOps.length > 0) {
                 formData.append('image_transform_ops', JSON.stringify(state.transformOps));
             }
@@ -1154,8 +1122,6 @@
         state.aiFile = null;
         state.requiresServerTransform = false;
         state.transformOps = [];
-        state.aiImageTypeCode = null;
-        state.aiPatientOrientation = null;
         document.getElementById('file-upload').value = '';
         document.getElementById('file-preview').classList.add('hidden');
         document.getElementById('scan-status').textContent = '';
@@ -1179,17 +1145,12 @@
 
         // Load valuesets
         try {
-            const [recordTypes, modalities] = await Promise.all([
-                fetchValueset('record_types'),
-                fetchValueset('modalities')
-            ]);
+            const record_types = await fetchValueset('record_types');
 
-            state.valuesets.record_types = recordTypes;
-            state.valuesets.modalities = modalities;
+            state.valuesets.record_types = record_types;
             console.log(state.valuesets);
 
-            populateSelect('record-type', recordTypes);
-            populateSelect('modality', modalities);
+            populateSelect('record-type', record_types);
         } catch (error) {
             console.error('Failed to load valuesets:', error);
             alert('Failed to load form options. Please refresh the page.');
@@ -1215,7 +1176,7 @@
         });
 
         // Watch form fields for changes
-        ['record-type', 'modality'].forEach(id => {
+        ['record-type'].forEach(id => {
             document.getElementById(id).addEventListener('change', updateSubmitButton);
         });
 

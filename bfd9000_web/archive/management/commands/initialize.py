@@ -9,6 +9,8 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import BaseCommand, CommandError, call_command
 
+from archive.constants import VALUESET_EXPAND_URLS
+
 
 class Command(BaseCommand):
     """Run migrate, create superuser, and import seed subject datasets."""
@@ -74,6 +76,17 @@ class Command(BaseCommand):
         if not options["skip_migrate"]:
             self.stdout.write(self.style.NOTICE("Running migrate..."))
             call_command("migrate", verbosity=verbosity)
+
+            self.stdout.write(self.style.NOTICE("Importing all valuesets..."))
+            try:
+                call_command(
+                    "import_valuesets",
+                    "--all",
+                    verbosity=verbosity,
+                )
+            except Exception as exc:
+                import warnings
+                self.stdout.write(self.style.WARNING(f"WARNING: import_valuesets --all failed: {exc}"))
 
         if not options["skip_superuser"]:
             self._run_createsuperuser(options, verbosity)

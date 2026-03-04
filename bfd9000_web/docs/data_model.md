@@ -2,7 +2,6 @@
 
 This document defines the archive concepts and rationale used by the Django models.
 
-
 ## Core hierarchy
 
 Imaging data is organized as:
@@ -103,13 +102,25 @@ Owns per-instance/acquisition fields:
 These are different concepts and must never be substituted.
 
 - `record_type`:
-  - SNOMED clinical study type.
+  - CWRU record type code (ValueSet: `https://orthodontics.case.edu/fhir/cwru-ortho-record-types`).
   - Owned by `Series`.
   - Used for clinical grouping/filtering.
 - `image_type`:
   - Legacy identifier code (e.g., `L`, `SM`).
   - Owned by `Record`.
   - Used for source compatibility/import semantics.
+
+## Codes, Valuesets, and Dropdowns
+
+Clinical codes (record types, modalities, orientations, procedures) are stored as `Coding` rows and grouped into `ValueSet`s. The UI uses the valueset API (`/api/valuesets/?type=...`) to populate dropdowns, and the same codes are used when exporting to open standards (FHIR/DICOM) so integrations stay interoperable.
+
+Valuesets are refreshed from canonical FHIR sources using the generic importer:
+
+```
+python manage.py import_valuesets --all
+```
+
+This is idempotent: it updates existing codes, adds new ones, and removes valueset links for retired codes so they no longer appear in dropdowns. Update valueset sources in `bfd9000_web/archive/constants.py` if a terminology endpoint changes or a new valueset should be managed by the importer.
 
 ## Clarifications from the refactor
 

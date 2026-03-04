@@ -115,10 +115,6 @@
                                     <td id="modality">-</td>
                                 </tr>
                                 <tr>
-                                    <th>Image Type</th>
-                                    <td id="image-type">-</td>
-                                </tr>
-                                <tr>
                                     <th>Patient Orientation</th>
                                     <td id="patient-orientation">-</td>
                                 </tr>
@@ -182,7 +178,6 @@
 
         // Series & acquisition details come from record payload
         document.getElementById('modality').textContent = record.series_modality?.display || '-';
-        document.getElementById('image-type').textContent = record.image_type?.display || '-';
         document.getElementById('patient-orientation').textContent = Array.isArray(record.patient_orientation)
             ? record.patient_orientation.join('\\')
             : '-';

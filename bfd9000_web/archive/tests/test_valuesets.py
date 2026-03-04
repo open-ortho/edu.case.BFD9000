@@ -33,9 +33,9 @@ class ValuesetTests(CleanupAPITestCase):
         self.record_types_valueset, _ = ValueSet.objects.get_or_create(
             slug="record_types",
             defaults={
-                "url": "https://orthodontics.case.edu/fhir/ValueSet/record-types",
-                "name": "RecordTypes",
-                "title": "Record types",
+                "url": "https://orthodontics.case.edu/fhir/cwru-ortho-record-types",
+                "name": "CWRUOrthoRecordTypes",
+                "title": "CWRU Ortho Record Types",
             },
         )
         self.orientations_valueset, _ = ValueSet.objects.get_or_create(
@@ -71,11 +71,11 @@ class ValuesetTests(CleanupAPITestCase):
             },
         )
 
-        # Record types (using SNOMED codes from migration)
+        # Record types (CWRU codes)
         self.rt_lateral, _ = Coding.objects.get_or_create(
             system=SYSTEM_RECORD_TYPE,
-            code='201456002',
-            defaults={'display': 'Cephalogram'},
+            code='L',
+            defaults={'display': 'Lateral Cephalogram'},
         )
         ValueSetConcept.objects.get_or_create(
             valueset=self.record_types_valueset,
@@ -83,8 +83,8 @@ class ValuesetTests(CleanupAPITestCase):
         )
         self.rt_pa, _ = Coding.objects.get_or_create(
             system=SYSTEM_RECORD_TYPE,
-            code='268425006',
-            defaults={'display': 'Pelvis X-ray'},
+            code='F',
+            defaults={'display': 'Frontal Cephalogram'},
         )
         ValueSetConcept.objects.get_or_create(
             valueset=self.record_types_valueset,
@@ -227,10 +227,10 @@ class ValuesetTests(CleanupAPITestCase):
             self.assertIn('display', item)
             self.assertEqual(len(item), 2, "Should only have 'id' and 'display' fields")
 
-        # Verify expected values (SNOMED codes)
+        # Verify expected values (CWRU codes)
         ids = [item['id'] for item in response.data]
-        self.assertIn('201456002', ids)  # Cephalogram
-        self.assertIn('268425006', ids)  # Pelvis X-ray
+        self.assertIn('L', ids)  # Lateral Cephalogram
+        self.assertIn('F', ids)  # Frontal Cephalogram
 
     def test_orientations(self):
         """Should return orientations with correct structure"""

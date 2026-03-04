@@ -40,19 +40,12 @@ from .constants import (
     SYSTEM_RECORD_TYPE,
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
     SYSTEM_IDENTIFIER_IMAGE_TYPE,
+    RECORD_TYPE_MODALITY_MAP,
 )
 from .media_utils import generate_thumbnail_jpeg_bytes
 
 
-RECORD_TYPE_CODES = (
-    '201456002',
-    '268425006',
-    '39714003',
-    '1597004',
-    '302189007',
-)
-
-LATERAL_IMAGE_TYPE_CODE = 'L'
+LATERAL_RECORD_TYPE_CODE = 'L'
 
 
 def _encode_patient_orientation(value: Optional[list[str]]) -> str:
@@ -403,13 +396,15 @@ class RecordUploadSerializer(serializers.ModelSerializer):
     # Use SlugRelatedField for idiomatic lookup by 'code'
     record_type = serializers.SlugRelatedField(
         slug_field='code',
-        queryset=Coding.objects.filter(system=SYSTEM_RECORD_TYPE, code__in=RECORD_TYPE_CODES),
-        write_only=True
+        queryset=Coding.objects.filter(system=SYSTEM_RECORD_TYPE),
+        write_only=True,
     )
     modality = serializers.SlugRelatedField(
         slug_field='code',
         queryset=Coding.objects.filter(system=SYSTEM_MODALITY),
-        write_only=True
+        required=False,
+        allow_null=True,
+        write_only=True,
     )
 
     acquisition_date = serializers.DateField(required=False, write_only=True)
@@ -486,6 +481,22 @@ class RecordUploadSerializer(serializers.ModelSerializer):
 
         return normalized
 
+    def _infer_modality(self, record_type: Coding) -> Coding:
+        record_type_code = str(getattr(record_type, 'code', '') or '')
+        modality_code = RECORD_TYPE_MODALITY_MAP.get(record_type_code)
+
+        if not modality_code:
+            raise serializers.ValidationError({
+                'modality': f"Unable to infer modality for record type {record_type_code or 'unknown'}."
+            })
+
+        modality = Coding.objects.filter(system=SYSTEM_MODALITY, code=modality_code).first()
+        if modality is None:
+            raise serializers.ValidationError({
+                'modality': f"Modality code {modality_code} not found in system {SYSTEM_MODALITY}."
+            })
+        return modality
+
     def to_representation(self, instance: Record) -> Dict[str, Any]:
         """Use standard RecordSerializer for response."""
         return cast(Dict[str, Any], RecordSerializer(instance, context=self.context).data)
@@ -543,7 +554,7 @@ class RecordUploadSerializer(serializers.ModelSerializer):
 
         # These are now Coding objects, not strings!
         rt_coding = validated_data.pop('record_type')
-        mod_coding = validated_data.pop('modality')
+        mod_coding = validated_data.pop('modality', None)
 
         acquisition_date = validated_data.pop('acquisition_date', None)
         image_type = validated_data.pop('image_type', None)
@@ -564,7 +575,7 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         if request and getattr(request, 'user', None) and request.user.is_authenticated:
             scan_operator = request.user
 
-        if patient_orientation is None and image_type and getattr(image_type, 'code', None) == LATERAL_IMAGE_TYPE_CODE:
+        if patient_orientation is None and getattr(rt_coding, 'code', None) == LATERAL_RECORD_TYPE_CODE:
             patient_orientation = ['A', 'F']
 
         with transaction.atomic():
@@ -585,6 +596,9 @@ class RecordUploadSerializer(serializers.ModelSerializer):
             if study.collection != collection:
                 study.collection = collection
                 study.save(update_fields=['collection'])
+
+            if mod_coding is None:
+                mod_coding = self._infer_modality(rt_coding)
 
             # Get or create Series within the study
             series, _ = Series.objects.get_or_create(
