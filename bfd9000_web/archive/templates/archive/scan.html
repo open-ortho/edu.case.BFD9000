@@ -143,7 +143,7 @@
                         <label class="label">
                             <span class="label-text">Record Type <span class="text-error">*</span></span>
                         </label>
-                        <select id="record-type" class="select select-bordered select-sm">
+                        <select id="record-type" class="select select-bordered select-sm font-mono">
                             <option value="">Loading...</option>
                         </select>
                     </div>
@@ -659,10 +659,15 @@
     function populateSelect(selectId, options) {
         const select = document.getElementById(selectId);
         select.innerHTML = '<option value="">Select...</option>';
+        const maxCodeLength = Math.max(
+            1,
+            ...options.map(opt => String(opt.id || '').length)
+        );
         options.forEach(opt => {
             const option = document.createElement('option');
             option.value = opt.id;
-            option.textContent = `${opt.display} (${opt.id})`;
+            const code = String(opt.id || '').padEnd(maxCodeLength, ' ');
+            option.textContent = `[${code}] - ${opt.display}`;
             select.appendChild(option);
         });
     }
@@ -1005,8 +1010,12 @@
             const result = await queryAI(state.aiFile);
 
             const recordTypeSelect = document.getElementById('record-type');
-            const aiCode = result.code || result.record_type || result.prediction || result.class_code || result.class_prediction;
+            const aiCode = result.class_code || result.code;
             if (aiCode) {
+                // If no valid code, classification failed
+            } else {
+                showAIStatus('AI classification failed: no valid code returned. Please classify manually.', true);
+            }
                 const option = state.valuesets.record_types.find(x => x.id === aiCode);
                 if (option) {
                     recordTypeSelect.value = aiCode;
@@ -1026,7 +1035,7 @@
                 }
             }
 
-            showAIStatus(`Fields populated from AI analysis. Confidence: ${result.type_probability.toFixed(2)}`);
+            showAIStatus(`Fields populated from AI analysis. Confidence: ${(result.class_probability ?? result.type_probability)?.toFixed(2) ?? 'N/A'}`);
             updateSubmitButton();
         } catch (error) {
             showAIStatus('AI processing failed: ' + error.message, true);

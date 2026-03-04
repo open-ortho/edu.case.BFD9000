@@ -78,11 +78,15 @@ class Command(BaseCommand):
             call_command("migrate", verbosity=verbosity)
 
             self.stdout.write(self.style.NOTICE("Importing all valuesets..."))
-            call_command(
-                "import_valuesets",
-                "--all",
-                verbosity=verbosity,
-            )
+            try:
+                call_command(
+                    "import_valuesets",
+                    "--all",
+                    verbosity=verbosity,
+                )
+            except Exception as exc:
+                import warnings
+                self.stdout.write(self.style.WARNING(f"WARNING: import_valuesets --all failed: {exc}"))
 
         if not options["skip_superuser"]:
             self._run_createsuperuser(options, verbosity)

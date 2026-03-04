@@ -19,7 +19,7 @@ def import_valueset(expand_url: str, slug: str) -> int:
 
 def _fetch_valueset(url: str) -> Dict[str, Any]:
     with urlopen(url) as response:
-        raw = response.read().decode("ascii", errors="ignore")
+        raw = response.read().decode("utf-8")
     data: Dict[str, Any] = json.loads(raw)
     return data
 
