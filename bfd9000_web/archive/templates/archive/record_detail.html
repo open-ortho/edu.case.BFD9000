@@ -131,6 +131,31 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Scanner Details -->
+            <div class="card bg-base-200 shadow" id="scanner-details-card">
+                <div class="card-body">
+                    <h2 class="card-title text-lg">Scanner Details</h2>
+                    <div class="overflow-x-auto">
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <th>Manufacturer</th>
+                                    <td id="device-manufacturer">-</td>
+                                </tr>
+                                <tr>
+                                    <th>Model</th>
+                                    <td id="device-model">-</td>
+                                </tr>
+                                <tr>
+                                    <th>Serial Number</th>
+                                    <td id="device-serial">-</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -187,6 +212,18 @@
         document.getElementById('scan-operator').textContent = record.operator || '-';
         renderArchiveLocations(record.archive_locations || []);
         setupDownloadButton(record);
+
+        // Device
+        const device = record.device;
+        if (device) {
+            document.getElementById('device-manufacturer').textContent = device.manufacturer || '-';
+            document.getElementById('device-model').textContent = device.model_number || '-';
+            document.getElementById('device-serial').textContent = device.serial_number || '-';
+        } else {
+            document.getElementById('device-manufacturer').closest('tr').classList.add('hidden');
+            document.getElementById('device-model').closest('tr').classList.add('hidden');
+            document.getElementById('device-serial').closest('tr').classList.add('hidden');
+        }
     }
 
     function renderArchiveLocations(locations) {
