@@ -3,6 +3,8 @@
 import datetime
 import io
 from django.test import override_settings
+from django.test.utils import CaptureQueriesContext
+from django.db import connection
 from django.contrib.auth.models import User, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -19,6 +21,7 @@ from archive.models import (
     Endpoint,
     ImagingStudy,
     PhysicalRecord,
+    Series,
     Subject,
 )
 from archive.constants import (
@@ -203,3 +206,86 @@ class RecordTests(CleanupAPITestCase):
         self.assertIsNotNone(digital_record.physical_record)
         physical_record: PhysicalRecord = digital_record.physical_record  # type: ignore[assignment]
         self.assertIsNone(physical_record.device_id)
+
+class ImagingStudyOperatorPrefetchTests(CleanupAPITestCase):
+    """
+    Verify that the ImagingStudy list endpoint does not issue N+1 queries
+    for the scan_operator_username / scan_operator_display fields.
+    """
+
+    def setUp(self) -> None:
+        self.user = User.objects.create_user(
+            username='perfuser', password='pass', first_name='Perf', last_name='User',
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.collection = Collection.objects.create(
+            short_name='PERF', full_name='Performance Test Collection'
+        )
+        self.procedure, _ = Coding.objects.get_or_create(
+            system=SYSTEM_PROCEDURE,
+            code='ortho-visit',
+            defaults={'display': 'Orthodontic Visit'},
+        )
+        self.record_type, _ = Coding.objects.get_or_create(
+            system=SYSTEM_RECORD_TYPE,
+            code='L',
+            defaults={'display': 'Lateral Cephalogram'},
+        )
+
+        self.studies: list[ImagingStudy] = []
+
+        for i in range(3):
+            subject = Subject.objects.create(
+                humanname_family=f'Doe{i}',
+                humanname_given=f'Jane{i}',
+                gender='male',
+                birth_date=f'1990-01-0{i + 1}',
+                collection=self.collection,
+            )
+            encounter = Encounter.objects.create(
+                subject=subject,
+                actual_period_start=f'2022-01-0{i + 1}',
+                procedure_code=self.procedure,
+            )
+            study = ImagingStudy.objects.create(encounter=encounter, collection=self.collection)
+            self.studies.append(study)
+            series = Series.objects.create(imaging_study=study)
+            operator = User.objects.create_user(
+                username=f'operator{i}',
+                first_name=f'Op{i}',
+                last_name='X',
+                password='pass',
+            )
+            DigitalRecord.objects.create(
+                series=series, operator=operator, record_type=self.record_type
+            )
+
+    def test_list_returns_all_studies_with_operator(self) -> None:
+        """Response contains all 3 studies with correct scan_operator_username values."""
+        resp = self.client.get('/api/imaging-studies/')
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        results = data['results'] if isinstance(data, dict) and 'results' in data else data
+        study_ids = {s.id for s in self.studies}
+        our_results = [r for r in results if r['id'] in study_ids]
+        self.assertEqual(len(our_results), 3)
+        expected_usernames = {f'operator{i}' for i in range(3)}
+        returned_usernames = {rec['scan_operator_username'] for rec in our_results}
+        self.assertEqual(expected_usernames, returned_usernames)
+
+    def test_list_query_count_is_bounded(self) -> None:
+        """
+        Query count for the list endpoint must not grow linearly with the number
+        of ImagingStudy objects (i.e., no N+1 on operator lookup).
+        With 3 studies the total should stay well under 15 queries.
+        """
+        with CaptureQueriesContext(connection) as ctx:
+            resp = self.client.get('/api/imaging-studies/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertLessEqual(
+            len(ctx.captured_queries),
+            15,
+            f"Too many queries ({len(ctx.captured_queries)}): "
+            + str([q['sql'][:120] for q in ctx.captured_queries]),
+        )

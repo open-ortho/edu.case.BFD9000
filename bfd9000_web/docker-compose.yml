@@ -6,6 +6,7 @@ services:
     environment:
       POSTGRES_DB: bfd9000
       POSTGRES_USER: bfd9000
+      # WARNING: dev-only credentials — do not reuse in staging or production
       POSTGRES_PASSWORD: bfd9000_dev
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -40,6 +41,7 @@ services:
       - DB_ENGINE=django.db.backends.postgresql
       - DB_NAME=bfd9000
       - DB_USER=bfd9000
+      # WARNING: dev-only credentials — do not reuse in staging or production
       - DB_PASSWORD=bfd9000_dev
       - DB_HOST=db
       - DB_PORT=5432
