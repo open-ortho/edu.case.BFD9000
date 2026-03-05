@@ -91,7 +91,7 @@ class DeviceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Device
-        fields = ['id', 'identifier', 'display_name', 'manufacturer', 'model_number', 'version', 'modalities']
+        fields = ['id', 'serial_number', 'display_name', 'manufacturer', 'model_number', 'version', 'modalities']
 
 
 class IdentifierSerializer(serializers.ModelSerializer):
@@ -579,7 +579,7 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
         if device_serial:
             display_name = ' '.join(filter(None, [device_manufacturer, device_model])) or device_serial
             device, _ = Device.objects.get_or_create(
-                identifier=device_serial,
+                serial_number=device_serial,
                 model_number=device_model,
                 defaults={
                     'display_name': display_name,

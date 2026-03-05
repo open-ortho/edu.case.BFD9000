@@ -156,8 +156,8 @@ class RecordTests(CleanupAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
 
         # Device should have been created
-        self.assertEqual(Device.objects.filter(identifier='SN-001', model_number='XRay3000').count(), 1)
-        device = Device.objects.get(identifier='SN-001', model_number='XRay3000')
+        self.assertEqual(Device.objects.filter(serial_number='SN-001', manufacturer='Acme', model_number='XRay3000').count(), 1)
+        device = Device.objects.get(serial_number='SN-001', manufacturer='Acme', model_number='XRay3000')
         self.assertEqual(device.manufacturer, 'Acme')
         self.assertEqual(device.display_name, 'Acme XRay3000')
 
@@ -189,9 +189,9 @@ class RecordTests(CleanupAPITestCase):
             )
 
         self.assertEqual(
-            Device.objects.filter(identifier='SN-REUSE', model_number='XRay3000').count(),
+            Device.objects.filter(serial_number='SN-REUSE', manufacturer='Acme', model_number='XRay3000').count(),
             1,
-            "Expected only one Device row for the same serial+model combination.",
+            "Expected only one Device row for the same serial+manufacturer+model combination.",
         )
 
     def test_upload_without_device_fields_succeeds_with_null_device(self):
