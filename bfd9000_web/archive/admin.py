@@ -324,7 +324,7 @@ class DigitalRecordAdmin(admin.ModelAdmin):
 class DeviceAdmin(admin.ModelAdmin):
     list_display = ['display_name', 'manufacturer', 'model_number', 'version']
     search_fields = ['display_name', 'manufacturer', 'model_number', 'serial_number']
-    filter_horizontal = ['modalities']
+    filter_horizontal = ['modalities', 'identifiers']
 
 
 @admin.register(Endpoint)

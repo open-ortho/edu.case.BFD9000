@@ -618,6 +618,12 @@ class Device(TimestampedModel):
         related_name='devices',
         help_text='DICOM modality codes this device can produce'
     )
+    identifiers = models.ManyToManyField(
+        'Identifier',
+        blank=True,
+        related_name='devices',
+        help_text='Institutional or business identifiers for this device (FHIR Device.identifier)',
+    )
 
     class Meta(TimestampedModel.Meta):
         """Model metadata."""
