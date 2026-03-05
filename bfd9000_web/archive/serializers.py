@@ -574,19 +574,6 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
         if not encounter:
             raise serializers.ValidationError({"encounter": "This field is required (either in URL or body)."})
 
-        # Resolve or auto-create Device by (serial, model) when serial is provided
-        device: Optional[Device] = None
-        if device_serial:
-            display_name = ' '.join(filter(None, [device_manufacturer, device_model])) or device_serial
-            device, _ = Device.objects.get_or_create(
-                serial_number=device_serial,
-                model_number=device_model,
-                defaults={
-                    'display_name': display_name,
-                    'manufacturer': device_manufacturer,
-                },
-            )
-
         request = self.context.get('request')
         operator = None
         if request and getattr(request, 'user', None) and request.user.is_authenticated:
@@ -596,6 +583,19 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
             patient_orientation = ['A', 'F']
 
         with transaction.atomic():
+            # Resolve or auto-create Device by (serial, manufacturer, model) when serial is provided
+            device: Optional[Device] = None
+            if device_serial:
+                display_name = ' '.join(filter(None, [device_manufacturer, device_model])) or device_serial
+                device, _ = Device.objects.get_or_create(
+                    serial_number=device_serial,
+                    manufacturer=device_manufacturer,
+                    model_number=device_model,
+                    defaults={
+                        'display_name': display_name,
+                    },
+                )
+
             subject = encounter.subject
             collection = getattr(subject, 'collection', None)
             if not collection:

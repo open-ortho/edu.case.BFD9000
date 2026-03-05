@@ -1,9 +1,3 @@
-# Replaces the earlier 0003_device_unique_identifier_model draft migration.
-# - Renames Device.identifier -> Device.serial_number (FHIR Device.serialNumber semantics)
-# - Adds Device.identifiers M2M -> Identifier (FHIR Device.identifier, unused for now)
-# - Drops old unique_device_identifier_model constraint
-# - Adds unique_device_serial_manufacturer_model constraint on (serial_number, manufacturer, model_number)
-
 from django.conf import settings
 from django.db import migrations, models
 

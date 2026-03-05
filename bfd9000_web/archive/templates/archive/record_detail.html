@@ -220,9 +220,9 @@
             document.getElementById('device-model').textContent = device.model_number || '-';
             document.getElementById('device-serial').textContent = device.serial_number || '-';
         } else {
-            document.getElementById('device-manufacturer').closest('tr').classList.add('hidden');
-            document.getElementById('device-model').closest('tr').classList.add('hidden');
-            document.getElementById('device-serial').closest('tr').classList.add('hidden');
+            document.getElementById('device-manufacturer').textContent = 'Manual upload';
+            document.getElementById('device-model').textContent = '-';
+            document.getElementById('device-serial').textContent = '-';
         }
     }
 
