@@ -23,7 +23,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "9000:9000"
+      - "127.0.0.1:9000:9000"
     depends_on:
       db:
         condition: service_healthy
@@ -55,16 +55,27 @@ services:
       - SCRIPT_NAME=/bfd9000
       - BFD9020_BASE_URL=http://localhost:9020
       # - BFD9020_BASE_URL=https://wingate.case.edu/bfd9020
+      
+      - SCANNER_API_BASE=http://127.0.0.1:9010
 
   bfd9020:
     image: ghcr.io/open-ortho/edu.case.bfd9020:local
     container_name: bfd9020
     ports:
-      - "9020:9020"
+      - "127.0.0.1:9020:9020"
     environment:
       LOG_LEVEL: "INFO"
       ROOT_PATH: ""
       ENABLE_DOCS: "true"
+
+  mock-bfd9010:
+    image: mock-bfd9010:local
+    container_name: mock_bfd9010
+    build:
+      context: ../dev_tools/mock_bfd9010
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:9010:9010"
 
 volumes:
   media_volume:

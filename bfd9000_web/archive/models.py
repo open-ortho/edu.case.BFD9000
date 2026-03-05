@@ -596,9 +596,9 @@ class Device(TimestampedModel):
     Physical device used for acquisition or digitization.
     Modeled after the FHIR Device resource.
     """
-    identifier = models.CharField(
+    serial_number = models.CharField(
         max_length=255, blank=True,
-        help_text='Device identifier (e.g. serial number or institution asset tag)'
+        help_text='Manufacturer-assigned serial number for this specific device unit (FHIR Device.serialNumber)'
     )
     display_name = models.CharField(
         max_length=255, help_text='Human-readable device name'
@@ -618,10 +618,23 @@ class Device(TimestampedModel):
         related_name='devices',
         help_text='DICOM modality codes this device can produce'
     )
+    identifiers = models.ManyToManyField(
+        'Identifier',
+        blank=True,
+        related_name='devices',
+        help_text='Institutional or business identifiers for this device (FHIR Device.identifier)',
+    )
 
     class Meta(TimestampedModel.Meta):
         """Model metadata."""
         ordering = ['display_name']
+        constraints = [
+            models.UniqueConstraint(
+                condition=models.Q(serial_number__gt=''),
+                fields=('serial_number', 'manufacturer', 'model_number'),
+                name='unique_device_serial_manufacturer_model',
+            )
+        ]
 
     def __str__(self) -> str:
         parts = [self.display_name]

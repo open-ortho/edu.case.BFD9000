@@ -237,6 +237,7 @@
         aiFile: null,
         requiresServerTransform: false,
         transformOps: [],
+        device: null,
         valuesets: {
             record_types: [],
         }
@@ -420,6 +421,20 @@
             const binary = binaryEntry.resource;
             const contentType = binary.contentType || 'image/png';
             const file = binaryToFile(binary.data, contentType, 'scanner');
+
+            // Fetch device info at scan time to guarantee we capture the actual scanner used
+            try {
+                const device = await fetchScannerDeviceInfo();
+                state.device = {
+                    serial: device.serialNumber || '',
+                    manufacturer: device.manufacturer || '',
+                    model: device.modelNumber || '',
+                };
+            } catch (deviceError) {
+                console.warn('Could not fetch device info at scan time:', deviceError);
+                state.device = null;
+            }
+
             applyScannedFile(file);
             showScanStatus('Scan completed');
         } catch (error) {
@@ -552,8 +567,14 @@
             const device = await fetchScannerDeviceInfo();
             const model = device.modelNumber || device.deviceName?.[0]?.name || 'Unknown model';
             document.getElementById('scanner-model').textContent = model;
+            state.device = {
+                serial: device.serialNumber || '',
+                manufacturer: device.manufacturer || '',
+                model: device.modelNumber || '',
+            };
         } catch (error) {
             document.getElementById('scanner-model').textContent = 'Scanner not connected';
+            state.device = null;
         }
     }
 
@@ -928,6 +949,8 @@
             return;
         }
 
+        // Manual file upload — no scanner device associated
+        state.device = null;
         state.file = file;
         state.transformOps = [];
         if (ext === 'png') {
@@ -1074,6 +1097,12 @@
             const acquisitionDate = document.getElementById('acquisition-date').value;
             if (acquisitionDate) {
                 formData.append('acquisition_date', acquisitionDate);
+            }
+
+            if (state.device && state.device.serial) {
+                formData.append('device_serial', state.device.serial);
+                formData.append('device_manufacturer', state.device.manufacturer);
+                formData.append('device_model', state.device.model);
             }
 
             const record = await createRecord(state.encounter.id, formData);

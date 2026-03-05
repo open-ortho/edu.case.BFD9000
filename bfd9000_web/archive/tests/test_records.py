@@ -15,10 +15,12 @@ from archive.models import (
     ArchiveLocation,
     Collection,
     Coding,
+    Device,
     DigitalRecord,
     Encounter,
     Endpoint,
     ImagingStudy,
+    PhysicalRecord,
     Series,
     Subject,
 )
@@ -132,6 +134,78 @@ class RecordTests(CleanupAPITestCase):
         self.assertNotIn('secret-token', endpoint.credentials_encrypted)
         self.assertEqual(endpoint.get_credentials(), payload)
 
+    def _upload_png(self, extra_fields: dict) -> 'rest_framework.response.Response':  # type: ignore[name-defined]
+        """Helper: POST a minimal valid PNG record upload, merging extra_fields."""
+        upload = SimpleUploadedFile('test.png', self.image_content, content_type='image/png')
+        data = {
+            'file': upload,
+            'record_type': self.rt_lateral.code,
+            'encounter': self.encounter.pk,
+        }
+        data.update(extra_fields)
+        url = reverse('archive:digitalrecord-list')
+        return self.client.post(url, data, format='multipart')
+
+    def test_upload_with_device_creates_device_and_links_records(self):
+        """Uploading with device fields creates a Device and links it to DigitalRecord and PhysicalRecord."""
+        response = self._upload_png({
+            'device_serial': 'SN-001',
+            'device_manufacturer': 'Acme',
+            'device_model': 'XRay3000',
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+        # Device should have been created
+        self.assertEqual(Device.objects.filter(serial_number='SN-001', manufacturer='Acme', model_number='XRay3000').count(), 1)
+        device = Device.objects.get(serial_number='SN-001', manufacturer='Acme', model_number='XRay3000')
+        self.assertEqual(device.manufacturer, 'Acme')
+        self.assertEqual(device.display_name, 'Acme XRay3000')
+
+        # DigitalRecord should reference the device
+        record_id = response.data['id']
+        digital_record = DigitalRecord.objects.get(pk=record_id)
+        self.assertEqual(digital_record.device_id, device.pk)
+
+        # PhysicalRecord should also reference the device
+        self.assertIsNotNone(digital_record.physical_record)
+        physical_record: PhysicalRecord = digital_record.physical_record  # type: ignore[assignment]
+        self.assertEqual(physical_record.device_id, device.pk)
+
+    def test_upload_with_same_device_serial_reuses_device(self):
+        """Uploading twice with the same serial+model reuses the existing Device (no duplicates)."""
+        for _ in range(2):
+            upload = SimpleUploadedFile('test.png', self.image_content, content_type='image/png')
+            self.client.post(
+                reverse('archive:digitalrecord-list'),
+                {
+                    'file': upload,
+                    'record_type': self.rt_lateral.code,
+                    'encounter': self.encounter.pk,
+                    'device_serial': 'SN-REUSE',
+                    'device_manufacturer': 'Acme',
+                    'device_model': 'XRay3000',
+                },
+                format='multipart',
+            )
+
+        self.assertEqual(
+            Device.objects.filter(serial_number='SN-REUSE', manufacturer='Acme', model_number='XRay3000').count(),
+            1,
+            "Expected only one Device row for the same serial+manufacturer+model combination.",
+        )
+
+    def test_upload_without_device_fields_succeeds_with_null_device(self):
+        """Uploading without device fields succeeds and leaves device null on both records."""
+        response = self._upload_png({})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+        record_id = response.data['id']
+        digital_record = DigitalRecord.objects.get(pk=record_id)
+        self.assertIsNone(digital_record.device_id)
+
+        self.assertIsNotNone(digital_record.physical_record)
+        physical_record: PhysicalRecord = digital_record.physical_record  # type: ignore[assignment]
+        self.assertIsNone(physical_record.device_id)
 
 class ImagingStudyOperatorPrefetchTests(CleanupAPITestCase):
     """
