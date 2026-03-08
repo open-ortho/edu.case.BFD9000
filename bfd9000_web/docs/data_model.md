@@ -5,6 +5,7 @@ This document defines the archive concepts and rationale used by the Django mode
 - [Archive Data Model](#archive-data-model)
   - [Core hierarchy](#core-hierarchy)
   - [Models](#models)
+    - [Subject](#subject)
     - [Encounter](#encounter)
       - [Encounter Date](#encounter-date)
       - [Encounter Age](#encounter-age)
@@ -58,6 +59,19 @@ Example: one encounter contains cephalometric films and scanned study models. Th
 ## Models
 
 These rules are strict.
+
+### Subject
+
+Represents a human or animal whose data is held in the archive.
+
+| Field | Notes |
+|-------|-------|
+| `identifiers` | M2M → Identifier. Typed, system-scoped references (e.g. Bolton ID, Richardson R-number). |
+| `gender` | FHIR `Patient.gender` values: `male`, `female`, `other`, `unknown`. |
+| `skeletal_pattern` | FK → Coding (null). SNOMED skeletal class code. |
+| `notes` | Free-text notes from import sources (e.g. "misc" column from Richardson spreadsheet). Null if empty. |
+
+Name, date-of-birth, and other PII fields exist in the model but are **not exposed** via the API or UI at this time.
 
 ### Encounter
 
@@ -118,11 +132,12 @@ Represents the original physical artifact produced at an encounter.
 | `physical_location_tray`        | Tray identifier.                                                                                                                                                                |
 | `physical_location_compartment` | Compartment identifier.                                                                                                                                                         |
 | `identifiers`                   | M2M → Identifier. External identifiers.                                                                                                                                         |
+| `notes`                         | Free-text notes from import sources (e.g. "Errors/Misc." column from Richardson spreadsheet). Null if empty.                                                                   |
 
 **Constraints:**
 
 - `record_type` cannot be null.
-- Unique on `(record_type, encounter)`: at each encounter a subject is collected only once per record type.
+- No uniqueness constraint on `(record_type, encounter)`. Multiple physical records of the same type may exist per encounter (e.g. multiple photographs taken on the same visit).
 - `medium` is derived from `record_type` via a model method/property — it is not stored. This avoids duplication and sync errors.
 
 ### DigitalRecord

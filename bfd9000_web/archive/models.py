@@ -321,6 +321,11 @@ class Subject(TimestampedModel):
         related_name='subjects',
         help_text="Collection/dataset the subject belongs to"
     )
+    notes = models.TextField(
+        blank=True,
+        default='',
+        help_text='Free-text notes about this subject (e.g. archival condition notes)'
+    )
 
     class Meta(TimestampedModel.Meta):
         """Model metadata."""
@@ -712,17 +717,16 @@ class PhysicalRecord(TimestampedModel):
         related_name='physical_records',
         help_text='External identifiers for this physical artifact'
     )
+    notes = models.TextField(
+        blank=True,
+        default='',
+        help_text='Free-text notes about this physical artifact'
+    )
 
     class Meta(TimestampedModel.Meta):
         """Model metadata."""
         ordering = ['-acquisition_datetime']
         indexes = [models.Index(fields=['encounter'])]
-        constraints = [
-            models.UniqueConstraint(
-                fields=['record_type', 'encounter'],
-                name='unique_physical_record_type_encounter'
-            )
-        ]
 
     @property
     def subject(self) -> 'Subject':
