@@ -5,6 +5,9 @@ This document defines the archive concepts and rationale used by the Django mode
 - [Archive Data Model](#archive-data-model)
   - [Core hierarchy](#core-hierarchy)
   - [Models](#models)
+    - [Encounter](#encounter)
+      - [Encounter Date](#encounter-date)
+      - [Encounter Age](#encounter-age)
     - [ImagingStudy](#imagingstudy)
     - [Series](#series)
     - [PhysicalRecord](#physicalrecord)
@@ -55,6 +58,24 @@ Example: one encounter contains cephalometric films and scanned study models. Th
 ## Models
 
 These rules are strict.
+
+### Encounter
+
+The encounter is a model inspired by FHIR Encounter resource, which is defined by the even that happened when the subject had a physical encounter with the collection curators/maintainers.
+
+#### Encounter Date
+
+The encounter clearly happened at a specific point in time, and can be recorded in the `actual_period` fields
+
+- actual_period_start: Encounter start date.
+- actual_period_start_raw: Original encounter date token from import sources. Always store whatever string we have, especially even if its not complete.
+- actual_period_start_precision: Precision of actual_period_start: when the encounter date is incomplete or unreadable, then we store here the precision of accuracy.
+- actual_period_start_uncertain: True when actual_period_start is inferred from partial data
+- actual_period_end: Encounter end date. This is unknown and usually not used.
+
+#### Encounter Age
+
+Sometime we don't have the `actual_period`, because the records have been anonymized. In this case, the `actual_period` is not known and cannot be used. This is why the model has a `procedure_occurance_age` field. When the actual period is known, this field could theoretically be useful, and the age could be compute by a function. However, since we have the field, the field should be computed each time the `actual_period` is set, thus overwriting any previous setting. It is therefore pseudo-calculated in the sense that when there is no `actual_period`, it is manually set by the user.
 
 ### ImagingStudy
 
