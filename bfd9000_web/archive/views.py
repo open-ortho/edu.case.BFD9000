@@ -38,6 +38,7 @@ from .constants import (
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
     SYSTEM_IDENTIFIER_LANCASTER_SUBJECT,
 )
+from .filters import DigitalRecordFilter
 from .media_utils import convert_tiff_to_png_bytes
 
 MAX_TIFF_PREVIEW_BYTES = 100 * 1024 * 1024
@@ -176,8 +177,7 @@ class SubjectViewSet(viewsets.ModelViewSet):
         'palatal_cleft__code',
         'collection__short_name',
     }
-    search_fields = ['identifiers__value', 'pk',
-                     'humanname_family', 'humanname_given']
+    search_fields = ['^identifiers__value']
 
 
 class EncounterViewSet(viewsets.ModelViewSet):
@@ -196,7 +196,7 @@ class EncounterViewSet(viewsets.ModelViewSet):
     ).order_by('-actual_period_start', '-id')
     serializer_class = EncounterSerializer
     filterset_fields = ['subject', 'actual_period_start']
-    search_fields = ['subject__identifiers__value']
+    search_fields = ['^subject__identifiers__value']
 
     def perform_create(self, serializer: serializers.BaseSerializer) -> None:
         """
@@ -295,15 +295,8 @@ class DigitalRecordViewSet(viewsets.ModelViewSet):
         'identifiers'
     )
     serializer_class = DigitalRecordSerializer
-    filterset_fields = [
-        'series__imaging_study__encounter__id',
-        'series__imaging_study__encounter__subject',
-        'series__imaging_study__encounter__subject__collection',
-        'series__imaging_study__encounter__subject__collection__short_name',
-        'series',
-        'record_type__id',
-    ]
-    search_fields = ['id', 'series__imaging_study__encounter__id', 'series__imaging_study__encounter__subject__id']
+    filterset_class = DigitalRecordFilter
+    search_fields = ['^series__imaging_study__encounter__subject__identifiers__value']
 
     def get_serializer_class(self) -> Type[serializers.Serializer]:
         if self.action == 'create':

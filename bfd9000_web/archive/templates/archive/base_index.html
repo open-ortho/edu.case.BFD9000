@@ -712,5 +712,44 @@ class PaginatedTableManager {
         this.tableBody.replaceChildren(row);
     }
 }
+
+/**
+ * Attach a search syntax tooltip (info icon) to the search bar.
+ *
+ * Call this once after DOMContentLoaded, passing the id of the search input's
+ * parent container (defaults to the element that contains #search-input).
+ *
+ * The tooltip explains the ^ (starts-with) and = (exact) prefix modifiers
+ * supported by the DRF SearchFilter backend.
+ *
+ * @param {string} [containerId] - Optional id of the flex container holding the search input.
+ *   If omitted, the tooltip is inserted after the element with id "search-input".
+ */
+function attachSearchTooltip(containerId) {
+    const tooltipHTML = `
+<div class="tooltip tooltip-bottom before:max-w-xs before:text-left before:whitespace-pre-wrap"
+     data-tip="Search matches identifiers that start with the entered text.&#10;Example: &quot;B&quot; returns all subjects whose ID begins with B.">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+         stroke-width="1.5" stroke="currentColor" class="size-5 text-base-content/50 cursor-help">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+    </svg>
+</div>`;
+
+    let anchor;
+    if (containerId) {
+        anchor = document.getElementById(containerId);
+    } else {
+        anchor = document.getElementById('search-input');
+    }
+    if (!anchor) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = tooltipHTML.trim();
+    const tooltipEl = wrapper.firstChild;
+
+    // Insert after the anchor element
+    anchor.parentNode.insertBefore(tooltipEl, anchor.nextSibling);
+}
 </script>
 {% endblock %}

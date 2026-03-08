@@ -275,7 +275,7 @@ Each Collection has a specific Subject identifier. The BBGSC has devised, over t
 |-----------|--------|---------|
 | `subject_identifier` | Preferred identifier from `Subject.identifiers` (official system first, Bolton system second, first available as fallback) | `B001` |
 | `record_type_code` | `DigitalRecord.record_type.code` | `L` |
-| `sex_code` | `Subject.sex` mapped: `male→M`, `female→F`, `other→O`, `unknown→U` | `M` |
+| `sex_code` | `Subject.gender` mapped: `male→M`, `female→F`, `other→O`, `unknown→U` (FHIR [Patient.gender](https://hl7.org/fhir/patient-definitions.html#Patient.gender)) | `M` |
 | `age` | Age at encounter formatted as `{years:02d}y{months:02d}m` (zero-padded). Omitted if encounter has no age data. | `08y06m` |
 
 ### Example

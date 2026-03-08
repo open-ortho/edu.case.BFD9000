@@ -19,6 +19,7 @@ from archive.models import (
     DigitalRecord,
     Encounter,
     Endpoint,
+    Identifier,
     ImagingStudy,
     PhysicalRecord,
     Series,
@@ -207,11 +208,151 @@ class RecordTests(CleanupAPITestCase):
         physical_record: PhysicalRecord = digital_record.physical_record  # type: ignore[assignment]
         self.assertIsNone(physical_record.device_id)
 
+class RecordIdentifierStrTests(CleanupAPITestCase):
+    """Tests for the identifier_str computed field on DigitalRecord API responses."""
+
+    def setUp(self) -> None:
+        self.user = User.objects.create_user(
+            username='idstruser',
+            password='testpassword',
+        )
+        for model in [Subject, Encounter, DigitalRecord, ImagingStudy]:
+            content_type = ContentType.objects.get_for_model(model)
+            permissions = Permission.objects.filter(content_type=content_type)
+            self.user.user_permissions.add(*permissions)
+        self.client.force_authenticate(user=self.user)
+
+        from archive.constants import SYSTEM_IDENTIFIER_BOLTON_SUBJECT
+
+        self.collection, _ = Collection.objects.get_or_create(
+            short_name='IDSTR',
+            defaults={'full_name': 'Identifier Str Test Collection'},
+        )
+
+        self.subject = Subject.objects.create(
+            humanname_family='Test',
+            humanname_given='Subject',
+            gender='male',
+            birth_date='2000-06-15',
+            collection=self.collection,
+        )
+        bolton_identifier, _ = Identifier.objects.get_or_create(
+            system=SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
+            value='B001',
+            defaults={'use': 'official'},
+        )
+        self.subject.identifiers.add(bolton_identifier)
+
+        procedure, _ = Coding.objects.get_or_create(
+            system=SYSTEM_PROCEDURE,
+            code='ortho-visit',
+            defaults={'display': 'Orthodontic Visit'},
+        )
+
+        # Age: 8 years 6 months ≈ 8.5 years
+        age_days = int(8 * 365.25 + 6 * 30.4375)
+        self.encounter = Encounter.objects.create(
+            subject=self.subject,
+            actual_period_start='2009-01-01',
+            procedure_occurrence_age=datetime.timedelta(days=age_days),
+            procedure_code=procedure,
+        )
+
+        self.study = ImagingStudy.objects.create(
+            encounter=self.encounter,
+            collection=self.collection,
+        )
+
+        self.rt_lateral, _ = Coding.objects.get_or_create(
+            system=SYSTEM_RECORD_TYPE,
+            code='L',
+            defaults={'display': 'Lateral Cephalogram'},
+        )
+        mod_rg, _ = Coding.objects.get_or_create(
+            system=SYSTEM_MODALITY,
+            code='RG',
+            defaults={'display': 'Radiography'},
+        )
+        self.series = Series.objects.create(
+            imaging_study=self.study,
+            modality=mod_rg,
+        )
+        self.digital_record = DigitalRecord.objects.create(
+            series=self.series,
+            record_type=self.rt_lateral,
+        )
+
+    def test_identifier_str_present_in_detail(self) -> None:
+        """identifier_str must appear in the detail endpoint response."""
+        url = reverse('archive:digitalrecord-list') + f'{self.digital_record.pk}/'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn('identifier_str', data)
+
+    def test_identifier_str_format(self) -> None:
+        """identifier_str must follow <subject_id><record_type><sex><age> schema."""
+        import re
+        url = reverse('archive:digitalrecord-list') + f'{self.digital_record.pk}/'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        identifier_str: str = data['identifier_str']
+        # Must match schema: <subject_identifier><record_type><sex><age>
+        # B001 (Bolton ID) + L (record type) + M (male) + NNyNNm (age)
+        pattern = r'^B001LM\d{2}y\d{2}m$'
+        self.assertRegex(
+            identifier_str,
+            pattern,
+            msg=f"identifier_str {identifier_str!r} does not match expected pattern {pattern!r}",
+        )
+        # Also verify the age encodes approximately 8y 6m (total months 102)
+        age_match = re.search(r'(\d{2})y(\d{2})m$', identifier_str)
+        self.assertIsNotNone(age_match, "Age portion missing from identifier_str")
+        assert age_match is not None  # for type narrowing
+        years, months = int(age_match.group(1)), int(age_match.group(2))
+        total_months = years * 12 + months
+        # Allow ±1 month tolerance for floating-point round-trip in age computation
+        self.assertAlmostEqual(total_months, 102, delta=1,
+                               msg=f"Expected ~102 total months (8y6m), got {total_months}")
+
+    def test_identifier_str_in_list(self) -> None:
+        """identifier_str must be present in the list endpoint results."""
+        url = reverse('archive:digitalrecord-list')
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        results = resp.json()['results']
+        our = [r for r in results if r['id'] == self.digital_record.pk]
+        self.assertEqual(len(our), 1)
+        self.assertIn('identifier_str', our[0])
+        self.assertNotEqual(our[0]['identifier_str'], '')
+
+    def test_identifier_str_missing_age(self) -> None:
+        """identifier_str with no age data should omit the age portion."""
+        self.encounter.procedure_occurrence_age = None
+        self.encounter.actual_period_start = None
+        self.encounter.save()
+        url = reverse('archive:digitalrecord-list') + f'{self.digital_record.pk}/'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        # No age — should still have subject+type+sex but no age component
+        self.assertEqual(data['identifier_str'], 'B001LM')
+
+    def test_identifier_str_female(self) -> None:
+        """Sex code F for female subjects."""
+        self.subject.gender = 'female'
+        self.subject.save()
+        url = reverse('archive:digitalrecord-list') + f'{self.digital_record.pk}/'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn('identifier_str', data)
+        self.assertTrue(data['identifier_str'].startswith('B001L'))
+        self.assertIn('F', data['identifier_str'])
+
+
 class ImagingStudyOperatorPrefetchTests(CleanupAPITestCase):
-    """
-    Verify that the ImagingStudy list endpoint does not issue N+1 queries
-    for the scan_operator_username / scan_operator_display fields.
-    """
 
     def setUp(self) -> None:
         self.user = User.objects.create_user(

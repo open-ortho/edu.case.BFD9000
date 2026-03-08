@@ -270,8 +270,15 @@ class Subject(TimestampedModel):
         ('unknown', 'Unknown'),
     ]
 
-    gender = models.CharField(max_length=16, choices=GENDER_CHOICES,
-                              help_text="Administrative sex/gender for the subject")
+    gender = models.CharField(
+        max_length=16,
+        choices=GENDER_CHOICES,
+        help_text=(
+            "Administrative gender for the subject. "
+            "Values align with FHIR Patient.gender: "
+            "https://hl7.org/fhir/patient-definitions.html#Patient.gender"
+        ),
+    )
     birth_date = models.DateField(help_text="Subject date of birth")
     humanname_family = models.CharField(
         max_length=128, help_text="Family name", null=True, blank=True)
@@ -382,8 +389,6 @@ class Encounter(TimestampedModel):
     )
     procedure_occurrence_age = models.DurationField(
         null=True, blank=True, help_text="Age at procedure/encounter when supplied by source data")
-    procedure_occurrence_datetime = models.DateTimeField(
-        null=True, blank=True, help_text="Exact procedure occurrence datetime when known")
     procedure_code = models.ForeignKey(
         Coding,
         on_delete=models.PROTECT,

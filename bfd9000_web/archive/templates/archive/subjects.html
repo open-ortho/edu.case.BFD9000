@@ -5,7 +5,7 @@
             <input
                 type="text"
                 id="search-input"
-                placeholder="Search subjects by identifier..."
+                placeholder="Search by identifier"
                 class="input input-bordered input-sm flex-1 max-w-md"
             />
             <button id="search-button" class="btn btn-sm btn-primary">
@@ -178,6 +178,7 @@
     // Initialize table when DOM is ready
     document.addEventListener("DOMContentLoaded", () => {
         tableManager.init();
+        attachSearchTooltip();
     });
 </script>
 {% endblock %}

@@ -147,8 +147,8 @@ class EncounterTests(CleanupAPITestCase):
         self.assertGreaterEqual(len(list_response.data['results']), 1)
         self.assertEqual(list_response.data['results'][0]['subject_identifier'], 'L00004310')
 
-    def test_search_encounters_by_partial_subject_identifier(self):
-        """Search should match encounters by any part of subject identifier."""
+    def test_search_encounters_by_subject_identifier_prefix(self):
+        """Search uses istartswith: prefix matches return results, mid-string matches do not."""
         identifier, _ = Identifier.objects.get_or_create(
             system=SYSTEM_IDENTIFIER_LANCASTER_SUBJECT,
             value='SUB-4310-ALPHA',
@@ -163,10 +163,19 @@ class EncounterTests(CleanupAPITestCase):
         }, format='json')
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
 
-        response = self.client.get(reverse('archive:encounter-list'), {'search': '4310'})
+        encounter_list_url = reverse('archive:encounter-list')
+
+        # Prefix match — 'SUB' should return the encounter
+        response = self.client.get(encounter_list_url, {'search': 'SUB'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data['results']), 1)
         self.assertEqual(response.data['results'][0]['subject'], self.subject.id)
+
+        # Mid-string match — '4310' should return nothing (istartswith, not icontains)
+        response = self.client.get(encounter_list_url, {'search': '4310'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        result_subject_ids = [r['subject'] for r in response.data['results']]
+        self.assertNotIn(self.subject.id, result_subject_ids)
 
     def test_get_encounter_detail(self):
         """Should retrieve specific encounter details"""

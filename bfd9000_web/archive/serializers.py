@@ -77,6 +77,16 @@ def _get_preferred_identifier(identifiers) -> Optional[str]:
 
     return official_identifier or bolton_identifier or first_identifier
 
+
+def _compute_age_years(encounter: 'Encounter', subject: 'Subject') -> Optional[float]:
+    """Return age in decimal years for the given encounter+subject, or None if not computable."""
+    birth_date = getattr(subject, 'birth_date', None)
+    if encounter.procedure_occurrence_age:
+        return round(encounter.procedure_occurrence_age.days / 365.25, 2)
+    if encounter.actual_period_start and birth_date:
+        return round((encounter.actual_period_start - birth_date).days / 365.25, 2)
+    return None
+
 class CodingSerializer(serializers.ModelSerializer):
     """Serializer for Coding model."""
     class Meta:
@@ -215,14 +225,8 @@ class EncounterSerializer(serializers.ModelSerializer):
         """Convert instance to dictionary representation."""
         ret = super().to_representation(instance)
         subject = getattr(instance, 'subject', None)
-        birth_date = getattr(subject, 'birth_date', None)
-        if instance.procedure_occurrence_age:
-            # Convert duration to years (approx)
-            days = instance.procedure_occurrence_age.days
-            ret['age_at_encounter'] = round(days / 365.25, 2)
-        elif instance.actual_period_start and birth_date:
-            days = (instance.actual_period_start - birth_date).days
-            ret['age_at_encounter'] = round(days / 365.25, 2)
+        if subject:
+            ret['age_at_encounter'] = _compute_age_years(instance, subject)
         else:
             ret['age_at_encounter'] = None
         return ret
@@ -332,6 +336,7 @@ class DigitalRecordSerializer(serializers.ModelSerializer):
     imaging_study = serializers.IntegerField(source='series.imaging_study.id', read_only=True)
     subject_id = serializers.IntegerField(source='series.imaging_study.encounter.subject.id', read_only=True)
     subject_identifier = serializers.SerializerMethodField()
+    identifier_str = serializers.SerializerMethodField()
     encounter_date = serializers.DateField(source='series.imaging_study.encounter.actual_period_start', read_only=True)
     actual_period_start_precision = serializers.CharField(source='series.imaging_study.encounter.actual_period_start_precision', read_only=True)
     actual_period_start_uncertain = serializers.BooleanField(source='series.imaging_study.encounter.actual_period_start_uncertain', read_only=True)
@@ -348,18 +353,45 @@ class DigitalRecordSerializer(serializers.ModelSerializer):
         model = DigitalRecord
         fields = '__all__'
 
-    def get_age_at_encounter(self, obj):
+    def get_age_at_encounter(self, obj: DigitalRecord) -> Optional[float]:
         encounter = getattr(obj.series.imaging_study, 'encounter', None)
+        if not encounter:
+            return None
         subject = getattr(encounter, 'subject', None)
-        birth_date = getattr(subject, 'birth_date', None)
+        if not subject:
+            return None
+        return _compute_age_years(encounter, subject)
 
-        if encounter and encounter.procedure_occurrence_age:
-            days = encounter.procedure_occurrence_age.days
-            return round(days / 365.25, 2)
-        if encounter and encounter.actual_period_start and birth_date:
-            days = (encounter.actual_period_start - birth_date).days
-            return round(days / 365.25, 2)
-        return None
+    def get_identifier_str(self, obj: DigitalRecord) -> str:
+        """
+        Return the Bolton-style record display identifier:
+            <subject_identifier><record_type_code><sex_code><age_years_months>
+        Example: B001LM08y06m
+        Returns empty string if key data is missing.
+        """
+        encounter = getattr(obj.series.imaging_study, 'encounter', None)
+        if not encounter:
+            return ''
+        subject = getattr(encounter, 'subject', None)
+        if not subject:
+            return ''
+
+        identifier: str = _get_preferred_identifier(subject.identifiers.all()) or ''
+        rt_code: str = obj.record_type.code if obj.record_type else ''
+
+        sex_map: Dict[str, str] = {'male': 'M', 'female': 'F', 'other': 'O', 'unknown': 'U'}
+        sex: str = sex_map.get(subject.gender, 'U')
+
+        age_years: Optional[float] = _compute_age_years(encounter, subject)
+        if age_years is not None:
+            total_months: int = int(round(age_years * 12))
+            years: int = total_months // 12
+            months: int = total_months % 12
+            age_str: str = f"{years:02d}y{months:02d}m"
+        else:
+            age_str = ''
+
+        return f"{identifier}{rt_code}{sex}{age_str}"
 
     def get_subject_identifier(self, obj) -> Optional[str]:
         encounter = getattr(obj.series.imaging_study, 'encounter', None)

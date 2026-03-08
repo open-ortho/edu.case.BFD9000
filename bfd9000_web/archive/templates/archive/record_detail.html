@@ -11,7 +11,7 @@
                 </svg>
                 Back to Records
             </a>
-            <h1 class="text-2xl font-bold">Record #<span id="record-id">{{ record_id }}</span></h1>
+            <h1 class="text-2xl font-bold" id="page-title">Record #<span id="record-id">{{ record_id }}</span></h1>
         </div>
         <div id="loading" class="text-base-content/60">Loading record details...</div>
         <div id="error" class="alert alert-error hidden"></div>
@@ -187,6 +187,11 @@
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('content').classList.remove('hidden');
 
+        // Update page title with identifier_str
+        const label = record.identifier_str || ('#' + record.id);
+        document.getElementById('page-title').textContent = 'Record ' + label;
+        document.title = 'Record ' + label;
+
         // Use thumbnail endpoint for all GUI image display
         document.getElementById('record-image').src = (window.script_name || '') + `/api/records/${recordId}/thumbnail/`;
 
@@ -311,77 +316,18 @@
         const btn = document.getElementById('download-original-btn');
         if (!btn) return;
 
-        const subjectId = record.subject_identifier || record.subject_id || "";
-        const imageType = record.record_type ? record.record_type.code : "";
-        const ageFloat = record.age_at_encounter !== undefined ? parseFloat(record.age_at_encounter) : null;
-
-        // Get extension from image_url
+        // Get file extension from image_url
         function getExtension(url) {
-            if (!url) return "bin";
+            if (!url) return 'bin';
             const m = url.match(/\.(\w+)$/);
-            if (m) return m[1];
-            return "bin";
+            return m ? m[1] : 'bin';
         }
 
         const ext = getExtension(record.image_url);
-
-        // Age parsing
-        function parseAge(age) {
-            if (!Number.isFinite(age)) return { years: "00", months: "00" };
-            let years = Math.floor(age);
-            let months = Math.floor((age - years) * 12 + 0.001);
-            return {
-                years: String(years).padStart(2, '0'),
-                months: String(months).padStart(2, '0')
-            };
-        }
-
-        // Map gender
-        function mapGender(g) {
-            switch ((g||"").toLowerCase()) {
-                case "male":    return "M";
-                case "female":  return "F";
-                case "other":   return "O";
-                case "unknown": return "U";
-                default:        return "U";
-            }
-        }
-
-        // Compose filename
-        function makeFilename({subject, imgType, gender, age}) {
-            const parts = [
-                subject || "",
-                imgType || "",
-                gender || "",
-                age.years + "y" + age.months + "m"
-            ].filter(x => x.length).join("");
-            const dotExt = ext ? ("." + ext) : "";
-            return (parts || "record") + dotExt;
-        }
+        const identifierStr = record.identifier_str || String(record.id);
+        const filename = identifierStr + (ext ? ('.' + ext) : '');
 
         btn.addEventListener('click', async function () {
-            // Fetch subject gender
-            let gender = "U";
-            try {
-                const resp = await fetch((window.script_name || '') + `/api/subjects/${record.subject_id}/`);
-                if (resp.ok) {
-                    const subj = await resp.json();
-                    gender = mapGender(subj.gender);
-                }
-            } catch (e) {
-                // Keep gender = "U"
-            }
-
-            // Generate filename
-            const age = parseAge(ageFloat);
-            const filename = makeFilename({
-                subject: subjectId,
-                imgType: imageType,
-                gender: gender,
-                age: age
-            });
-
-            // Download
             const url = (window.script_name || '') + `/api/records/${recordId}/image/`;
             try {
                 const res = await fetch(url);
@@ -397,7 +343,7 @@
                     link.remove();
                 }, 100);
             } catch (err) {
-                alert("Failed to download file: " + err.message);
+                alert('Failed to download file: ' + err.message);
             }
         });
     }

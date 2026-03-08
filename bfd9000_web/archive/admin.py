@@ -174,7 +174,6 @@ class EncounterAdmin(TimestampedAdmin):
                     "diagnosis",
                     "procedure_code",
                     "procedure_occurrence_age",
-                    "procedure_occurrence_datetime",
                 )
             },
         ),
