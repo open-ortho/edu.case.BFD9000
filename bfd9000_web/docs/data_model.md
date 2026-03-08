@@ -16,6 +16,11 @@ This document defines the archive concepts and rationale used by the Django mode
   - [Codes, Valuesets, and Dropdowns](#codes-valuesets-and-dropdowns)
   - [Staging vs archival storage](#staging-vs-archival-storage)
   - [Thumbnail policy](#thumbnail-policy)
+  - [Record display identifier (`identifier_str`)](#record-display-identifier-identifier_str)
+    - [Schema](#schema)
+    - [Example](#example)
+    - [Usage](#usage)
+    - [Critical distinction](#critical-distinction)
   - [API and UI implications](#api-and-ui-implications)
 
 ## Core hierarchy
@@ -232,6 +237,46 @@ Additional rules:
 - If no thumbnail exists for a `DigitalRecord`, the API and UI return a static fallback JPEG image.
 
 For planning: 500k thumbnails at ~20 KB is roughly 10 GB total.
+
+## Record display identifier (`identifier_str`)
+
+Each Collection has a specific Subject identifier. The BBGSC has devised, over the years, a schema to produce a unique identifier for each record, which can be computed from subject id, encounter age, gender and record type.
+
+`identifier_str` is a computed, read-only field returned by the `DigitalRecord` API serializer. It is **not stored** in the database and is **not** one of the `identifiers` M2M entries on `Subject` or `DigitalRecord`.
+
+### Schema
+
+```
+<subject_identifier><record_type_code><sex_code><age>
+```
+
+| Component | Source | Example |
+|-----------|--------|---------|
+| `subject_identifier` | Preferred identifier from `Subject.identifiers` (official system first, Bolton system second, first available as fallback) | `B001` |
+| `record_type_code` | `DigitalRecord.record_type.code` | `L` |
+| `sex_code` | `Subject.sex` mapped: `male→M`, `female→F`, `other→O`, `unknown→U` | `M` |
+| `age` | Age at encounter formatted as `{years:02d}y{months:02d}m` (zero-padded). Omitted if encounter has no age data. | `08y06m` |
+
+### Example
+
+Subject `B001`, lateral cephalogram (`L`), male (`M`), age 8 years 6 months:
+
+```
+B001LM08y06m
+```
+
+### Usage
+
+- **UI display**: shown in the records list as the human-readable label for each record button (fallback to `record.id` if absent).
+- **Download filenames**: the download button in `record_detail.html` uses `identifier_str` as the base filename (e.g. `B001LM08y06m.png`).
+- **Not for linking**: do not use `identifier_str` as a stable identifier for API queries, foreign keys, or external system integration. Use the integer PK or a stored `Identifier` entry for that purpose.
+
+### Critical distinction
+
+`identifier_str` differs from the stored `identifiers` (M2M `Identifier` objects on `Subject` and `DigitalRecord`):
+
+- `identifiers` are persistent, typed, system-scoped references (e.g. DICOM UIDs, Bolton IDs).
+- `identifier_str` is a transient display string assembled at serialization time for human-readable labelling and file naming only.
 
 ## API and UI implications
 
