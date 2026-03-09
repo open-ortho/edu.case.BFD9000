@@ -1,5 +1,7 @@
 # Use Cases
 
+See also: [Permissions Reference](permissions.md)
+
 The BFD9000 shall be able to accommodate the following use cases.
 
 ---
@@ -20,7 +22,6 @@ The BFD9000 shall be able to accommodate the following use cases.
 - Operator has authenticated into the system using CAS SSO (case.edu credentials)
 - Operator has launched the BFD9010 bridge on the workstation with the scanner connected
 - Operator has located and identified the physical record to be digitized and archived
-
 
 ### Steps
 

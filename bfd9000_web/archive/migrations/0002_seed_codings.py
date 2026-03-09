@@ -1,3 +1,14 @@
+"""
+Seed all required ValueSets and Codings.
+
+This migration replaces the historical chain of seeding migrations (0002–0015
+from the pre-refactor history). All static coded values required at startup or
+by importers are created here.
+
+record_types codings are intentionally empty at this point; they are populated
+at runtime by the `import_valuesets` management command from the external FHIR
+$expand endpoint (see constants.VALUESET_EXPAND_URLS).
+"""
 from django.db import migrations
 
 
@@ -5,17 +16,10 @@ SCT = "http://snomed.info/sct"
 DCM = "http://dicom.nema.org/resources/ontology/DCM"
 RACE = "urn:oid:2.16.840.1.113883.6.238"
 IMAGE_TYPE_SYSTEM = "https://orthodontics.case.edu/fhir/identifier-system/image-type"
+RECORD_TYPE_SYSTEM = "https://orthodontics.case.edu/fhir/identifier-system/record-type"
 
 
 VALUESETS = [
-    {
-        "slug": "record_types",
-        "url": "https://orthodontics.case.edu/fhir/ValueSet/record-types",
-        "name": "RecordTypes",
-        "title": "Record types",
-        "status": "active",
-        "publisher": "Case Western Reserve University",
-    },
     {
         "slug": "orientations",
         "url": "https://orthodontics.case.edu/fhir/ValueSet/orientations",
@@ -84,17 +88,24 @@ VALUESETS = [
             "CDC Race & Ethnicity system (urn:oid:2.16.840.1.113883.6.238)."
         ),
     },
+    {
+        "slug": "record_types",
+        "url": "http://terminology.open-ortho.org/fhir/cwru-ortho-record-types",
+        "name": "CWRUOrthoRecordTypes",
+        "title": "CWRU Ortho Record Types",
+        "status": "active",
+        "publisher": "Case Western Reserve University",
+        "description": (
+            "Record type codes for the CWRU orthodontic archive. "
+            "Populated at runtime from the open-ortho FHIR terminology server "
+            "via the import_valuesets management command."
+        ),
+    },
 ]
 
 
+# (system, code, display, meaning) tuples grouped by valueset slug
 CODINGS = {
-    "record_types": [
-        (SCT, "201456002", "Cephalogram", ""),
-        (SCT, "268425006", "Pelvis X-ray", ""),
-        (SCT, "39714003", "Skeletal X-ray of wrist and hand", ""),
-        (SCT, "1597004", "Skeletal X-ray of ankle and foot", ""),
-        (SCT, "302189007", "Dental model", ""),
-    ],
     "orientations": [
         (SCT, "399198007", "Right lateral projection", ""),
         (SCT, "399173006", "Left lateral projection", ""),
@@ -118,19 +129,22 @@ CODINGS = {
             DCM,
             "RG",
             "Radiographic imaging",
-            "An acquisition device, process or method that performs radiographic imaging (conventional film/screen).",
+            "An acquisition device, process or method that performs radiographic imaging "
+            "(conventional film/screen).",
         ),
         (
             DCM,
             "XC",
             "External-camera Photography",
-            "An acquisition device, process or method that performs photography with an external camera.",
+            "An acquisition device, process or method that performs photography with an "
+            "external camera.",
         ),
         (
             DCM,
             "M3D",
             "3D Manufacturing Modeling System",
-            "A device, process or method that produces data (models) for use in 3D manufacturing.",
+            "A device, process or method that produces data (models) for use in 3D "
+            "manufacturing.",
         ),
         (
             DCM,
@@ -142,7 +156,7 @@ CODINGS = {
             DCM,
             "DOC",
             "Document",
-            "A device, process or method that produces documents. i.e., representations of documents as images, whether by scanning or other means.",
+            "A device, process or method that produces documents.",
         ),
         (
             DCM,
@@ -175,10 +189,12 @@ CODINGS = {
         (RACE, "2106-3", "White", "White"),
         (RACE, "2054-5", "Black or African American", "Black or African American"),
     ],
+    # record_types: seeded empty — populated at runtime via import_valuesets command
+    "record_types": [],
 }
 
 
-def seed_valuesets_and_codings(apps, schema_editor):
+def seed_forward(apps, schema_editor):
     del schema_editor
     Coding = apps.get_model("archive", "Coding")
     ValueSet = apps.get_model("archive", "ValueSet")
@@ -187,8 +203,7 @@ def seed_valuesets_and_codings(apps, schema_editor):
     valuesets_by_slug = {}
     for payload in VALUESETS:
         slug = payload["slug"]
-        defaults = dict(payload)
-        defaults.pop("slug")
+        defaults = {k: v for k, v in payload.items() if k != "slug"}
         valueset, _ = ValueSet.objects.get_or_create(slug=slug, defaults=defaults)
         valuesets_by_slug[slug] = valueset
 
@@ -201,6 +216,7 @@ def seed_valuesets_and_codings(apps, schema_editor):
                 code=code,
                 defaults={"display": display, "meaning": meaning},
             )
+            # Keep display/meaning in sync if re-run
             updates = []
             if coding.display != display:
                 coding.display = display
@@ -213,15 +229,15 @@ def seed_valuesets_and_codings(apps, schema_editor):
 
             ValueSetConcept.objects.get_or_create(valueset=valueset, coding=coding)
 
+    # Remove the legacy SI modality code if it snuck in somehow
     Coding.objects.filter(system=DCM, code="SI").delete()
 
 
-def unseed_valuesets_and_codings(apps, schema_editor):
+def seed_reverse(apps, schema_editor):
     del schema_editor
     ValueSet = apps.get_model("archive", "ValueSet")
     ValueSet.objects.filter(
         slug__in=[
-            "record_types",
             "orientations",
             "modalities",
             "body_sites",
@@ -229,6 +245,7 @@ def unseed_valuesets_and_codings(apps, schema_editor):
             "image_types",
             "skeletal-pattern",
             "race",
+            "record_types",
         ]
     ).delete()
 
@@ -240,5 +257,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(seed_valuesets_and_codings, unseed_valuesets_and_codings),
+        migrations.RunPython(seed_forward, seed_reverse),
     ]

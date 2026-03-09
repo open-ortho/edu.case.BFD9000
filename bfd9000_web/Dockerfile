@@ -8,6 +8,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies
@@ -21,7 +22,6 @@ FROM python:3.13-slim
 WORKDIR /app
 
 # Install runtime dependencies
-# (Add libpq-dev here if/when we switch to Postgres)
 # libmagic1 is required for python-magic
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libmagic1 \
@@ -45,8 +45,8 @@ RUN useradd -m django
 RUN chown -R django:django /app
 USER django
 
+# Entrypoint: run migrations then start gunicorn
+ENTRYPOINT ["/app/entrypoint.sh"]
+
 # Expose port
 EXPOSE 9000
-
-# Default command
-CMD ["gunicorn", "BFD9000.wsgi:application", "--bind", "0.0.0.0:9000"]

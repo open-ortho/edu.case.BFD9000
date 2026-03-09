@@ -108,14 +108,29 @@ WSGI_APPLICATION = "BFD9000.wsgi.application"
 
 
 # Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db" / "db.sqlite3",
+# Use DB_ENGINE env var to select backend:
+#   unset / "django.db.backends.sqlite3"   SQLite (local runserver, default)
+#   "django.db.backends.postgresql"        PostgreSQL (docker-compose / production)
+_db_engine = os.environ.get("DB_ENGINE", "django.db.backends.sqlite3")
+if _db_engine == "django.db.backends.sqlite3":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db" / "db.sqlite3",
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": _db_engine,
+            "NAME": os.environ.get("DB_NAME", "bfd9000"),
+            "USER": os.environ.get("DB_USER", "bfd9000"),
+            "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+            "HOST": os.environ.get("DB_HOST", "db"),
+            "PORT": os.environ.get("DB_PORT", "5432"),
+        }
+    }
+
 
 
 # Password validation

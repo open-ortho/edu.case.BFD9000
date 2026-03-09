@@ -5,7 +5,7 @@
             <input
                 type="text"
                 id="search-input"
-                placeholder="Search records by subject or encounter..."
+                placeholder="Search by subject identifier"
                 class="input input-bordered input-sm flex-1 max-w-md"
             />
             <button id="search-button" class="btn btn-sm btn-primary">
@@ -24,17 +24,18 @@
             <thead>
                 <tr>
                     <th>Record ID</th>
-                    <th>Encounter</th>
-                    <th>Subject</th>
+                    <th>Record Type</th>
+                    <th>Modality</th>
                     <th>Age</th>
+                    <th>Subject</th>
+                    <th>Encounter</th>
                     <th>File Size</th>
-                    <th>Image Type</th>
                 </tr>
             </thead>
             <tbody id="record_table_body">
                 {% for _ in ' ' %}
                 <tr>
-                    <td colspan="6">
+                    <td colspan="7">
                         <div class="flex w-full gap-4">
                             <div class="skeleton h-[1lh] w-1/3"></div>
                             <div class="skeleton h-[1lh] grow"></div>
@@ -47,6 +48,7 @@
         </table>
     </div>
     <div class="bg-base-300 p-2 flex items-center gap-3">
+        <a href="{% url 'archive:record_create' %}" class="btn btn-primary rounded-full">Add Record</a>
         <div class="grow"></div>
         <span class="text-sm text-base-content/60">
             <span id="record-count-badge"></span>
@@ -61,47 +63,33 @@
     // ========================================
 
     /**
-     * Helper to format file size for display
-     */
-    function formatFileSize(bytes) {
-        if (!bytes) return "-";
-        const mb = bytes / (1024 * 1024);
-        return mb.toFixed(1) + " MB";
-    }
-
-    /**
      * Fetch records from the API
      * @param {Object} params - Query parameters
      * @param {string} params.search - Search query
      * @param {string} params.subject - Filter by subject ID
-     * @param {string|number} params.encounter - Filter by encounter ID
+     * @param {string} params.encounter - Filter by encounter PK
      * @param {number} params.page - Page number (1-indexed)
      * @param {number} params.page_size - Number of items per page
      * @returns {Promise<Object>} Response with { count, next, previous, results }
      */
-    async function fetchRecords({
-        search = "",
-        subject = "",
-        encounter = "",
-        page = 1,
-        page_size = 20,
-    } = {}) {
-        const params = new URLSearchParams({
+    async function fetchRecords(params = {}) {
+        const { search = "", page = 1, page_size = 20, ...extra } = params;
+        const urlParams = new URLSearchParams({
             page: page.toString(),
             page_size: page_size.toString(),
         });
 
         if (search) {
-            params.set("search", search);
+            urlParams.set("search", search);
         }
-        if (subject) {
-            params.set("series__imaging_study__encounter__subject", subject);
-        }
-        if (encounter) {
-            params.set("series__imaging_study__encounter__id", encounter);
+        // Forward any custom filter params (e.g. series__imaging_study__encounter__id)
+        for (const [key, value] of Object.entries(extra)) {
+            if (value !== null && value !== undefined && value !== "") {
+                urlParams.set(key, value.toString());
+            }
         }
 
-        const response = await fetch((window.script_name || '') + `/api/records/?${params}`);
+        const response = await fetch((window.script_name || '') + `/api/records/?${urlParams}`);
         if (!response.ok) {
             throw new Error(`API error: ${response.status}`);
         }
@@ -144,7 +132,7 @@
 
     const tableManager = new InfiniteScrollTableManager({
         tableBodyId: "record_table_body",
-        columnCount: 6,
+        columnCount: 7,
         countBadgeId: "record-count-badge",
         fetchData: fetchRecords,
         renderRows: (records) => {
@@ -155,21 +143,32 @@
                 const recordId = document.createElement("td");
                 const recordBtn = document.createElement("button");
                 recordBtn.className = "btn btn-soft btn-primary btn-xs";
-                recordBtn.textContent = record.id;
+                recordBtn.textContent = record.identifier_str || record.id;
                 recordBtn.onclick = () => {
                     // Navigate to record detail page
                     window.location.href = (window.script_name || '') + `/records/${record.id}/`;
                 };
                 recordId.appendChild(recordBtn);
 
-                // Encounter ID column with button
-                const encounter = document.createElement("td");
-                const encounterBtn = document.createElement("button");
-                encounterBtn.className = "btn btn-soft btn-xs";
-                encounterBtn.textContent = record.encounter_id || "-";
-                encounterBtn.onclick = () =>
-                    (window.location.href = (window.script_name || '') + `/encounters/?search=${record.encounter_id}`);
-                encounter.appendChild(encounterBtn);
+                // Record Type column (display value with code as tooltip)
+                const recordType = document.createElement("td");
+                recordType.textContent = record.record_type?.display || record.record_type?.code || "-";
+                if (record.record_type?.code) {
+                    recordType.title = record.record_type.code;
+                }
+
+                // Modality column (code with full term tooltip)
+                const modality = document.createElement("td");
+                const modalityCode = record.series_modality?.code || "-";
+                const modalityDisplay = record.series_modality?.display;
+                modality.textContent = modalityCode;
+                if (modalityDisplay) {
+                    modality.title = modalityDisplay;
+                }
+
+                // Age column (years/months with uncertainty when applicable)
+                const age = document.createElement("td");
+                age.textContent = formatAge(record);
 
                 // Subject ID column with button
                 const subject = document.createElement("td");
@@ -180,25 +179,32 @@
                     (window.location.href = (window.script_name || '') + `/encounters/?subject=${record.subject_id}`);
                 subject.appendChild(subjectBtn);
 
-                // Age column (years/months with uncertainty when applicable)
-                const age = document.createElement("td");
-                age.textContent = formatAge(record);
+                // Encounter ID column with button — filters records for this encounter
+                const encounter = document.createElement("td");
+                const encounterBtn = document.createElement("button");
+                encounterBtn.className = "btn btn-soft btn-xs";
+                encounterBtn.textContent = record.encounter_id || "-";
+                encounterBtn.onclick = () => {
+                    const params = new URLSearchParams();
+                    params.set("encounter", record.encounter_id);
+                    window.location.href = (window.script_name || '') + `/records/?${params.toString()}`;
+                };
+                encounter.appendChild(encounterBtn);
 
                 // File size column (plain text)
                 const fileSize = document.createElement("td");
-                fileSize.textContent = formatFileSize(record.file_size);
-
-                // Image type column (plain text)
-                const imageType = document.createElement("td");
-                imageType.textContent = record.image_type?.display || "-";
+                fileSize.textContent = record.file_size
+                    ? (record.file_size / (1024 * 1024)).toFixed(1) + " MB"
+                    : "-";
 
                 row.replaceChildren(
                     recordId,
-                    encounter,
-                    subject,
+                    recordType,
+                    modality,
                     age,
-                    fileSize,
-                    imageType
+                    subject,
+                    encounter,
+                    fileSize
                 );
                 return row;
             });
@@ -213,6 +219,7 @@
     // Initialize table when DOM is ready
     document.addEventListener("DOMContentLoaded", () => {
         tableManager.init();
+        attachSearchTooltip();
     });
 </script>
 {% endblock %}

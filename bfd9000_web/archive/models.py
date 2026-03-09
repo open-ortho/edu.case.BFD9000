@@ -77,7 +77,7 @@ class Coding(TimestampedModel):
         ordering = ['system', 'code']
 
     def __str__(self) -> str:
-        return f"{self.system}#{self.code}" if self.code else self.system
+        return f"[{self.code}] - {self.display or self.meaning or 'No display'}"
 
 
 class ValueSet(TimestampedModel):
@@ -270,8 +270,15 @@ class Subject(TimestampedModel):
         ('unknown', 'Unknown'),
     ]
 
-    gender = models.CharField(max_length=16, choices=GENDER_CHOICES,
-                              help_text="Administrative sex/gender for the subject")
+    gender = models.CharField(
+        max_length=16,
+        choices=GENDER_CHOICES,
+        help_text=(
+            "Administrative gender for the subject. "
+            "Values align with FHIR Patient.gender: "
+            "https://hl7.org/fhir/patient-definitions.html#Patient.gender"
+        ),
+    )
     birth_date = models.DateField(help_text="Subject date of birth")
     humanname_family = models.CharField(
         max_length=128, help_text="Family name", null=True, blank=True)
@@ -382,8 +389,6 @@ class Encounter(TimestampedModel):
     )
     procedure_occurrence_age = models.DurationField(
         null=True, blank=True, help_text="Age at procedure/encounter when supplied by source data")
-    procedure_occurrence_datetime = models.DateTimeField(
-        null=True, blank=True, help_text="Exact procedure occurrence datetime when known")
     procedure_code = models.ForeignKey(
         Coding,
         on_delete=models.PROTECT,
@@ -491,12 +496,7 @@ class Series(TimestampedModel):
     # Intentionally aligned to the official DICOM keyword SeriesInstanceUID.
     series_instance_uid = models.CharField(max_length=64, blank=True,
                                            help_text='DICOM SeriesInstanceUID')
-    record_type = models.ForeignKey(
-        Coding,
-        on_delete=models.PROTECT,
-        related_name='series_record_type',
-        help_text='SNOMED CT code identifying the clinical study type (e.g. Cephalogram, Dental model)'
-    )
+
     modality = models.ForeignKey(
         Coding,
         on_delete=models.SET_NULL,
@@ -517,11 +517,11 @@ class Series(TimestampedModel):
     class Meta(TimestampedModel.Meta):
         """Model metadata."""
         verbose_name_plural = 'Series'
-        ordering = ['imaging_study', 'record_type']
+        ordering = ['imaging_study']
         indexes = [models.Index(fields=['imaging_study'])]
 
     def __str__(self) -> str:
-        return f"Series {self.series_instance_uid or self.pk} ({self.record_type})"
+        return f"Series {self.series_instance_uid or self.pk}"
 
     def save(self, *args, **kwargs) -> None:
         if not self.series_instance_uid:
@@ -596,33 +596,188 @@ class Endpoint(TimestampedModel):
         return data
 
 
-class Record(TimestampedModel):
+class Device(TimestampedModel):
     """
-    Physical or digital artifact instance. Corresponds to DICOM Instance.
+    Physical device used for acquisition or digitization.
+    Modeled after the FHIR Device resource.
+    """
+    serial_number = models.CharField(
+        max_length=255, blank=True,
+        help_text='Manufacturer-assigned serial number for this specific device unit (FHIR Device.serialNumber)'
+    )
+    display_name = models.CharField(
+        max_length=255, help_text='Human-readable device name'
+    )
+    manufacturer = models.CharField(
+        max_length=255, blank=True, help_text='Manufacturer name'
+    )
+    model_number = models.CharField(
+        max_length=128, blank=True, help_text='Model number'
+    )
+    version = models.CharField(
+        max_length=128, blank=True, help_text='Firmware or software version'
+    )
+    modalities = models.ManyToManyField(
+        Coding,
+        blank=True,
+        related_name='devices',
+        help_text='DICOM modality codes this device can produce'
+    )
+    identifiers = models.ManyToManyField(
+        'Identifier',
+        blank=True,
+        related_name='devices',
+        help_text='Institutional or business identifiers for this device (FHIR Device.identifier)',
+    )
 
-    Each Record belongs to a Series. Records store file-level metadata,
-    thumbnails, acquisition timestamps and operator information.
+    class Meta(TimestampedModel.Meta):
+        """Model metadata."""
+        ordering = ['display_name']
+        constraints = [
+            models.UniqueConstraint(
+                condition=models.Q(serial_number__gt=''),
+                fields=('serial_number', 'manufacturer', 'model_number'),
+                name='unique_device_serial_manufacturer_model',
+            )
+        ]
+
+    def __str__(self) -> str:
+        parts = [self.display_name]
+        if self.manufacturer:
+            parts.append(self.manufacturer)
+        if self.model_number:
+            parts.append(self.model_number)
+        return ' — '.join(parts)
+
+
+class PhysicalRecord(TimestampedModel):
+    """
+    The original physical artifact produced at an encounter: an acetate film,
+    plaster model, paper chart, etc.
+
+    Lives directly under Encounter — no DICOM UIDs, no Series FK.
     See docs/data_model.md for field ownership and semantics.
     """
+    encounter = models.ForeignKey(
+        Encounter,
+        on_delete=models.PROTECT,
+        related_name='physical_records',
+        help_text='Encounter at which this physical artifact was produced'
+    )
+    record_type = models.ForeignKey(
+        Coding,
+        on_delete=models.PROTECT,
+        related_name='physical_records_record_type',
+        help_text='CWRU record type code identifying the clinical study type (e.g. L, SM)'
+    )
+    acquisition_datetime = models.DateTimeField(
+        null=True, blank=True,
+        help_text='When the original was acquired (X-ray taken, model cast, etc.)'
+    )
+    operator = models.CharField(
+        max_length=255,
+        blank=True,
+        default='Unknown',
+        help_text='Technician who operated the acquisition device. Defaults to "Unknown" for historical records.'
+    )
+    device = models.ForeignKey(
+        'Device',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='physical_records',
+        help_text='Device used to acquire the patient data (e.g. cephalostat)'
+    )
+    physical_location = models.ForeignKey(
+        Address,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='physical_records_location',
+        help_text='Address of the physical archive where this artifact is stored'
+    )
+    physical_location_box = models.CharField(
+        max_length=128, blank=True, help_text='Box identifier in physical archive'
+    )
+    physical_location_shelf = models.CharField(
+        max_length=128, blank=True, help_text='Shelf identifier in physical archive'
+    )
+    physical_location_tray = models.CharField(
+        max_length=128, blank=True, help_text='Tray identifier in physical archive'
+    )
+    physical_location_compartment = models.CharField(
+        max_length=128, blank=True, help_text='Compartment identifier in physical archive'
+    )
+    identifiers = models.ManyToManyField(
+        Identifier,
+        blank=True,
+        related_name='physical_records',
+        help_text='External identifiers for this physical artifact'
+    )
+
+    class Meta(TimestampedModel.Meta):
+        """Model metadata."""
+        ordering = ['-acquisition_datetime']
+        indexes = [models.Index(fields=['encounter'])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['record_type', 'encounter'],
+                name='unique_physical_record_type_encounter'
+            )
+        ]
+
+    @property
+    def subject(self) -> 'Subject':
+        """Navigate to Subject via Encounter."""
+        return self.encounter.subject
+
+    def __str__(self) -> str:
+        return f"PhysicalRecord {self.pk} ({self.record_type})"
+
+
+class DigitalRecord(TimestampedModel):
+    """
+    One digital instance: either a digitization of a PhysicalRecord, or a
+    born-digital acquisition with no physical counterpart.
+    Corresponds to a DICOM SOP Instance.
+
+    See docs/data_model.md for field ownership, constraints, and semantics.
+    """
+    physical_record = models.ForeignKey(
+        PhysicalRecord,
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name='digital_records',
+        help_text='Physical artifact this digital record was derived from. Null for born-digital records.'
+    )
     series = models.ForeignKey(
         Series,
         on_delete=models.PROTECT,
-        related_name='records',
-        help_text='The Series this record instance belongs to'
+        related_name='digital_records',
+        help_text='Series this digital record belongs to (always required for DICOM grouping)'
     )
     # Intentionally aligned to the official DICOM keyword SOPInstanceUID.
     sop_instance_uid = models.CharField(
-        max_length=64, blank=True, help_text='DICOM SOPInstanceUID uniquely identifying this artifact instance'
+        max_length=64, blank=True,
+        help_text='DICOM SOPInstanceUID uniquely identifying this digital instance'
+    )
+    record_type = models.ForeignKey(
+        Coding,
+        on_delete=models.PROTECT,
+        related_name='digital_records_record_type',
+        help_text=(
+            'CWRU record type code (e.g. L, SM). '
+            'Must match physical_record.record_type when physical_record is set.'
+        )
     )
     acquisition_datetime = models.DateTimeField(
-        null=True, blank=True, help_text='Date and time this artifact was acquired or scanned'
+        null=True, blank=True,
+        help_text='When the physical record was scanned, or when born-digital data was acquired'
     )
-    scan_operator = models.ForeignKey(
+    operator = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True, blank=True,
-        related_name='records_scanned',
-        help_text='User who performed the scan or acquisition of this record'
+        related_name='digital_records_operated',
+        help_text='System user who performed the scan or born-digital acquisition'
     )
     source_file = models.FileField(
         upload_to='uploads/',
@@ -632,67 +787,69 @@ class Record(TimestampedModel):
     thumbnail = models.ImageField(
         upload_to='thumbnails/',
         null=True, blank=True,
-        help_text='Compressed preview image (target 20KB, hard limit 100KB JPEG). Persists for browse UX.'
-    )
-    # Legacy/local image type coding
-    image_type = models.ForeignKey(
-        Coding,
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name='records_image_type',
-        help_text='Legacy Bolton/Lancaster compound code encoding medium+view (e.g. L, SM). See docs/data_model.md.'
+        help_text='Compressed preview image (target 20 KB, hard limit 100 KB JPEG). Persists for browse UX.'
     )
     patient_orientation = models.CharField(
-        max_length=16, blank=True, help_text='DICOM PatientOrientation (0020,0020), encoded as A\\F'
+        max_length=16, blank=True,
+        help_text='DICOM PatientOrientation (0020,0020), encoded as e.g. A\\F'
     )
     image_transform_ops = models.JSONField(
-        default=list, blank=True, help_text='Ordered list of transform ops applied to preview image'
+        default=list, blank=True,
+        help_text='Ordered list of transform ops applied to the preview image'
     )
-    physical_location = models.ForeignKey(
-        Address, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='records_physical_location',
-        help_text='Physical location where physical artifact is stored (archive address)'
+    device = models.ForeignKey(
+        Device,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='digital_records',
+        help_text='Device used to digitize the physical record, or to acquire born-digital data'
     )
-    physical_location_box = models.CharField(
-        max_length=128, blank=True, help_text='Box identifier in physical archive')
-    physical_location_shelf = models.CharField(
-        max_length=128, blank=True, help_text='Shelf identifier in physical archive')
-    physical_location_tray = models.CharField(
-        max_length=128, blank=True, help_text='Tray identifier in physical archive')
-    physical_location_compartment = models.CharField(
-        max_length=128, blank=True, help_text='Compartment identifier in physical archive')
     identifiers = models.ManyToManyField(
-        Identifier, blank=True, related_name='records', help_text="External identifiers for this record instance")
-    device = models.CharField(
-        max_length=255, blank=True, help_text='Device used to capture this record')
+        Identifier,
+        blank=True,
+        related_name='digital_records',
+        help_text='External identifiers for this digital instance'
+    )
 
     class Meta(TimestampedModel.Meta):
         """Model metadata."""
         ordering = ['-created_at']
         indexes = [models.Index(fields=['series'])]
 
+    def clean(self) -> None:
+        if self.physical_record is not None:
+            if self.record_type != self.physical_record.record_type:
+                raise ValidationError(
+                    'DigitalRecord.record_type must match physical_record.record_type'
+                )
+            digital_encounter = self.series.imaging_study.encounter
+            if digital_encounter != self.physical_record.encounter:
+                raise ValidationError(
+                    'DigitalRecord series encounter must match physical_record encounter'
+                )
+
     @property
     def encounter(self) -> Encounter:
-        """Navigate to Encounter via Series → ImagingStudy → Encounter"""
+        """Navigate to Encounter via Series → ImagingStudy → Encounter."""
         return self.series.imaging_study.encounter
 
     @property
     def subject(self) -> Subject:
-        """Navigate to Subject via Series → ImagingStudy → Encounter → Subject"""
+        """Navigate to Subject via Series → ImagingStudy → Encounter → Subject."""
         return self.series.imaging_study.encounter.subject
 
     def __str__(self) -> str:
-        return f"Record {self.pk} ({self.series.record_type if self.series else 'NoSeries'})"
+        return f"DigitalRecord {self.pk} ({self.record_type})"
 
     def save(self, *args, **kwargs) -> None:
         if not self.sop_instance_uid:
-            # DICOM SOPInstanceUID (official DICOM keyword)
             self.sop_instance_uid = generate_dicom_uid(SOPINSTANCEUID_ROOT)
         super().save(*args, **kwargs)
 
 
+
 class ArchiveLocation(TimestampedModel):
-    """One concrete archived copy of a record stored at an endpoint."""
+    """One concrete archived copy of a digital record stored at an endpoint."""
 
     class Status(models.TextChoices):
         PENDING = 'pending', 'pending'
@@ -700,11 +857,11 @@ class ArchiveLocation(TimestampedModel):
         FAILED = 'failed', 'failed'
         VERIFIED = 'verified', 'verified'
 
-    record = models.ForeignKey(
-        Record,
+    digital_record = models.ForeignKey(
+        DigitalRecord,
         on_delete=models.CASCADE,
         related_name='archive_locations',
-        help_text='Record represented by this archived copy',
+        help_text='DigitalRecord represented by this archived copy',
     )
     endpoint = models.ForeignKey(
         Endpoint,
@@ -722,10 +879,10 @@ class ArchiveLocation(TimestampedModel):
     class Meta(TimestampedModel.Meta):
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['record']),
+            models.Index(fields=['digital_record']),
             models.Index(fields=['endpoint']),
             models.Index(fields=['status']),
         ]
 
     def __str__(self) -> str:
-        return f"ArchiveLocation record={self.record_id} endpoint={self.endpoint_id}"
+        return f"ArchiveLocation digital_record={self.digital_record.pk} endpoint={self.endpoint.pk}"

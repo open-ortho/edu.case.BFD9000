@@ -20,7 +20,7 @@ router.register(r'encounters', views.EncounterViewSet)
 router.register(r'imaging-studies', views.ImagingStudyViewSet)
 router.register(r'endpoints', views.EndpointViewSet)
 router.register(r'archive-locations', views.ArchiveLocationViewSet)
-router.register(r'records', views.RecordViewSet)
+router.register(r'records', views.DigitalRecordViewSet)
 router.register(r'series', views.SeriesViewSet)
 router.register(r'valuesets', views.ValuesetViewSet, basename='valuesets')
 
@@ -29,13 +29,13 @@ subjects_router = routers.NestedDefaultRouter(
     router, r'subjects', lookup='subject')
 subjects_router.register(
     r'encounters', views.EncounterViewSet, basename='subject-encounters')
-subjects_router.register(r'records', views.RecordViewSet,
+subjects_router.register(r'records', views.DigitalRecordViewSet,
                          basename='subject-records')
 
 encounters_router = routers.NestedDefaultRouter(
     router, r'encounters', lookup='encounter')
 encounters_router.register(
-    r'records', views.RecordViewSet, basename='encounter-records')
+    r'records', views.DigitalRecordViewSet, basename='encounter-records')
 
 imaging_router = routers.NestedDefaultRouter(
     router, r'imaging-studies', lookup='imaging_study')
@@ -54,8 +54,8 @@ urlpatterns = [
     path('encounters/', views.encounters, name='encounters'),
     path('encounters/create/', views.encounter_create, name='encounter_create'),
     path('records/', views.records, name='records'),
+    path('records/create/', views.scan, name='record_create'),
     path('records/<str:record_id>/', views.record_detail, name='record_detail'),
-    path('scan/', views.scan, name='scan'),
     path('api/scan/tiff-preview/', views.scan_tiff_preview, name='scan_tiff_preview'),
     # API routes
     path('api/', include(router.urls)),

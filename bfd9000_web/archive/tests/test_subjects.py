@@ -164,7 +164,7 @@ class SubjectTests(CleanupAPITestCase):
         self.assertEqual(response.data['humanname_family'], 'Updated')
 
     def test_delete_subject(self):
-        """Should delete subject"""
+        """Non-superuser should not delete subject."""
         subject = Subject.objects.create(
             humanname_family="Doe",
             humanname_given="John",
@@ -174,31 +174,98 @@ class SubjectTests(CleanupAPITestCase):
 
         url = reverse('archive:subject-detail', kwargs={'pk': subject.id})
         response = self.client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-        # Verify deletion
-        self.assertFalse(Subject.objects.filter(pk=subject.id).exists())
+        # Verify subject still exists
+        self.assertTrue(Subject.objects.filter(pk=subject.id).exists())
 
-    def test_search_subjects(self):
-        """Should search subjects by query parameter"""
-        Subject.objects.create(
+    def test_superuser_can_delete_subject(self):
+        """Superuser should be able to delete subject."""
+        subject = Subject.objects.create(
             humanname_family="Doe",
             humanname_given="John",
             gender="male",
             birth_date="2000-01-01"
         )
-        Subject.objects.create(
+        superuser = User.objects.create_superuser(
+            username="admin",
+            password="adminpass",
+            email="admin@example.com",
+        )
+
+        self.client.force_authenticate(user=superuser)
+        url = reverse('archive:subject-detail', kwargs={'pk': subject.id})
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Subject.objects.filter(pk=subject.id).exists())
+
+    def test_regular_user_without_subject_perms_cannot_create_subject(self):
+        """Regular authenticated user should not create subject."""
+        regular_user = User.objects.create_user(username='regular', password='testpassword')
+        self.client.force_authenticate(user=regular_user)
+
+        url = reverse('archive:subject-list')
+        data = {
+            "humanname_family": "Doe",
+            "humanname_given": "John",
+            "gender": "male",
+            "birth_date": "2000-01-01"
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_search_subjects(self):
+        """Search uses istartswith: prefix matches return results, mid-string matches do not."""
+        from archive.models import Identifier
+
+        subject_doe = Subject.objects.create(
+            humanname_family="Doe",
+            humanname_given="John",
+            gender="male",
+            birth_date="2000-01-01"
+        )
+        subject_smith = Subject.objects.create(
             humanname_family="Smith",
             humanname_given="Jane",
             gender="female",
             birth_date="1995-05-15"
         )
 
-        url = reverse('archive:subject-list') + '?search=Doe'
-        response = self.client.get(url)
+        id_doe, _ = Identifier.objects.get_or_create(
+            system='http://example.com/ids',
+            value='SRCH001',
+            defaults={'use': 'official'},
+        )
+        id_smith, _ = Identifier.objects.get_or_create(
+            system='http://example.com/ids',
+            value='SRCH002',
+            defaults={'use': 'official'},
+        )
+        subject_doe.identifiers.add(id_doe)
+        subject_smith.identifiers.add(id_smith)
+
+        base_url = reverse('archive:subject-list')
+
+        # Prefix 'SRCH' matches both
+        response = self.client.get(base_url + '?search=SRCH')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Verify we got results
-        self.assertGreater(len(response.data['results']), 0)
+        returned_ids = [r['id'] for r in response.data['results']]
+        self.assertIn(subject_doe.id, returned_ids)
+        self.assertIn(subject_smith.id, returned_ids)
+
+        # Prefix 'SRCH001' matches only subject_doe
+        response = self.client.get(base_url + '?search=SRCH001')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_ids = [r['id'] for r in response.data['results']]
+        self.assertIn(subject_doe.id, returned_ids)
+        self.assertNotIn(subject_smith.id, returned_ids)
+
+        # Mid-string match 'RCH' should return nothing (istartswith, not icontains)
+        response = self.client.get(base_url + '?search=RCH')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_ids = [r['id'] for r in response.data['results']]
+        self.assertNotIn(subject_doe.id, returned_ids)
+        self.assertNotIn(subject_smith.id, returned_ids)
 
     def test_filter_subjects_by_gender(self):
         """Should filter subjects by gender"""

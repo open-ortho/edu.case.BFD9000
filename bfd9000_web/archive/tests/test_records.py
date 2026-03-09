@@ -2,7 +2,9 @@
 
 import datetime
 import io
-
+from django.test import override_settings
+from django.test.utils import CaptureQueriesContext
+from django.db import connection
 from django.contrib.auth.models import User, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -13,10 +15,14 @@ from archive.models import (
     ArchiveLocation,
     Collection,
     Coding,
+    Device,
+    DigitalRecord,
     Encounter,
     Endpoint,
+    Identifier,
     ImagingStudy,
-    Record,
+    PhysicalRecord,
+    Series,
     Subject,
 )
 from archive.constants import (
@@ -25,9 +31,11 @@ from archive.constants import (
     SYSTEM_MODALITY,
     SYSTEM_PROCEDURE,
     SYSTEM_BODY_SITE,
-    SYSTEM_IDENTIFIER_IMAGE_TYPE,
 )
 from .base import CleanupAPITestCase
+
+# A valid Fernet key for use in tests that need ENDPOINT_CREDENTIALS_KEY.
+_TEST_FERNET_KEY = "pszJ39pBGFbjGZk8cM-MOzccZh0T0M8MTmVVitw4_8Y="
 
 
 class RecordTests(CleanupAPITestCase):
@@ -43,7 +51,7 @@ class RecordTests(CleanupAPITestCase):
         )
 
         # Add necessary permissions
-        for model in [Subject, Encounter, Record, ImagingStudy]:
+        for model in [Subject, Encounter, DigitalRecord, ImagingStudy]:
             content_type = ContentType.objects.get_for_model(model)
             permissions = Permission.objects.filter(content_type=content_type)
             self.user.user_permissions.add(*permissions)
@@ -82,8 +90,8 @@ class RecordTests(CleanupAPITestCase):
         # Create codings
         self.rt_lateral, _ = Coding.objects.get_or_create(
             system=SYSTEM_RECORD_TYPE,
-            code='201456002',
-            defaults={'display': 'Cephalogram'}
+            code='L',
+            defaults={'display': 'Lateral Cephalogram'}
         )
         self.orient_left, _ = Coding.objects.get_or_create(
             system=SYSTEM_ORIENTATION,
@@ -94,11 +102,6 @@ class RecordTests(CleanupAPITestCase):
             system=SYSTEM_MODALITY,
             code='RG',
             defaults={'display': 'Radiography'}
-        )
-        self.image_type_lateral, _ = Coding.objects.get_or_create(
-            system=SYSTEM_IDENTIFIER_IMAGE_TYPE,
-            code='L',
-            defaults={'display': 'Lateral'},
         )
 
         # Create a valid PNG image
@@ -114,579 +117,7 @@ class RecordTests(CleanupAPITestCase):
                   ).save(tiff_buf, format='TIFF')
         self.tiff_content = tiff_buf.getvalue()
 
-    def test_create_record_with_file(self):
-        """Should create record with file upload"""
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.png", self.image_content, content_type="image/png")
-
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-            "operator": "TestOp"
-        }
-
-        response = self.client.post(url, data, format='multipart')
-        if response.status_code != status.HTTP_201_CREATED:
-            print(
-                f"Record creation failed: {response.status_code} - {response.data}")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn('id', response.data)
-        # Verify record was created successfully
-        self.assertIn('record_type', response.data)
-
-    def test_create_record_with_tiff_file(self):
-        """Should create record with TIFF upload."""
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.tiff", self.tiff_content, content_type="image/tiff")
-
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-
-        response = self.client.post(url, data, format='multipart')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn('id', response.data)
-
-    def test_create_record_missing_file(self):
-        """Should return 400 if file is missing"""
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        data = {
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-            "operator": "TestOp"
-        }
-
-        response = self.client.post(url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_create_record_missing_required_metadata(self):
-        """Should return 400 if required metadata is missing"""
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.png", self.image_content, content_type="image/png")
-
-        data = {
-            "file": file,
-            # Missing record_type, orientation, modality
-        }
-
-        response = self.client.post(url, data, format='multipart')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_create_record_invalid_encounter(self):
-        """Should return 404 for non-existent encounter"""
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': 99999})
-        file = SimpleUploadedFile(
-            "test.png", self.image_content, content_type="image/png")
-
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-
-        response = self.client.post(url, data, format='multipart')
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
-    def test_list_records_for_encounter(self):
-        """Should list all records for an encounter"""
-        # Create records
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        for i in range(2):
-            file = SimpleUploadedFile(
-                f"test{i}.png", self.image_content, content_type="image/png")
-            data = {
-                "file": file,
-                "record_type": self.rt_lateral.code,
-                "orientation": "left",
-                "modality": "RG",
-            }
-            self.client.post(url, data, format='multipart')
-
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('results', response.data)
-        self.assertEqual(len(response.data['results']), 2)
-
-    def test_get_record_detail(self):
-        """Should retrieve specific record details"""
-        # Create a record
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.png", self.image_content, content_type="image/png")
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-        create_response = self.client.post(url, data, format='multipart')
-        record_id = create_response.data['id']
-
-        # Get record detail
-        url = reverse('archive:record-detail', kwargs={'pk': record_id})
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['id'], record_id)
-        self.assertIn('encounter', response.data)
-
-    def test_get_record_not_found(self):
-        """Should return 404 for non-existent record"""
-        url = reverse('archive:record-detail', kwargs={'pk': 99999})
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
-    def test_update_record_metadata(self):
-        """Should update record metadata"""
-        # Create a record
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.png", self.image_content, content_type="image/png")
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-        create_response = self.client.post(url, data, format='multipart')
-        record_id = create_response.data['id']
-
-        # Update record - use device field which exists on Record model
-        url = reverse('archive:record-detail', kwargs={'pk': record_id})
-        update_data = {
-            "device": "NewScanner"
-        }
-        response = self.client.patch(url, update_data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['device'], 'NewScanner')
-
-    def test_delete_record(self):
-        """Should delete record"""
-        # Create a record
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.png", self.image_content, content_type="image/png")
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-        create_response = self.client.post(url, data, format='multipart')
-        record_id = create_response.data['id']
-
-        # Delete record
-        url = reverse('archive:record-detail', kwargs={'pk': record_id})
-        response = self.client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-
-        # Verify deletion
-        self.assertFalse(Record.objects.filter(pk=record_id).exists())
-
-    def test_get_record_image(self):
-        """Should serve full record image"""
-        # Create a record
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.png", self.image_content, content_type="image/png")
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-        create_response = self.client.post(url, data, format='multipart')
-        record_id = create_response.data['id']
-
-        # Get image
-        url = reverse('archive:record-image', kwargs={'pk': record_id})
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('image/', response['Content-Type'])
-
-    def test_get_record_image_returns_raw_tiff(self):
-        """Record image endpoint should passthrough TIFF source unmodified."""
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.tiff", self.tiff_content, content_type="image/tiff")
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-        create_response = self.client.post(url, data, format='multipart')
-        record_id = create_response.data['id']
-
-        image_url = reverse('archive:record-image', kwargs={'pk': record_id})
-        response = self.client.get(image_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response['Content-Type'], 'image/tiff')
-
-    def test_create_record_sets_default_patient_orientation_for_lateral_image_type(self):
-        """Lateral image type should default PatientOrientation to A\\F."""
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.tiff", self.tiff_content, content_type="image/tiff")
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-            "image_type": "L",
-        }
-
-        create_response = self.client.post(url, data, format='multipart')
-        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(
-            create_response.data['patient_orientation'], ['A', 'F'])
-
-        record = Record.objects.get(pk=create_response.data['id'])
-        self.assertEqual(record.patient_orientation, 'A\\F')
-
-    def test_record_image_ignores_saved_transform_ops(self):
-        """Image endpoint should serve raw source regardless of transform ops."""
-        img = Image.new('RGB', (2, 1), color=(255, 255, 255))
-        buf = io.BytesIO()
-        img.save(buf, format='PNG')
-        png_content = buf.getvalue()
-
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.png", png_content, content_type="image/png")
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-            "image_transform_ops": '[{"rotation":90,"flip":false}]',
-        }
-
-        create_response = self.client.post(url, data, format='multipart')
-        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
-
-        image_url = reverse('archive:record-image',
-                            kwargs={'pk': create_response.data['id']})
-        response = self.client.get(image_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response['Content-Type'], 'image/png')
-
-        payload = b''.join(response.streaming_content) if hasattr(
-            response, 'streaming_content') else response.content
-        raw = Image.open(io.BytesIO(payload))
-        self.assertEqual(raw.size, (2, 1))
-
-    def test_get_record_thumbnail(self):
-        """Should serve record thumbnail (raster image)"""
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.png", self.image_content, content_type="image/png")
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-        create_response = self.client.post(url, data, format='multipart')
-        record_id = create_response.data['id']
-        url = reverse('archive:record-thumbnail', kwargs={'pk': record_id})
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response['Content-Type'], 'image/jpeg')
-        payload = b''.join(response.streaming_content) if hasattr(
-            response, 'streaming_content') else response.content
-        self.assertTrue(payload.startswith(b'\xff\xd8'))  # JPEG SOI
-
-    def test_get_record_thumbnail_for_3d_file(self):
-        """Should serve static fallback JPEG for 3D file (e.g., STL)"""
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        stl_content = b"solid ascii\nendsolid"
-        file = SimpleUploadedFile(
-            "test.stl", stl_content, content_type="application/octet-stream")
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-        create_response = self.client.post(url, data, format='multipart')
-        record_id = create_response.data['id']
-        url = reverse('archive:record-thumbnail', kwargs={'pk': record_id})
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response['Content-Type'], 'image/jpeg')
-        self.assertTrue(response.content.startswith(b'\xff\xd8'))
-
-        # 3D inputs should not generate a persisted thumbnail yet
-        record = Record.objects.get(pk=record_id)
-        self.assertFalse(bool(record.thumbnail))
-
-    def test_create_record_uses_thumbnail_preview_when_provided(self):
-        """3D source can still store thumbnail when thumbnail_preview is provided."""
-        url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        stl_file = SimpleUploadedFile(
-            "model.stl",
-            b"solid ascii\nendsolid",
-            content_type="application/octet-stream",
-        )
-        preview_png = SimpleUploadedFile(
-            "preview.png",
-            self.image_content,
-            content_type="image/png",
-        )
-        data = {
-            "file": stl_file,
-            "thumbnail_preview": preview_png,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-        create_response = self.client.post(url, data, format='multipart')
-        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
-
-        record = Record.objects.get(pk=create_response.data['id'])
-        self.assertTrue(bool(record.thumbnail))
-
-    def test_filter_records_by_record_type(self):
-        """Should filter records by record type"""
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-
-        # Create records with different types
-        file1 = SimpleUploadedFile(
-            "test1.png", self.image_content, content_type="image/png")
-        data1 = {
-            "file": file1,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-        self.client.post(url, data1, format='multipart')
-
-        # Filter by record type (using ID since it's a foreign key)
-        filter_url = url + f'?record_type={self.rt_lateral.id}'
-        response = self.client.get(filter_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Verify at least one record was returned
-        self.assertGreater(len(response.data['results']), 0)
-        for record in response.data['results']:
-            # record_type is a nested object with code field
-            self.assertEqual(record['record_type']
-                             ['code'], self.rt_lateral.code)
-
-    def test_unauthenticated_access(self):
-        """Should return 401/403 if not authenticated"""
-        self.client.logout()
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        response = self.client.get(url)
-        self.assertIn(response.status_code, [
-                      status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
-
-    def test_record_response_structure(self):
-        """Should return record with expected fields"""
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.png", self.image_content, content_type="image/png")
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-
-        response = self.client.post(url, data, format='multipart')
-        if response.status_code != status.HTTP_201_CREATED:
-            print(
-                f"Record creation failed: {response.status_code} - {response.data}")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-
-        # Check for expected fields (fields that exist on Record model)
-        expected_fields = ['id', 'record_type', 'encounter', 'imaging_study']
-        for field in expected_fields:
-            self.assertIn(field, response.data)
-
-    def test_record_includes_encounter_date(self):
-        """Should expose encounter date in record response."""
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.png", self.image_content, content_type="image/png")
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-
-        response = self.client.post(url, data, format='multipart')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(str(response.data['encounter_date']), '2020-01-01')
-
-    def test_record_age_falls_back_to_birthdate_when_duration_missing(self):
-        """Should derive record age from encounter date and subject birth date."""
-        encounter = Encounter.objects.create(
-            subject=self.subject,
-            actual_period_start="2020-06-15",
-            procedure_code=self.procedure,
-            procedure_occurrence_age=None,
-        )
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': encounter.id})
-        file = SimpleUploadedFile(
-            "test.png", self.image_content, content_type="image/png")
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-
-        create_response = self.client.post(url, data, format='multipart')
-        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
-        self.assertAlmostEqual(
-            create_response.data['age_at_encounter'], 20.45, delta=0.05)
-
-        detail_url = reverse('archive:record-detail',
-                             kwargs={'pk': create_response.data['id']})
-        detail_response = self.client.get(detail_url)
-        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
-        self.assertAlmostEqual(
-            detail_response.data['age_at_encounter'], 20.45, delta=0.05)
-
-    def test_upload_preserves_acquisition_date(self):
-        """Should return the same acquisition date submitted on upload."""
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.png", self.image_content, content_type="image/png")
-
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-            "acquisition_date": "2026-02-27",
-        }
-
-        response = self.client.post(url, data, format='multipart')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(str(response.data['acquisition_date']), '2026-02-27')
-
-    def test_create_record_rejects_body_site_code_as_record_type(self):
-        """Should reject body-site coding when submitted as record_type."""
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.png", self.image_content, content_type="image/png")
-        body_site, _ = Coding.objects.get_or_create(
-            system=SYSTEM_BODY_SITE,
-            code='69536005',
-            defaults={'display': 'Head'},
-        )
-
-        data = {
-            "file": file,
-            "record_type": body_site.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-
-        response = self.client.post(url, data, format='multipart')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('record_type', response.data['error']['details'])
-
-    def test_imaging_study_operator_display_fields(self):
-        """Imaging study API should expose username and full display for operator."""
-        url = reverse('archive:encounter-records-list',
-                      kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile(
-            "test.png", self.image_content, content_type="image/png")
-        data = {
-            "file": file,
-            "record_type": self.rt_lateral.code,
-            "orientation": "left",
-            "modality": "RG",
-        }
-
-        create_response = self.client.post(url, data, format='multipart')
-        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
-
-        study_url = reverse('archive:imagingstudy-detail',
-                            kwargs={'pk': create_response.data['imaging_study']})
-        study_response = self.client.get(study_url)
-        self.assertEqual(study_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(
-            study_response.data['scan_operator_username'], 'testuser')
-        self.assertEqual(
-            study_response.data['scan_operator_display'], 'Test User (testuser)')
-
-    def test_record_detail_includes_archive_locations(self):
-        """Record detail payload should include nested archive locations."""
-        upload_url = reverse('archive:encounter-records-list', kwargs={'encounter_pk': self.encounter.id})
-        file = SimpleUploadedFile("test.png", self.image_content, content_type="image/png")
-
-        create_response = self.client.post(
-            upload_url,
-            {
-                "file": file,
-                "record_type": self.rt_lateral.code,
-                "modality": "RG",
-            },
-            format='multipart',
-        )
-        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
-        record_id = create_response.data['id']
-
-        endpoint = Endpoint.objects.create(
-            name='PACS-A',
-            status=Endpoint.Status.ACTIVE,
-            connection_type=Endpoint.ConnectionType.DICOM_STOW_RS,
-            address='https://pacs.example.org/dicomweb',
-        )
-        ArchiveLocation.objects.create(
-            record_id=record_id,
-            endpoint=endpoint,
-            assigned_id='1.2.840.10008.5.1.4',
-            status=ArchiveLocation.Status.ARCHIVED,
-            archived_at=datetime.datetime.now(datetime.timezone.utc),
-        )
-
-        detail_url = reverse('archive:record-detail', kwargs={'pk': record_id})
-        detail_response = self.client.get(detail_url)
-        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
-        self.assertIn('archive_locations', detail_response.data)
-        self.assertEqual(len(detail_response.data['archive_locations']), 1)
-        location_payload = detail_response.data['archive_locations'][0]
-        self.assertEqual(location_payload['assigned_id'], '1.2.840.10008.5.1.4')
-        self.assertEqual(location_payload['endpoint']['name'], 'PACS-A')
-        self.assertEqual(location_payload['endpoint']['connection_type'], Endpoint.ConnectionType.DICOM_STOW_RS)
-
+    @override_settings(ENDPOINT_CREDENTIALS_KEY=_TEST_FERNET_KEY)
     def test_endpoint_credentials_round_trip(self):
         """Endpoint credentials should encrypt and decrypt through model helpers."""
         endpoint = Endpoint.objects.create(
@@ -703,3 +134,299 @@ class RecordTests(CleanupAPITestCase):
         self.assertNotEqual(endpoint.credentials_encrypted, '')
         self.assertNotIn('secret-token', endpoint.credentials_encrypted)
         self.assertEqual(endpoint.get_credentials(), payload)
+
+    def _upload_png(self, extra_fields: dict) -> 'rest_framework.response.Response':  # type: ignore[name-defined]
+        """Helper: POST a minimal valid PNG record upload, merging extra_fields."""
+        upload = SimpleUploadedFile('test.png', self.image_content, content_type='image/png')
+        data = {
+            'file': upload,
+            'record_type': self.rt_lateral.code,
+            'encounter': self.encounter.pk,
+        }
+        data.update(extra_fields)
+        url = reverse('archive:digitalrecord-list')
+        return self.client.post(url, data, format='multipart')
+
+    def test_upload_with_device_creates_device_and_links_records(self):
+        """Uploading with device fields creates a Device and links it to DigitalRecord and PhysicalRecord."""
+        response = self._upload_png({
+            'device_serial': 'SN-001',
+            'device_manufacturer': 'Acme',
+            'device_model': 'XRay3000',
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+        # Device should have been created
+        self.assertEqual(Device.objects.filter(serial_number='SN-001', manufacturer='Acme', model_number='XRay3000').count(), 1)
+        device = Device.objects.get(serial_number='SN-001', manufacturer='Acme', model_number='XRay3000')
+        self.assertEqual(device.manufacturer, 'Acme')
+        self.assertEqual(device.display_name, 'Acme XRay3000')
+
+        # DigitalRecord should reference the device
+        record_id = response.data['id']
+        digital_record = DigitalRecord.objects.get(pk=record_id)
+        self.assertEqual(digital_record.device_id, device.pk)
+
+        # PhysicalRecord should also reference the device
+        self.assertIsNotNone(digital_record.physical_record)
+        physical_record: PhysicalRecord = digital_record.physical_record  # type: ignore[assignment]
+        self.assertEqual(physical_record.device_id, device.pk)
+
+    def test_upload_with_same_device_serial_reuses_device(self):
+        """Uploading twice with the same serial+model reuses the existing Device (no duplicates)."""
+        for _ in range(2):
+            upload = SimpleUploadedFile('test.png', self.image_content, content_type='image/png')
+            self.client.post(
+                reverse('archive:digitalrecord-list'),
+                {
+                    'file': upload,
+                    'record_type': self.rt_lateral.code,
+                    'encounter': self.encounter.pk,
+                    'device_serial': 'SN-REUSE',
+                    'device_manufacturer': 'Acme',
+                    'device_model': 'XRay3000',
+                },
+                format='multipart',
+            )
+
+        self.assertEqual(
+            Device.objects.filter(serial_number='SN-REUSE', manufacturer='Acme', model_number='XRay3000').count(),
+            1,
+            "Expected only one Device row for the same serial+manufacturer+model combination.",
+        )
+
+    def test_upload_without_device_fields_succeeds_with_null_device(self):
+        """Uploading without device fields succeeds and leaves device null on both records."""
+        response = self._upload_png({})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+        record_id = response.data['id']
+        digital_record = DigitalRecord.objects.get(pk=record_id)
+        self.assertIsNone(digital_record.device_id)
+
+        self.assertIsNotNone(digital_record.physical_record)
+        physical_record: PhysicalRecord = digital_record.physical_record  # type: ignore[assignment]
+        self.assertIsNone(physical_record.device_id)
+
+class RecordIdentifierStrTests(CleanupAPITestCase):
+    """Tests for the identifier_str computed field on DigitalRecord API responses."""
+
+    def setUp(self) -> None:
+        self.user = User.objects.create_user(
+            username='idstruser',
+            password='testpassword',
+        )
+        for model in [Subject, Encounter, DigitalRecord, ImagingStudy]:
+            content_type = ContentType.objects.get_for_model(model)
+            permissions = Permission.objects.filter(content_type=content_type)
+            self.user.user_permissions.add(*permissions)
+        self.client.force_authenticate(user=self.user)
+
+        from archive.constants import SYSTEM_IDENTIFIER_BOLTON_SUBJECT
+
+        self.collection, _ = Collection.objects.get_or_create(
+            short_name='IDSTR',
+            defaults={'full_name': 'Identifier Str Test Collection'},
+        )
+
+        self.subject = Subject.objects.create(
+            humanname_family='Test',
+            humanname_given='Subject',
+            gender='male',
+            birth_date='2000-06-15',
+            collection=self.collection,
+        )
+        bolton_identifier, _ = Identifier.objects.get_or_create(
+            system=SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
+            value='B001',
+            defaults={'use': 'official'},
+        )
+        self.subject.identifiers.add(bolton_identifier)
+
+        procedure, _ = Coding.objects.get_or_create(
+            system=SYSTEM_PROCEDURE,
+            code='ortho-visit',
+            defaults={'display': 'Orthodontic Visit'},
+        )
+
+        # Age: 8 years 6 months ≈ 8.5 years
+        age_days = int(8 * 365.25 + 6 * 30.4375)
+        self.encounter = Encounter.objects.create(
+            subject=self.subject,
+            actual_period_start='2009-01-01',
+            procedure_occurrence_age=datetime.timedelta(days=age_days),
+            procedure_code=procedure,
+        )
+
+        self.study = ImagingStudy.objects.create(
+            encounter=self.encounter,
+            collection=self.collection,
+        )
+
+        self.rt_lateral, _ = Coding.objects.get_or_create(
+            system=SYSTEM_RECORD_TYPE,
+            code='L',
+            defaults={'display': 'Lateral Cephalogram'},
+        )
+        mod_rg, _ = Coding.objects.get_or_create(
+            system=SYSTEM_MODALITY,
+            code='RG',
+            defaults={'display': 'Radiography'},
+        )
+        self.series = Series.objects.create(
+            imaging_study=self.study,
+            modality=mod_rg,
+        )
+        self.digital_record = DigitalRecord.objects.create(
+            series=self.series,
+            record_type=self.rt_lateral,
+        )
+
+    def test_identifier_str_present_in_detail(self) -> None:
+        """identifier_str must appear in the detail endpoint response."""
+        url = reverse('archive:digitalrecord-list') + f'{self.digital_record.pk}/'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn('identifier_str', data)
+
+    def test_identifier_str_format(self) -> None:
+        """identifier_str must follow <subject_id><record_type><sex><age> schema."""
+        import re
+        url = reverse('archive:digitalrecord-list') + f'{self.digital_record.pk}/'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        identifier_str: str = data['identifier_str']
+        # Must match schema: <subject_identifier><record_type><sex><age>
+        # B001 (Bolton ID) + L (record type) + M (male) + NNyNNm (age)
+        pattern = r'^B001LM\d{2}y\d{2}m$'
+        self.assertRegex(
+            identifier_str,
+            pattern,
+            msg=f"identifier_str {identifier_str!r} does not match expected pattern {pattern!r}",
+        )
+        # Also verify the age encodes approximately 8y 6m (total months 102)
+        age_match = re.search(r'(\d{2})y(\d{2})m$', identifier_str)
+        self.assertIsNotNone(age_match, "Age portion missing from identifier_str")
+        assert age_match is not None  # for type narrowing
+        years, months = int(age_match.group(1)), int(age_match.group(2))
+        total_months = years * 12 + months
+        # Allow ±1 month tolerance for floating-point round-trip in age computation
+        self.assertAlmostEqual(total_months, 102, delta=1,
+                               msg=f"Expected ~102 total months (8y6m), got {total_months}")
+
+    def test_identifier_str_in_list(self) -> None:
+        """identifier_str must be present in the list endpoint results."""
+        url = reverse('archive:digitalrecord-list')
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        results = resp.json()['results']
+        our = [r for r in results if r['id'] == self.digital_record.pk]
+        self.assertEqual(len(our), 1)
+        self.assertIn('identifier_str', our[0])
+        self.assertNotEqual(our[0]['identifier_str'], '')
+
+    def test_identifier_str_missing_age(self) -> None:
+        """identifier_str with no age data should omit the age portion."""
+        self.encounter.procedure_occurrence_age = None
+        self.encounter.actual_period_start = None
+        self.encounter.save()
+        url = reverse('archive:digitalrecord-list') + f'{self.digital_record.pk}/'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        # No age — should still have subject+type+sex but no age component
+        self.assertEqual(data['identifier_str'], 'B001LM')
+
+    def test_identifier_str_female(self) -> None:
+        """Sex code F for female subjects."""
+        self.subject.gender = 'female'
+        self.subject.save()
+        url = reverse('archive:digitalrecord-list') + f'{self.digital_record.pk}/'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn('identifier_str', data)
+        self.assertTrue(data['identifier_str'].startswith('B001L'))
+        self.assertIn('F', data['identifier_str'])
+
+
+class ImagingStudyOperatorPrefetchTests(CleanupAPITestCase):
+
+    def setUp(self) -> None:
+        self.user = User.objects.create_user(
+            username='perfuser', password='pass', first_name='Perf', last_name='User',
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.collection = Collection.objects.create(
+            short_name='PERF', full_name='Performance Test Collection'
+        )
+        self.procedure, _ = Coding.objects.get_or_create(
+            system=SYSTEM_PROCEDURE,
+            code='ortho-visit',
+            defaults={'display': 'Orthodontic Visit'},
+        )
+        self.record_type, _ = Coding.objects.get_or_create(
+            system=SYSTEM_RECORD_TYPE,
+            code='L',
+            defaults={'display': 'Lateral Cephalogram'},
+        )
+
+        self.studies: list[ImagingStudy] = []
+
+        for i in range(3):
+            subject = Subject.objects.create(
+                humanname_family=f'Doe{i}',
+                humanname_given=f'Jane{i}',
+                gender='male',
+                birth_date=f'1990-01-0{i + 1}',
+                collection=self.collection,
+            )
+            encounter = Encounter.objects.create(
+                subject=subject,
+                actual_period_start=f'2022-01-0{i + 1}',
+                procedure_code=self.procedure,
+            )
+            study = ImagingStudy.objects.create(encounter=encounter, collection=self.collection)
+            self.studies.append(study)
+            series = Series.objects.create(imaging_study=study)
+            operator = User.objects.create_user(
+                username=f'operator{i}',
+                first_name=f'Op{i}',
+                last_name='X',
+                password='pass',
+            )
+            DigitalRecord.objects.create(
+                series=series, operator=operator, record_type=self.record_type
+            )
+
+    def test_list_returns_all_studies_with_operator(self) -> None:
+        """Response contains all 3 studies with correct scan_operator_username values."""
+        resp = self.client.get('/api/imaging-studies/')
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        results = data['results'] if isinstance(data, dict) and 'results' in data else data
+        study_ids = {s.id for s in self.studies}
+        our_results = [r for r in results if r['id'] in study_ids]
+        self.assertEqual(len(our_results), 3)
+        expected_usernames = {f'operator{i}' for i in range(3)}
+        returned_usernames = {rec['scan_operator_username'] for rec in our_results}
+        self.assertEqual(expected_usernames, returned_usernames)
+
+    def test_list_query_count_is_bounded(self) -> None:
+        """
+        Query count for the list endpoint must not grow linearly with the number
+        of ImagingStudy objects (i.e., no N+1 on operator lookup).
+        With 3 studies the total should stay well under 15 queries.
+        """
+        with CaptureQueriesContext(connection) as ctx:
+            resp = self.client.get('/api/imaging-studies/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertLessEqual(
+            len(ctx.captured_queries),
+            15,
+            f"Too many queries ({len(ctx.captured_queries)}): "
+            + str([q['sql'][:120] for q in ctx.captured_queries]),
+        )

@@ -13,31 +13,33 @@ from rest_framework import viewsets, serializers
 from rest_framework.decorators import action
 from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
+from .permissions import CuratorOrSuperuserEditPermission, RecordPermission
 from rest_framework.request import Request
 from rest_framework.response import Response
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.db.models import Case, CharField, Count, OuterRef, QuerySet, Subquery, When
+from django.db.models import Case, CharField, Count, OuterRef, QuerySet, Subquery, When, Prefetch
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_POST
 from .models import (
     Coding, Identifier, Address, Collection, Subject,
-    ArchiveLocation, Encounter, Endpoint, Location, ImagingStudy, Series, Record, ValueSet
+    ArchiveLocation, Encounter, Endpoint, Location, ImagingStudy, Series, PhysicalRecord, DigitalRecord, Device, ValueSet
 )
 from .serializers import (
     CodingSerializer, IdentifierSerializer, AddressSerializer,
     ArchiveLocationSerializer, CollectionSerializer, SubjectSerializer, EncounterSerializer,
-    EndpointSerializer, LocationSerializer, ImagingStudySerializer, RecordSerializer,
-    RecordUploadSerializer, SeriesSerializer
+    EndpointSerializer, LocationSerializer, ImagingStudySerializer, DigitalRecordSerializer,
+    DigitalRecordUploadSerializer, DeviceSerializer, SeriesSerializer
 )
 from .media_upload import download_file
 from .constants import (
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
     SYSTEM_IDENTIFIER_LANCASTER_SUBJECT,
 )
+from .filters import DigitalRecordFilter
 from .media_utils import convert_tiff_to_png_bytes
 
 MAX_TIFF_PREVIEW_BYTES = 100 * 1024 * 1024
@@ -145,6 +147,7 @@ class CollectionViewSet(viewsets.ModelViewSet):
 
 
 class SubjectViewSet(viewsets.ModelViewSet):
+    permission_classes = [CuratorOrSuperuserEditPermission]
     """
     ViewSet for Subject model.
 
@@ -157,7 +160,7 @@ class SubjectViewSet(viewsets.ModelViewSet):
         'identifiers'
     ).annotate(
         encounter_count=Count('encounters', distinct=True),
-        record_count=Count('encounters__imaging_study__series__records', distinct=True),
+        record_count=Count('encounters__imaging_study__series__digital_records', distinct=True),
         official_identifier=Subquery(
             Identifier.objects.filter(
                 subjects=OuterRef('pk'),
@@ -175,11 +178,11 @@ class SubjectViewSet(viewsets.ModelViewSet):
         'palatal_cleft__code',
         'collection__short_name',
     }
-    search_fields = ['identifiers__value', 'pk',
-                     'humanname_family', 'humanname_given']
+    search_fields = ['^identifiers__value']
 
 
 class EncounterViewSet(viewsets.ModelViewSet):
+    permission_classes = [CuratorOrSuperuserEditPermission]
     """
     ViewSet for Encounter model.
 
@@ -190,11 +193,11 @@ class EncounterViewSet(viewsets.ModelViewSet):
     ).prefetch_related(
         'subject__identifiers'
     ).annotate(
-        record_count=Count('imaging_study__series__records', distinct=True)
+        record_count=Count('imaging_study__series__digital_records', distinct=True)
     ).order_by('-actual_period_start', '-id')
     serializer_class = EncounterSerializer
     filterset_fields = ['subject', 'actual_period_start']
-    search_fields = ['subject__identifiers__value']
+    search_fields = ['^subject__identifiers__value']
 
     def perform_create(self, serializer: serializers.BaseSerializer) -> None:
         """
@@ -229,10 +232,16 @@ class EncounterViewSet(viewsets.ModelViewSet):
 class ImagingStudyViewSet(viewsets.ModelViewSet):
     """
     ViewSet for ImagingStudy model.
-
+    
     Manages the technical details of an imaging session.
     """
-    queryset = ImagingStudy.objects.all()
+    queryset = ImagingStudy.objects.prefetch_related(
+        Prefetch(
+            'series__digital_records',
+            queryset=DigitalRecord.objects.filter(operator__isnull=False).select_related('operator').order_by('-created_at'),
+            to_attr='_operator_records',
+        )
+    )
     serializer_class = ImagingStudySerializer
     filterset_fields = ['encounter', 'collection']
 
@@ -244,7 +253,7 @@ class SeriesViewSet(viewsets.ModelViewSet):
     Exposes series grouped under imaging studies. Standard CRUD.
     Requires authentication to prevent unauthenticated enumeration of all series.
     """
-    queryset = Series.objects.select_related('imaging_study', 'record_type', 'modality').prefetch_related('records')
+    queryset = Series.objects.select_related('imaging_study', 'modality').prefetch_related('digital_records')
     serializer_class = SeriesSerializer
     permission_classes = [IsAuthenticated]
 
@@ -259,49 +268,43 @@ class EndpointViewSet(viewsets.ModelViewSet):
 
 
 class ArchiveLocationViewSet(viewsets.ModelViewSet):
-    """ViewSet for archived storage locations of records."""
+    """ViewSet for archived storage locations of digital records."""
 
-    queryset = ArchiveLocation.objects.select_related('record', 'endpoint')
+    queryset = ArchiveLocation.objects.select_related('digital_record', 'endpoint')
     serializer_class = ArchiveLocationSerializer
-    filterset_fields = ['record', 'endpoint', 'status', 'endpoint__connection_type']
-    search_fields = ['assigned_id', 'record__id', 'endpoint__name', 'endpoint__address']
+    filterset_fields = ['digital_record', 'endpoint', 'status', 'endpoint__connection_type']
+    search_fields = ['assigned_id', 'digital_record__id', 'endpoint__name', 'endpoint__address']
 
 
-class RecordViewSet(viewsets.ModelViewSet):
+class DigitalRecordViewSet(viewsets.ModelViewSet):
+    permission_classes = [RecordPermission]
     """
-    ViewSet for Record model.
+    ViewSet for DigitalRecord model.
 
-    Manages the high-level record entries that link encounters to imaging studies.
+    Manages the high-level digital record entries that link encounters to imaging studies.
     Supports file uploads via a specialized serializer.
     """
-    # Use series -> imaging_study -> encounter chain for related lookups
-    queryset = Record.objects.select_related(
+    queryset = DigitalRecord.objects.select_related(
         'series__imaging_study__encounter',
-        'series__record_type',
-        'series__modality'
+        'series__modality',
+        'record_type',
+        'physical_record',
+        'device',
     ).prefetch_related(
         'series__imaging_study__encounter__subject__identifiers',
         'archive_locations__endpoint',
         'identifiers'
     )
-    serializer_class = RecordSerializer
-    filterset_fields = [
-        'series__imaging_study__encounter__id',
-        'series__imaging_study__encounter__subject',
-        'series__imaging_study__encounter__subject__collection',
-        'series__imaging_study__encounter__subject__collection__short_name',
-        'series',
-    ]
-    search_fields = ['id', 'series__imaging_study__encounter__id', 'series__imaging_study__encounter__subject__id']
+    serializer_class = DigitalRecordSerializer
+    filterset_class = DigitalRecordFilter
+    search_fields = ['^series__imaging_study__encounter__subject__identifiers__value']
 
     def get_serializer_class(self) -> Type[serializers.Serializer]:
-        """Return the appropriate serializer class based on the action."""
         if self.action == 'create':
-            return RecordUploadSerializer
-        return RecordSerializer
+            return DigitalRecordUploadSerializer
+        return DigitalRecordSerializer
 
     def get_serializer_context(self) -> Dict[str, Any]:
-        """Add extra context to the serializer."""
         context = super().get_serializer_context()
         if self.action == 'create':
             # If nested, get encounter
@@ -312,7 +315,6 @@ class RecordViewSet(viewsets.ModelViewSet):
         return context
 
     def get_queryset(self) -> QuerySet:
-        """Filter queryset based on nested routes."""
         qs = super().get_queryset()
         # Filter by nested encounter if present (via series -> imaging_study)
         encounter_pk = self.kwargs.get('encounter_pk')
@@ -324,10 +326,10 @@ class RecordViewSet(viewsets.ModelViewSet):
         if subject_pk:
             qs = qs.filter(series__imaging_study__encounter__subject__id=subject_pk)
 
-        # Backward-compatible query param aliases
+        # Query param filter for record_type
         record_type = self.request.query_params.get('record_type')
         if record_type:
-            qs = qs.filter(series__record_type__id=record_type)
+            qs = qs.filter(record_type__id=record_type)
 
         return qs
 
@@ -338,19 +340,18 @@ class RecordViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=['get'])
     def image(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Any:
-        """Serve the raw source file (passthrough, no modification)."""
         del request, pk, kwargs
-        record = self.get_object()
-        if not getattr(record, 'source_file', None):
+        digital_record = self.get_object()
+        if not getattr(digital_record, 'source_file', None):
             return Response({"error": "No image file available"}, status=404)
-        source_file_name = record.source_file.name
+        source_file_name = digital_record.source_file.name
         if source_file_name.startswith("box://"):
             import mimetypes
             box_file_id = source_file_name[len("box://"):]
             stream, filename = download_file(box_file_id)
             content_type, _ = mimetypes.guess_type(filename)
             return FileResponse(stream, content_type=content_type or "application/octet-stream", filename=filename)
-        return FileResponse(record.source_file.open('rb'))
+        return FileResponse(digital_record.source_file.open('rb'))
 
     @extend_schema(
         responses={
@@ -359,32 +360,25 @@ class RecordViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=['get'])
     def thumbnail(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Any:
-        """Serve record thumbnail (persisted), or static fallback if missing."""
         from django.contrib.staticfiles import finders
         del request, pk, kwargs
-        record = self.get_object()
+        digital_record = self.get_object()
 
-        # Serve persisted thumbnail if available
-        if getattr(record, 'thumbnail', None):
+        if getattr(digital_record, 'thumbnail', None):
             try:
-                return FileResponse(record.thumbnail.open('rb'), content_type='image/jpeg')
+                return FileResponse(digital_record.thumbnail.open('rb'), content_type='image/jpeg')
             except Exception:
                 pass
 
-        # Serve static fallback if no thumbnail available
         fallback_path = finders.find('archive/img/no-thumbnail.jpg')
         if fallback_path:
             with open(fallback_path, 'rb') as f:
                 return HttpResponse(f.read(), content_type='image/jpeg')
-        # If fallback missing, return 404
         return JsonResponse({"error": "No thumbnail or fallback available."}, status=404)
 
     @action(detail=True, methods=['get'])
     def dicom(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Any:
-        """Serve the DICOM file (Not Implemented)."""
-        # DRF action signature requires request/pk/kwargs.
         del request, pk, kwargs
-        # Not implemented yet
         return Response({"error": "DICOM download not implemented"}, status=404)
 
 

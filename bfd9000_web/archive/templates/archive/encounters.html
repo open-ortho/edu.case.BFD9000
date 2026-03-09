@@ -5,7 +5,7 @@
             <input
                 type="text"
                 id="search-input"
-                placeholder="Search encounters by subject..."
+                placeholder="Search by subject identifier"
                 class="input input-bordered input-sm flex-1 max-w-md"
             />
             <button id="search-button" class="btn btn-sm btn-primary">
@@ -26,14 +26,13 @@
                     <th>Encounter ID</th>
                     <th>Subject</th>
                     <th>Records</th>
-                    <th>Date</th>
                     <th>Age</th>
                 </tr>
             </thead>
             <tbody id="encounter_table_body">
                 {% for _ in ' ' %}
                 <tr>
-                    <td colspan="5">
+                    <td colspan="4">
                         <div class="flex w-full gap-4">
                             <div class="skeleton h-[1lh] w-1/3"></div>
                             <div class="skeleton h-[1lh] grow"></div>
@@ -46,7 +45,9 @@
         </table>
     </div>
     <div class="bg-base-300 p-2 flex items-center gap-3">
+        {% if perms.archive.add_encounter %}
         <a href="{% url 'archive:encounter_create' %}" class="btn btn-primary rounded-full">New Encounter</a>
+        {% endif %}
         <div class="grow"></div>
         <span class="text-sm text-base-content/60">
             <span id="encounter-count-badge"></span>
@@ -126,7 +127,7 @@
 
     const tableManager = new InfiniteScrollTableManager({
         tableBodyId: "encounter_table_body",
-        columnCount: 5,
+        columnCount: 4,
         countBadgeId: "encounter-count-badge",
         fetchData: fetchEncounters,
         renderRows: (encounters) => {
@@ -160,15 +161,11 @@
                     (window.location.href = (window.script_name || '') + `/records?encounter=${encounter.id}`);
                 records.appendChild(recordsBtn);
 
-                // Date column (plain text)
-                const date = document.createElement("td");
-                date.textContent = encounter.actual_period_start || encounter.encounter_date || "-";
-
                 // Age column (years/months with uncertainty when applicable)
                 const age = document.createElement("td");
                 age.textContent = formatAge(encounter);
 
-                row.replaceChildren(encounterId, subject, records, date, age);
+                row.replaceChildren(encounterId, subject, records, age);
                 return row;
             });
         },
@@ -182,6 +179,7 @@
     // Initialize table when DOM is ready
     document.addEventListener("DOMContentLoaded", () => {
         tableManager.init();
+        attachSearchTooltip();
     });
 </script>
 {% endblock %}

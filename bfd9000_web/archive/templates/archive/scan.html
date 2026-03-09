@@ -143,17 +143,7 @@
                         <label class="label">
                             <span class="label-text">Record Type <span class="text-error">*</span></span>
                         </label>
-                        <select id="record-type" class="select select-bordered select-sm">
-                            <option value="">Loading...</option>
-                        </select>
-                    </div>
-
-                    <!-- Modality -->
-                    <div class="form-control">
-                        <label class="label">
-                            <span class="label-text">Modality <span class="text-error">*</span></span>
-                        </label>
-                        <select id="modality" class="select select-bordered select-sm">
+                        <select id="record-type" class="select select-bordered select-sm font-mono">
                             <option value="">Loading...</option>
                         </select>
                     </div>
@@ -247,11 +237,9 @@
         aiFile: null,
         requiresServerTransform: false,
         transformOps: [],
-        aiImageTypeCode: null,
-        aiPatientOrientation: null,
+        device: null,
         valuesets: {
             record_types: [],
-            modalities: []
         }
     };
     const defaultOperatorDisplay = "{{ operator_display|default:''|escapejs }}";
@@ -306,7 +294,7 @@
 
     async function createRecord(encounterId, formData) {
         const csrftoken = getCsrfToken();
-        
+
         const response = await fetch((window.script_name || '') + `/api/encounters/${encounterId}/records/`, {
             method: 'POST',
             headers: {
@@ -390,7 +378,12 @@
         const r = await resp2.json();
         console.log(r);
 
-        return result;
+        return {
+            ...result,
+            class_code: r.code,
+            class_prediction: r.prediction,
+            class_probability: r.probability,
+        };
     }
 
     async function performScannerScan() {
@@ -428,6 +421,20 @@
             const binary = binaryEntry.resource;
             const contentType = binary.contentType || 'image/png';
             const file = binaryToFile(binary.data, contentType, 'scanner');
+
+            // Fetch device info at scan time to guarantee we capture the actual scanner used
+            try {
+                const device = await fetchScannerDeviceInfo();
+                state.device = {
+                    serial: device.serialNumber || '',
+                    manufacturer: device.manufacturer || '',
+                    model: device.modelNumber || '',
+                };
+            } catch (deviceError) {
+                console.warn('Could not fetch device info at scan time:', deviceError);
+                state.device = null;
+            }
+
             applyScannedFile(file);
             showScanStatus('Scan completed');
         } catch (error) {
@@ -560,8 +567,14 @@
             const device = await fetchScannerDeviceInfo();
             const model = device.modelNumber || device.deviceName?.[0]?.name || 'Unknown model';
             document.getElementById('scanner-model').textContent = model;
+            state.device = {
+                serial: device.serialNumber || '',
+                manufacturer: device.manufacturer || '',
+                model: device.modelNumber || '',
+            };
         } catch (error) {
             document.getElementById('scanner-model').textContent = 'Scanner not connected';
+            state.device = null;
         }
     }
 
@@ -577,42 +590,15 @@
         return new File([blob], `${baseName}.${ext}`, { type: contentType });
     }
 
-    function applyScannedFile(file) {
+    async function applyScannedFile(file) {
         state.file = file;
-        state.previewFile = file;
-        state.aiFile = file;
         state.requiresServerTransform = false;
         state.transformOps = [];
-        state.aiImageTypeCode = null;
-        state.aiPatientOrientation = null;
-        showFilePreview(file, file);
+        const resized = await resizeImage(file);
+        state.aiFile = resized;
+        state.previewFile = resized;
+        showFilePreview(state.file, state.previewFile);
         updateSubmitButton();
-    }
-
-    function mapAIType(typePrediction) {
-        const mapping = {
-            'Lateral': {
-                recordType: '201456002',
-                imageType: 'L',
-                patientOrientation: ['A', 'F'],
-            },
-            'Hip & Pelvis': {
-                recordType: '268425006',
-                imageType: 'P',
-                patientOrientation: null,
-            },
-            'Foot & Ankle': {
-                recordType: '1597004',
-                imageType: 'FA',
-                patientOrientation: null,
-            },
-            'Hand & Wrist': {
-                recordType: '39714003',
-                imageType: 'H',
-                patientOrientation: null,
-            },
-        };
-        return mapping[typePrediction] || null;
     }
 
     // ========================================
@@ -695,17 +681,21 @@
     function populateSelect(selectId, options) {
         const select = document.getElementById(selectId);
         select.innerHTML = '<option value="">Select...</option>';
+        const maxCodeLength = Math.max(
+            1,
+            ...options.map(opt => String(opt.id || '').length)
+        );
         options.forEach(opt => {
             const option = document.createElement('option');
             option.value = opt.id;
-            option.textContent = opt.display;
+            const code = String(opt.id || '').padEnd(maxCodeLength, ' ');
+            option.textContent = `[${code}] - ${opt.display}`;
             select.appendChild(option);
         });
     }
 
     function clearFormFields() {
         document.getElementById('record-type').value = '';
-        document.getElementById('modality').value = '';
         document.getElementById('operator').value = defaultOperatorDisplay;
         // Reset acquisition date to today
         document.getElementById('acquisition-date').valueAsDate = new Date();
@@ -718,9 +708,8 @@
         const hasEncounter = state.encounter !== null;
         const hasFile = state.file !== null;
         const hasRecordType = document.getElementById('record-type').value !== '';
-        const hasModality = document.getElementById('modality').value !== '';
 
-        const canSubmit = hasSubject && hasEncounter && hasFile && hasRecordType && hasModality;
+        const canSubmit = hasSubject && hasEncounter && hasFile && hasRecordType;
         document.getElementById('submit-button').disabled = !canSubmit;
 
         // Update AI and image manipulation buttons (need file and must be PNG)
@@ -736,7 +725,7 @@
         statusDiv.className = `alert ${isError ? 'alert-error' : 'alert-success'} py-2 px-3`;
         statusDiv.textContent = message;
         statusDiv.classList.remove('hidden');
-        setTimeout(() => statusDiv.classList.add('hidden'), 3000);
+        setTimeout(() => statusDiv.classList.add('hidden'), 8000);
     }
 
     function showSubmitStatus(message, isError = false) {
@@ -792,8 +781,102 @@
     // ========================================
     // IMAGE MANIPULATION FUNCTIONS
     // ========================================
-    
-    // modify image by rotating / flipping
+
+    /**
+     * Resize an image file to fit within maxWidth x maxHeight, preserving aspect ratio.
+     * Returns a new PNG File. If the image already fits, returns the original file unchanged.
+     * Always outputs image/png.
+     */
+    async function resizeImage(file, maxWidth = 800, maxHeight = 600) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const url = URL.createObjectURL(file);
+            img.onload = () => {
+                URL.revokeObjectURL(url);
+                if (img.width <= maxWidth && img.height <= maxHeight) {
+                    resolve(file);
+                    return;
+                }
+                const ratio = Math.min(maxWidth / img.width, maxHeight / img.height);
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(img.width * ratio);
+                canvas.height = Math.round(img.height * ratio);
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        resolve(new File([blob], file.name, { type: 'image/png' }));
+                    } else {
+                        reject(new Error('resizeImage: canvas.toBlob failed'));
+                    }
+                }, 'image/png');
+            };
+            img.onerror = () => {
+                URL.revokeObjectURL(url);
+                reject(new Error('resizeImage: failed to load image'));
+            };
+            img.src = url;
+        });
+    }
+
+    // Apply all current transformOps to state.aiFile to re-render state.previewFile.
+    // base: the clean untransformed image to start from (defaults to state.aiFile)
+    async function applyTransformOpsToPreview(base) {
+        base = base || state.aiFile;
+        if (!base) return;
+
+        let currentFile = base;
+
+        for (const op of state.transformOps) {
+            currentFile = await new Promise((resolve, reject) => {
+                const img = new Image();
+                const url = URL.createObjectURL(currentFile);
+                img.onload = () => {
+                    URL.revokeObjectURL(url);
+                    const degrees = op.rotation || 0;
+                    const flip = op.flip || false;
+                    const radians = (degrees * Math.PI) / 180;
+
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+
+                    if (Math.abs(degrees) === 90 || Math.abs(degrees) === 270) {
+                        canvas.width = img.height;
+                        canvas.height = img.width;
+                    } else {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                    }
+
+                    ctx.save();
+                    ctx.translate(canvas.width / 2, canvas.height / 2);
+                    ctx.rotate(radians);
+                    if (flip) {
+                        ctx.scale(-1, 1);
+                    }
+                    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+                    ctx.restore();
+
+                    canvas.toBlob((blob) => {
+                        if (blob) {
+                            resolve(new File([blob], 'preview.png', { type: 'image/png' }));
+                        } else {
+                            reject(new Error('applyTransformOpsToPreview: canvas.toBlob failed'));
+                        }
+                    }, 'image/png');
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    reject(new Error('applyTransformOpsToPreview: failed to load image'));
+                };
+                img.src = url;
+            });
+        }
+
+        state.previewFile = currentFile;
+        showFilePreview(state.file, state.previewFile);
+    }
+
+    // modify image by rotating / flipping: appends one op and re-renders preview
     async function modifyImage(degrees, flip = false) {
         if (!state.aiFile) return;
 
@@ -802,55 +885,7 @@
             flip: !!flip,
         });
 
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-
-        return new Promise((resolve, reject) => {
-            img.onload = () => {
-                // For 90 or -90 degree rotation, swap width and height
-                const radians = (degrees * Math.PI) / 180;
-
-                if (Math.abs(degrees) === 90 || Math.abs(degrees) === 270) {
-                    canvas.width = img.height;
-                    canvas.height = img.width;
-                } else {
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                }
-
-                // Clear canvas
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                // Move to center of canvas, rotate, then draw image centered
-                ctx.save();
-                ctx.translate(canvas.width / 2, canvas.height / 2);
-                ctx.rotate(radians);
-                if (flip) {
-                    ctx.scale(-1, 1);
-                }
-                ctx.drawImage(img, -img.width / 2, -img.height / 2);
-                ctx.restore();
-
-                canvas.toBlob((blob) => {
-                    if (blob) {
-                        const newFile = new File([blob], 'preview.png', { type: 'image/png' });
-                        state.previewFile = newFile;
-                        state.aiFile = newFile;
-                        if (state.file && state.file.type === 'image/png') {
-                            state.file = newFile;
-                        }
-                        showFilePreview(state.file, state.previewFile);
-                        resolve();
-                    } else {
-                        reject(new Error('Failed to create rotated image'));
-                    }
-                }, 'image/png');
-            };
-
-            img.onerror = () => reject(new Error('Failed to load image'));
-            img.src = URL.createObjectURL(state.aiFile);
-        });
+        await applyTransformOpsToPreview();
     }
 
     // ========================================
@@ -934,8 +969,6 @@
             state.aiFile = null;
             state.requiresServerTransform = false;
             state.transformOps = [];
-            state.aiImageTypeCode = null;
-            state.aiPatientOrientation = null;
             document.getElementById('file-preview').classList.add('hidden');
             clearFormFields();
             updateSubmitButton();
@@ -963,21 +996,23 @@
             return;
         }
 
+        // Manual file upload — no scanner device associated
+        state.device = null;
         state.file = file;
         state.transformOps = [];
-        state.aiImageTypeCode = null;
-        state.aiPatientOrientation = null;
         if (ext === 'png') {
             state.requiresServerTransform = false;
-            state.previewFile = file;
-            state.aiFile = file;
+            const resized = await resizeImage(file);
+            state.aiFile = resized;
+            state.previewFile = resized;
             showFilePreview(file, state.previewFile);
         } else if (ext === 'tif' || ext === 'tiff') {
             state.requiresServerTransform = true;
             try {
                 const pngPreview = await convertTiffToPng(file);
-                state.previewFile = pngPreview;
-                state.aiFile = pngPreview;
+                const resized = await resizeImage(pngPreview);
+                state.aiFile = resized;
+                state.previewFile = resized;
                 showFilePreview(file, state.previewFile);
             } catch (error) {
                 state.previewFile = null;
@@ -1046,26 +1081,44 @@
         try {
             const result = await queryAI(state.aiFile);
 
-            // Map AI type_prediction to record_type select value
-            if (result.type_prediction) {
-                const mapped = mapAIType(result.type_prediction);
-                const recordTypeSelect = document.getElementById('record-type');
-                if (mapped && mapped.recordType) {
-                    recordTypeSelect.value = mapped.recordType;
-                    state.aiImageTypeCode = mapped.imageType;
-                    state.aiPatientOrientation = mapped.patientOrientation;
+            const recordTypeSelect = document.getElementById('record-type');
+            const aiCode = result.class_code || result.code;
+            if (aiCode) {
+                const option = state.valuesets.record_types.find(x => x.id === aiCode);
+                if (option) {
+                    recordTypeSelect.value = aiCode;
                 }
-            }
-            
-            if (result.flip || result.rotation) {
-                try {
-                    await modifyImage(result.rotation || 0, result.flip || false);
-                } catch (error) {
-                    alert('Failed to transform image: ' + error.message);
+            } else if (result.type_prediction) {
+                const option = state.valuesets.record_types.find(x => x.display === result.type_prediction);
+                if (option) {
+                    recordTypeSelect.value = option.id;
                 }
+            } else {
+                showAIStatus('AI classification failed: no valid code returned. Please classify manually.', true);
             }
 
-            showAIStatus(`Fields populated from AI analysis. Confidence: ${result.type_probability.toFixed(2)}`);
+            // Replace transformOps with AI result (do not append — AI resets orientation).
+            // Note: result.rotation can be 0 (falsy) but still valid, so check for null explicitly.
+            if (result.rotation !== null && result.rotation !== undefined) {
+                state.transformOps = [{
+                    rotation: result.rotation || 0,
+                    flip: result.flip || false,
+                }];
+            } else {
+                // AI returned no orientation data — reset transforms and show clean base
+                state.transformOps = [];
+            }
+            try {
+                await applyTransformOpsToPreview();
+            } catch (error) {
+                alert('Failed to transform image: ' + error.message);
+            }
+
+            const confidence = (result.class_probability ?? result.type_probability)?.toFixed(2) ?? 'N/A';
+            const classification = result.class_code || result.type_prediction || 'N/A';
+            const rotation = result.rotation !== null && result.rotation !== undefined ? `${result.rotation}°` : 'none';
+            const flip = result.flip ? 'yes' : 'no';
+            showAIStatus(`AI: class=${classification} conf=${confidence} rotation=${rotation} flip=${flip}`);
             updateSubmitButton();
         } catch (error) {
             showAIStatus('AI processing failed: ' + error.message, true);
@@ -1089,23 +1142,29 @@
             if (state.previewFile) {
                 formData.append('thumbnail_preview', state.previewFile, 'thumbnail_preview.png');
             }
-            formData.append('record_type', document.getElementById('record-type').value);
-            formData.append('modality', document.getElementById('modality').value);
 
-            if (state.aiImageTypeCode) {
-                formData.append('image_type', state.aiImageTypeCode);
+            const recordType = document.getElementById('record-type').value;
+            if (!recordType) {
+                throw new Error('Record type is required.');
             }
-            if (state.aiPatientOrientation && state.aiPatientOrientation.length === 2) {
-                formData.append('patient_orientation', state.aiPatientOrientation[0]);
-                formData.append('patient_orientation', state.aiPatientOrientation[1]);
+            if (!state.valuesets.record_types.find(x => x.id === recordType)) {
+                throw new Error(`Expected record type ${recordType} to exist in valueset record_types`);
             }
-            if (state.requiresServerTransform && state.transformOps.length > 0) {
+            formData.append('record_type', recordType);
+
+            if (state.transformOps.length > 0) {
                 formData.append('image_transform_ops', JSON.stringify(state.transformOps));
             }
 
             const acquisitionDate = document.getElementById('acquisition-date').value;
             if (acquisitionDate) {
                 formData.append('acquisition_date', acquisitionDate);
+            }
+
+            if (state.device && state.device.serial) {
+                formData.append('device_serial', state.device.serial);
+                formData.append('device_manufacturer', state.device.manufacturer);
+                formData.append('device_model', state.device.model);
             }
 
             const record = await createRecord(state.encounter.id, formData);
@@ -1154,8 +1213,6 @@
         state.aiFile = null;
         state.requiresServerTransform = false;
         state.transformOps = [];
-        state.aiImageTypeCode = null;
-        state.aiPatientOrientation = null;
         document.getElementById('file-upload').value = '';
         document.getElementById('file-preview').classList.add('hidden');
         document.getElementById('scan-status').textContent = '';
@@ -1179,17 +1236,12 @@
 
         // Load valuesets
         try {
-            const [recordTypes, modalities] = await Promise.all([
-                fetchValueset('record_types'),
-                fetchValueset('modalities')
-            ]);
+            const record_types = await fetchValueset('record_types');
 
-            state.valuesets.record_types = recordTypes;
-            state.valuesets.modalities = modalities;
+            state.valuesets.record_types = record_types;
             console.log(state.valuesets);
 
-            populateSelect('record-type', recordTypes);
-            populateSelect('modality', modalities);
+            populateSelect('record-type', record_types);
         } catch (error) {
             console.error('Failed to load valuesets:', error);
             alert('Failed to load form options. Please refresh the page.');
@@ -1215,7 +1267,7 @@
         });
 
         // Watch form fields for changes
-        ['record-type', 'modality'].forEach(id => {
+        ['record-type'].forEach(id => {
             document.getElementById(id).addEventListener('change', updateSubmitButton);
         });
 

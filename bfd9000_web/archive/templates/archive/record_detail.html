@@ -11,7 +11,7 @@
                 </svg>
                 Back to Records
             </a>
-            <h1 class="text-2xl font-bold">Record #<span id="record-id">{{ record_id }}</span></h1>
+            <h1 class="text-2xl font-bold" id="page-title">Record #<span id="record-id">{{ record_id }}</span></h1>
         </div>
         <div id="loading" class="text-base-content/60">Loading record details...</div>
         <div id="error" class="alert alert-error hidden"></div>
@@ -115,10 +115,6 @@
                                     <td id="modality">-</td>
                                 </tr>
                                 <tr>
-                                    <th>Image Type</th>
-                                    <td id="image-type">-</td>
-                                </tr>
-                                <tr>
                                     <th>Patient Orientation</th>
                                     <td id="patient-orientation">-</td>
                                 </tr>
@@ -127,8 +123,33 @@
                                     <td id="acquisition-datetime">-</td>
                                 </tr>
                                 <tr>
-                                    <th>Scan Operator</th>
+                                    <th>Operator</th>
                                     <td id="scan-operator">-</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scanner Details -->
+            <div class="card bg-base-200 shadow" id="scanner-details-card">
+                <div class="card-body">
+                    <h2 class="card-title text-lg">Scanner Details</h2>
+                    <div class="overflow-x-auto">
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <th>Manufacturer</th>
+                                    <td id="device-manufacturer">-</td>
+                                </tr>
+                                <tr>
+                                    <th>Model</th>
+                                    <td id="device-model">-</td>
+                                </tr>
+                                <tr>
+                                    <th>Serial Number</th>
+                                    <td id="device-serial">-</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -166,6 +187,11 @@
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('content').classList.remove('hidden');
 
+        // Update page title with identifier_str
+        const label = record.identifier_str || ('#' + record.id);
+        document.getElementById('page-title').textContent = 'Record ' + label;
+        document.title = 'Record ' + label;
+
         // Use thumbnail endpoint for all GUI image display
         document.getElementById('record-image').src = (window.script_name || '') + `/api/records/${recordId}/thumbnail/`;
 
@@ -175,23 +201,34 @@
         document.getElementById('age-at-encounter').textContent = formatAge(record);
 
         // Record Details
-        document.getElementById('record-type').textContent = record.series_record_type?.display || '-';
-        document.getElementById('created-at').textContent = record.created_at
+        document.getElementById('record-type').textContent = record.record_type?.display || '-';
+        document.getElementById('created-at').textContent = record.created_at 
             ? new Date(record.created_at).toLocaleString()
             : '-';
 
         // Series & acquisition details come from record payload
         document.getElementById('modality').textContent = record.series_modality?.display || '-';
-        document.getElementById('image-type').textContent = record.image_type?.display || '-';
         document.getElementById('patient-orientation').textContent = Array.isArray(record.patient_orientation)
             ? record.patient_orientation.join('\\')
             : '-';
         document.getElementById('acquisition-datetime').textContent = record.acquisition_datetime
             ? new Date(record.acquisition_datetime).toLocaleString()
             : '-';
-        document.getElementById('scan-operator').textContent = record.scan_operator || '-';
+        document.getElementById('scan-operator').textContent = record.operator || '-';
         renderArchiveLocations(record.archive_locations || []);
         setupDownloadButton(record);
+
+        // Device
+        const device = record.device;
+        if (device) {
+            document.getElementById('device-manufacturer').textContent = device.manufacturer || '-';
+            document.getElementById('device-model').textContent = device.model_number || '-';
+            document.getElementById('device-serial').textContent = device.serial_number || '-';
+        } else {
+            document.getElementById('device-manufacturer').textContent = 'Manual upload';
+            document.getElementById('device-model').textContent = '-';
+            document.getElementById('device-serial').textContent = '-';
+        }
     }
 
     function renderArchiveLocations(locations) {
@@ -279,77 +316,18 @@
         const btn = document.getElementById('download-original-btn');
         if (!btn) return;
 
-        const subjectId = record.subject_identifier || record.subject_id || "";
-        const imageType = record.image_type ? record.image_type.code : "";
-        const ageFloat = record.age_at_encounter !== undefined ? parseFloat(record.age_at_encounter) : null;
-
-        // Get extension from image_url
+        // Get file extension from image_url
         function getExtension(url) {
-            if (!url) return "bin";
+            if (!url) return 'bin';
             const m = url.match(/\.(\w+)$/);
-            if (m) return m[1];
-            return "bin";
+            return m ? m[1] : 'bin';
         }
 
         const ext = getExtension(record.image_url);
-
-        // Age parsing
-        function parseAge(age) {
-            if (!Number.isFinite(age)) return { years: "00", months: "00" };
-            let years = Math.floor(age);
-            let months = Math.floor((age - years) * 12 + 0.001);
-            return {
-                years: String(years).padStart(2, '0'),
-                months: String(months).padStart(2, '0')
-            };
-        }
-
-        // Map gender
-        function mapGender(g) {
-            switch ((g||"").toLowerCase()) {
-                case "male":    return "M";
-                case "female":  return "F";
-                case "other":   return "O";
-                case "unknown": return "U";
-                default:        return "U";
-            }
-        }
-
-        // Compose filename
-        function makeFilename({subject, imgType, gender, age}) {
-            const parts = [
-                subject || "",
-                imgType || "",
-                gender || "",
-                age.years + "y" + age.months + "m"
-            ].filter(x => x.length).join("");
-            const dotExt = ext ? ("." + ext) : "";
-            return (parts || "record") + dotExt;
-        }
+        const identifierStr = record.identifier_str || String(record.id);
+        const filename = identifierStr + (ext ? ('.' + ext) : '');
 
         btn.addEventListener('click', async function () {
-            // Fetch subject gender
-            let gender = "U";
-            try {
-                const resp = await fetch((window.script_name || '') + `/api/subjects/${record.subject_id}/`);
-                if (resp.ok) {
-                    const subj = await resp.json();
-                    gender = mapGender(subj.gender);
-                }
-            } catch (e) {
-                // Keep gender = "U"
-            }
-
-            // Generate filename
-            const age = parseAge(ageFloat);
-            const filename = makeFilename({
-                subject: subjectId,
-                imgType: imageType,
-                gender: gender,
-                age: age
-            });
-
-            // Download
             const url = (window.script_name || '') + `/api/records/${recordId}/image/`;
             try {
                 const res = await fetch(url);
@@ -365,7 +343,7 @@
                     link.remove();
                 }, 100);
             } catch (err) {
-                alert("Failed to download file: " + err.message);
+                alert('Failed to download file: ' + err.message);
             }
         });
     }
