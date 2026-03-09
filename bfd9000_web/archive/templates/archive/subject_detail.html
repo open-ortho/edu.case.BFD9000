@@ -24,7 +24,8 @@
                         <tr><th>Ethnicity</th><td id="ethnicity">-</td></tr>
                         <tr><th>Palatal Cleft</th><td id="palatal-cleft">-</td></tr>
                         <tr><th>Encounters</th><td id="encounter-count">0</td></tr>
-                        <tr><th>Records</th><td id="record-count">0</td></tr>
+                        <tr><th>Digital Records</th><td id="record-count">0</td></tr>
+                        <tr><th>Physical Records</th><td id="physical-record-count">0</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -99,6 +100,7 @@
         setText('palatal-cleft', subject.palatal_cleft?.display || subject.palatal_cleft?.code);
         setText('encounter-count', subject.encounter_count ?? 0);
         setText('record-count', subject.record_count ?? 0);
+        setText('physical-record-count', subject.physical_record_count ?? 0);
         renderIdentifiers(subject.identifiers || []);
     }
 

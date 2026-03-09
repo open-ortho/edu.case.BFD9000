@@ -263,6 +263,8 @@ class RichardsonImporterTestCase(TestCase):
 
     def test_physical_record_box_and_notes(self) -> None:
         """Box and notes are populated on PhysicalRecord from Main cols 12 and 13."""
+        from archive.models import PhysicalLocation
+
         subject_rows = [
             ('R001', 'ADAMS, LORNA', datetime(1966, 8, 8), 'FA30', None, 'F', 'I'),
         ]
@@ -275,8 +277,14 @@ class RichardsonImporterTestCase(TestCase):
 
         rec = PhysicalRecord.objects.first()
         self.assertIsNotNone(rec)
-        self.assertEqual(rec.physical_location_box, '1-A-3')
         self.assertEqual(rec.notes, 'only have upper arch')
+        # Location should be parsed into a PhysicalLocation M2M entry
+        self.assertEqual(rec.locations.count(), 1)
+        loc = rec.locations.first()
+        assert loc is not None
+        self.assertEqual(loc.cabinet, '1')
+        self.assertEqual(loc.shelf, 'A')
+        self.assertEqual(loc.slot, '3')
 
     # ------------------------------------------------------------------
     # Record type mapping
@@ -439,3 +447,70 @@ class RichardsonImporterTestCase(TestCase):
         self.assertEqual(subject.identifiers.filter(
             system=SYSTEM_IDENTIFIER_RICHARDSON_SUBJECT
         ).count(), 1)
+
+
+class ParseBoxLocationTests(RichardsonImporterTestCase):
+    """Unit tests for RichardsonImporter._parse_box_locations()."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.importer = _make_importer()
+
+    def test_simple_single_slot(self) -> None:
+        """'1-A-3' → one location: cabinet=1, shelf=A, slot=3."""
+        from archive.models import PhysicalLocation
+        locs = self.importer._parse_box_locations('1-A-3')
+        self.assertEqual(len(locs), 1)
+        loc = locs[0]
+        self.assertIsInstance(loc, PhysicalLocation)
+        self.assertEqual(loc.cabinet, '1')
+        self.assertEqual(loc.shelf, 'A')
+        self.assertEqual(loc.slot, '3')
+
+    def test_two_slots_same_shelf(self) -> None:
+        """'1-A-16/17' → two locations: (1,A,16) and (1,A,17)."""
+        locs = self.importer._parse_box_locations('1-A-16/17')
+        self.assertEqual(len(locs), 2)
+        cabinets = {loc.cabinet for loc in locs}
+        shelves = {loc.shelf for loc in locs}
+        slots = {loc.slot for loc in locs}
+        self.assertEqual(cabinets, {'1'})
+        self.assertEqual(shelves, {'A'})
+        self.assertEqual(slots, {'16', '17'})
+
+    def test_two_slots_spanning_shelves(self) -> None:
+        """'1-A-30/B-1' → two locations: (1,A,30) and (1,B,1)."""
+        locs = self.importer._parse_box_locations('1-A-30/B-1')
+        self.assertEqual(len(locs), 2)
+        by_shelf = {loc.shelf: loc for loc in locs}
+        self.assertIn('A', by_shelf)
+        self.assertIn('B', by_shelf)
+        self.assertEqual(by_shelf['A'].slot, '30')
+        self.assertEqual(by_shelf['B'].slot, '1')
+        self.assertEqual(by_shelf['A'].cabinet, '1')
+        self.assertEqual(by_shelf['B'].cabinet, '1')
+
+    def test_two_slots_no_shelf_inferred(self) -> None:
+        """'10-9/10' (missing shelf) → two locations with inferred shelf 'A'."""
+        locs = self.importer._parse_box_locations('10-9/10')
+        self.assertEqual(len(locs), 2)
+        for loc in locs:
+            self.assertEqual(loc.cabinet, '10')
+            self.assertEqual(loc.shelf, 'A')
+        slots = {loc.slot for loc in locs}
+        self.assertEqual(slots, {'9', '10'})
+
+    def test_freeform_text(self) -> None:
+        """'R Archive Box' (no hyphens) → one location with cabinet=raw, shelf='', slot=''."""
+        locs = self.importer._parse_box_locations('R Archive Box')
+        self.assertEqual(len(locs), 1)
+        loc = locs[0]
+        self.assertEqual(loc.cabinet, 'R Archive Box')
+        self.assertEqual(loc.shelf, '')
+        self.assertEqual(loc.slot, '')
+
+    def test_deduplication(self) -> None:
+        """Parsing the same string twice returns the same PhysicalLocation row (get_or_create)."""
+        locs1 = self.importer._parse_box_locations('2-B-5')
+        locs2 = self.importer._parse_box_locations('2-B-5')
+        self.assertEqual(locs1[0].pk, locs2[0].pk)

@@ -32,6 +32,7 @@ from .models import (
     Location,
     ImagingStudy,
     Series,
+    PhysicalLocation,
     PhysicalRecord,
     DigitalRecord,
     Device,
@@ -165,6 +166,7 @@ class SubjectSerializer(serializers.ModelSerializer):
 
     encounter_count = serializers.IntegerField(read_only=True)
     record_count = serializers.IntegerField(read_only=True)
+    physical_record_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         """Serializer metadata."""
@@ -321,6 +323,36 @@ class ArchiveLocationSerializer(serializers.ModelSerializer):
         model = ArchiveLocation
         fields = '__all__'
 
+
+class PhysicalLocationSerializer(serializers.ModelSerializer):
+    """Serializer for PhysicalLocation model."""
+    address = AddressSerializer(read_only=True)
+
+    class Meta:
+        model = PhysicalLocation
+        fields = '__all__'
+
+
+class PhysicalRecordSerializer(serializers.ModelSerializer):
+    """Serializer for PhysicalRecord model."""
+    record_type = CodingSerializer(read_only=True)
+    identifiers = IdentifierSerializer(many=True, read_only=True)
+    locations = PhysicalLocationSerializer(many=True, read_only=True)
+    encounter_id = serializers.IntegerField(source='encounter.id', read_only=True)
+    subject_id = serializers.IntegerField(source='encounter.subject.id', read_only=True)
+    subject_identifier = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PhysicalRecord
+        fields = '__all__'
+
+    def get_subject_identifier(self, obj: PhysicalRecord) -> Optional[str]:
+        subject = getattr(obj.encounter, 'subject', None)
+        if not subject:
+            return None
+        return _get_preferred_identifier(subject.identifiers.all())
+
+
 class DigitalRecordSerializer(serializers.ModelSerializer):
     """Serializer for DigitalRecord model."""
     identifiers = IdentifierSerializer(many=True, read_only=True)
@@ -365,8 +397,8 @@ class DigitalRecordSerializer(serializers.ModelSerializer):
     def get_identifier_str(self, obj: DigitalRecord) -> str:
         """
         Return the Bolton-style record display identifier:
-            <subject_identifier><record_type_code><sex_code><age_years_months>
-        Example: B001LM08y06m
+            <subject_identifier><record_type_code><sex_code><age_years_months><seq:02d>
+        Example: R001PHF08y06m01
         Returns empty string if key data is missing.
         """
         encounter = getattr(obj.series.imaging_study, 'encounter', None)
@@ -391,7 +423,8 @@ class DigitalRecordSerializer(serializers.ModelSerializer):
         else:
             age_str = ''
 
-        return f"{identifier}{rt_code}{sex}{age_str}"
+        seq: int = obj.sequence_number or 1
+        return f"{identifier}{rt_code}{sex}{age_str}{seq:02d}"
 
     def get_subject_identifier(self, obj) -> Optional[str]:
         encounter = getattr(obj.series.imaging_study, 'encounter', None)

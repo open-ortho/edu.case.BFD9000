@@ -6,10 +6,11 @@ core entities like Subject, Encounter, ImagingStudy, and Record, as well as
 supporting entities like Coding, Identifier, and Collection.
 """
 import json
-from typing import Any
+from typing import Any, Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 from django.db import models
+from django.db.models import Max
 from .media_utils import generate_dicom_uid
 from django.db.models import QuerySet
 from django.conf import settings
@@ -655,6 +656,51 @@ class Device(TimestampedModel):
         return ' — '.join(parts)
 
 
+class PhysicalLocation(TimestampedModel):
+    """
+    A physical storage slot in an archive (e.g. a single compartment in a cabinet).
+
+    Structured as cabinet / shelf / slot so that a single box string like
+    ``1-A-16/17`` can be split into two rows sharing the same cabinet and shelf.
+    A free-form ``raw`` field preserves the original box string for provenance.
+    """
+    address = models.ForeignKey(
+        Address,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='physical_locations',
+        help_text='Address of the building or facility where this storage slot is located',
+    )
+    cabinet = models.CharField(
+        max_length=64, blank=True,
+        help_text='Cabinet or box number within the facility (e.g. "1", "10")',
+    )
+    shelf = models.CharField(
+        max_length=64, blank=True,
+        help_text='Shelf identifier within the cabinet (e.g. "A", "B")',
+    )
+    slot = models.CharField(
+        max_length=64, blank=True,
+        help_text='Slot or compartment identifier on the shelf (e.g. "16", "30")',
+    )
+    raw = models.CharField(
+        max_length=256, blank=True,
+        help_text='Original unparsed location string from the source spreadsheet',
+    )
+
+    class Meta(TimestampedModel.Meta):
+        """Model metadata."""
+        ordering = ['cabinet', 'shelf', 'slot']
+        indexes = [
+            models.Index(fields=['cabinet', 'shelf', 'slot']),
+        ]
+
+    def __str__(self) -> str:
+        parts = [p for p in [self.cabinet, self.shelf, self.slot] if p]
+        label = '-'.join(parts) if parts else '(empty)'
+        return f"PhysicalLocation {label}"
+
+
 class PhysicalRecord(TimestampedModel):
     """
     The original physical artifact produced at an encounter: an acetate film,
@@ -675,6 +721,13 @@ class PhysicalRecord(TimestampedModel):
         related_name='physical_records_record_type',
         help_text='CWRU record type code identifying the clinical study type (e.g. L, SM)'
     )
+    sequence_number = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text=(
+            'One-based sequence within (encounter, record_type). '
+            'Auto-assigned on first save. Used in identifier_str suffix.'
+        ),
+    )
     acquisition_datetime = models.DateTimeField(
         null=True, blank=True,
         help_text='When the original was acquired (X-ray taken, model cast, etc.)'
@@ -692,24 +745,11 @@ class PhysicalRecord(TimestampedModel):
         related_name='physical_records',
         help_text='Device used to acquire the patient data (e.g. cephalostat)'
     )
-    physical_location = models.ForeignKey(
-        Address,
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name='physical_records_location',
-        help_text='Address of the physical archive where this artifact is stored'
-    )
-    physical_location_box = models.CharField(
-        max_length=128, blank=True, help_text='Box identifier in physical archive'
-    )
-    physical_location_shelf = models.CharField(
-        max_length=128, blank=True, help_text='Shelf identifier in physical archive'
-    )
-    physical_location_tray = models.CharField(
-        max_length=128, blank=True, help_text='Tray identifier in physical archive'
-    )
-    physical_location_compartment = models.CharField(
-        max_length=128, blank=True, help_text='Compartment identifier in physical archive'
+    locations = models.ManyToManyField(
+        PhysicalLocation,
+        blank=True,
+        related_name='physical_records',
+        help_text='Physical archive storage slots where this artifact is held',
     )
     identifiers = models.ManyToManyField(
         Identifier,
@@ -735,6 +775,17 @@ class PhysicalRecord(TimestampedModel):
 
     def __str__(self) -> str:
         return f"PhysicalRecord {self.pk} ({self.record_type})"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        encounter_pk: Optional[int] = self.encounter_id  # type: ignore[attr-defined]
+        record_type_pk: Optional[int] = self.record_type_id  # type: ignore[attr-defined]
+        if self.sequence_number is None and encounter_pk and record_type_pk:
+            max_seq: Optional[int] = PhysicalRecord.objects.filter(
+                encounter_id=encounter_pk,
+                record_type_id=record_type_pk,
+            ).aggregate(m=Max('sequence_number'))['m']
+            self.sequence_number = (max_seq or 0) + 1
+        super().save(*args, **kwargs)
 
 
 class DigitalRecord(TimestampedModel):
@@ -814,6 +865,13 @@ class DigitalRecord(TimestampedModel):
         related_name='digital_records',
         help_text='External identifiers for this digital instance'
     )
+    sequence_number = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text=(
+            'One-based sequence within (encounter, record_type) among DigitalRecords. '
+            'Auto-assigned on first save. Used in identifier_str suffix.'
+        ),
+    )
 
     class Meta(TimestampedModel.Meta):
         """Model metadata."""
@@ -845,9 +903,27 @@ class DigitalRecord(TimestampedModel):
     def __str__(self) -> str:
         return f"DigitalRecord {self.pk} ({self.record_type})"
 
-    def save(self, *args, **kwargs) -> None:
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if not self.sop_instance_uid:
             self.sop_instance_uid = generate_dicom_uid(SOPINSTANCEUID_ROOT)
+        if self.sequence_number is None:
+            series_pk: Optional[int] = self.series_id  # type: ignore[attr-defined]
+            record_type_pk: Optional[int] = self.record_type_id  # type: ignore[attr-defined]
+            if series_pk and record_type_pk:
+                # Resolve encounter via DB rather than traversing ORM relations
+                # so we don't require a pre-fetched series on a new instance.
+                encounter_ids = (
+                    ImagingStudy.objects
+                    .filter(series__id=series_pk)
+                    .values_list('encounter_id', flat=True)
+                )
+                if encounter_ids:
+                    encounter_id = encounter_ids[0]
+                    max_seq: Optional[int] = DigitalRecord.objects.filter(
+                        series__imaging_study__encounter_id=encounter_id,
+                        record_type_id=record_type_pk,
+                    ).aggregate(m=Max('sequence_number'))['m']
+                    self.sequence_number = (max_seq or 0) + 1
         super().save(*args, **kwargs)
 
 

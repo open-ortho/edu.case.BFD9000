@@ -14,6 +14,7 @@ router.register(r'codings', views.CodingViewSet)
 router.register(r'identifiers', views.IdentifierViewSet)
 router.register(r'addresses', views.AddressViewSet)
 router.register(r'locations', views.LocationViewSet)
+router.register(r'physical-locations', views.PhysicalLocationViewSet)
 router.register(r'collections', views.CollectionViewSet)
 router.register(r'subjects', views.SubjectViewSet)
 router.register(r'encounters', views.EncounterViewSet)
@@ -21,6 +22,7 @@ router.register(r'imaging-studies', views.ImagingStudyViewSet)
 router.register(r'endpoints', views.EndpointViewSet)
 router.register(r'archive-locations', views.ArchiveLocationViewSet)
 router.register(r'records', views.DigitalRecordViewSet)
+router.register(r'physical-records', views.PhysicalRecordViewSet)
 router.register(r'series', views.SeriesViewSet)
 router.register(r'valuesets', views.ValuesetViewSet, basename='valuesets')
 
@@ -31,11 +33,15 @@ subjects_router.register(
     r'encounters', views.EncounterViewSet, basename='subject-encounters')
 subjects_router.register(r'records', views.DigitalRecordViewSet,
                          basename='subject-records')
+subjects_router.register(r'physical-records', views.PhysicalRecordViewSet,
+                         basename='subject-physical-records')
 
 encounters_router = routers.NestedDefaultRouter(
     router, r'encounters', lookup='encounter')
 encounters_router.register(
     r'records', views.DigitalRecordViewSet, basename='encounter-records')
+encounters_router.register(
+    r'physical-records', views.PhysicalRecordViewSet, basename='encounter-physical-records')
 
 imaging_router = routers.NestedDefaultRouter(
     router, r'imaging-studies', lookup='imaging_study')
@@ -56,6 +62,7 @@ urlpatterns = [
     path('records/', views.records, name='records'),
     path('records/create/', views.scan, name='record_create'),
     path('records/<str:record_id>/', views.record_detail, name='record_detail'),
+    path('physical-records/', views.physical_records, name='physical_records'),
     path('api/scan/tiff-preview/', views.scan_tiff_preview, name='scan_tiff_preview'),
     # API routes
     path('api/', include(router.urls)),

@@ -16,7 +16,7 @@ from archive.constants import (
     SYSTEM_RECORD_TYPE,
 )
 from archive.management.importers.base import BaseImporter, ImportStats
-from archive.models import Coding, Encounter, PhysicalRecord, Subject
+from archive.models import Coding, Encounter, PhysicalLocation, PhysicalRecord, Subject
 
 COLLECTION_SHORT_NAME = 'Richardson'
 COLLECTION_FULL_NAME = 'Richardson Collection'
@@ -362,14 +362,98 @@ class RichardsonImporter(BaseImporter):
         acq_datetime: Optional[datetime] = None
         if isinstance(acq_date_raw, datetime):
             acq_datetime = acq_date_raw.replace(tzinfo=timezone.utc)
-        PhysicalRecord.objects.create(
+        pr = PhysicalRecord.objects.create(
             encounter=encounter,
             record_type=record_type,
             acquisition_datetime=acq_datetime,
-            physical_location_box=box,
-            notes=misc,
+            notes=misc or '',
         )
+        if box:
+            locations = self._parse_box_locations(box)
+            pr.locations.set(locations)
         stats.physical_records_created += 1
+
+    # ------------------------------------------------------------------
+    # Location parsing
+    # ------------------------------------------------------------------
+
+    def _parse_box_locations(self, raw: str) -> list[PhysicalLocation]:
+        """
+        Parse a box string from the Richardson spreadsheet into one or more
+        ``PhysicalLocation`` rows.
+
+        Supported formats
+        -----------------
+        ``1-A-3``       → one location: cabinet=1, shelf=A, slot=3
+        ``1-A-16/17``   → two locations: (1,A,16) and (1,A,17)
+        ``1-A-30/B-1``  → two locations: (1,A,30) and (1,B,1)
+        ``10-9/10``     → two locations with inferred shelf 'A': (10,A,9) and (10,A,10)
+        anything else   → one location with cabinet=raw, shelf='', slot=''
+
+        All created ``PhysicalLocation`` rows store the original *raw* string.
+        """
+        locations: list[PhysicalLocation] = []
+
+        parts = raw.split('-')
+
+        # Need at least "cabinet-shelf-slot" (3 parts) to parse structured data.
+        if len(parts) < 3:
+            # Could be freeform text like "R Archive Box", or "10-9/10" (2 parts).
+            if len(parts) == 2:
+                # Format: "cabinet-slot1/slot2" with no shelf letter — infer shelf 'A'
+                cabinet = parts[0].strip()
+                slot_part = parts[1].strip()
+                slots = [s.strip() for s in slot_part.split('/')]
+                for slot in slots:
+                    if slot:
+                        loc, _ = PhysicalLocation.objects.get_or_create(
+                            cabinet=cabinet, shelf='A', slot=slot,
+                            defaults={'raw': raw},
+                        )
+                        locations.append(loc)
+            else:
+                # Freeform: store entire string in cabinet
+                loc, _ = PhysicalLocation.objects.get_or_create(
+                    cabinet=raw.strip(), shelf='', slot='',
+                    defaults={'raw': raw},
+                )
+                locations.append(loc)
+            return locations
+
+        # 3+ parts: "cabinet-shelf-slot[/...]"
+        cabinet = parts[0].strip()
+        shelf = parts[1].strip()
+        slot_part = '-'.join(parts[2:]).strip()  # re-join in case slot itself contains '-'
+
+        # slot_part may be "16", "16/17", or "30/B-1"
+        if '/' not in slot_part:
+            # Simple single slot
+            loc, _ = PhysicalLocation.objects.get_or_create(
+                cabinet=cabinet, shelf=shelf, slot=slot_part,
+                defaults={'raw': raw},
+            )
+            locations.append(loc)
+        else:
+            # Multiple slots: split on '/'
+            slot_tokens = slot_part.split('/')
+            current_shelf = shelf
+            for token in slot_tokens:
+                token = token.strip()
+                # A token like "B-1" means new shelf 'B', slot '1'
+                if '-' in token:
+                    sub = token.split('-', 1)
+                    current_shelf = sub[0].strip()
+                    slot = sub[1].strip()
+                else:
+                    slot = token
+                if slot:
+                    loc, _ = PhysicalLocation.objects.get_or_create(
+                        cabinet=cabinet, shelf=current_shelf, slot=slot,
+                        defaults={'raw': raw},
+                    )
+                    locations.append(loc)
+
+        return locations
 
     # ------------------------------------------------------------------
     # Summary

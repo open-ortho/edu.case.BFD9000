@@ -26,13 +26,15 @@ from django.shortcuts import render
 from django.views.decorators.http import require_POST
 from .models import (
     Coding, Identifier, Address, Collection, Subject,
-    ArchiveLocation, Encounter, Endpoint, Location, ImagingStudy, Series, PhysicalRecord, DigitalRecord, Device, ValueSet
+    ArchiveLocation, Encounter, Endpoint, Location, ImagingStudy, Series,
+    PhysicalLocation, PhysicalRecord, DigitalRecord, Device, ValueSet
 )
 from .serializers import (
     CodingSerializer, IdentifierSerializer, AddressSerializer,
     ArchiveLocationSerializer, CollectionSerializer, SubjectSerializer, EncounterSerializer,
     EndpointSerializer, LocationSerializer, ImagingStudySerializer, DigitalRecordSerializer,
-    DigitalRecordUploadSerializer, DeviceSerializer, SeriesSerializer
+    DigitalRecordUploadSerializer, DeviceSerializer, SeriesSerializer,
+    PhysicalLocationSerializer, PhysicalRecordSerializer,
 )
 from .constants import (
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
@@ -160,6 +162,7 @@ class SubjectViewSet(viewsets.ModelViewSet):
     ).annotate(
         encounter_count=Count('encounters', distinct=True),
         record_count=Count('encounters__imaging_study__series__digital_records', distinct=True),
+        physical_record_count=Count('encounters__physical_records', distinct=True),
         official_identifier=Subquery(
             Identifier.objects.filter(
                 subjects=OuterRef('pk'),
@@ -273,6 +276,45 @@ class ArchiveLocationViewSet(viewsets.ModelViewSet):
     serializer_class = ArchiveLocationSerializer
     filterset_fields = ['digital_record', 'endpoint', 'status', 'endpoint__connection_type']
     search_fields = ['assigned_id', 'digital_record__id', 'endpoint__name', 'endpoint__address']
+
+
+class PhysicalLocationViewSet(viewsets.ModelViewSet):
+    """ViewSet for PhysicalLocation — archive storage slots."""
+
+    queryset = PhysicalLocation.objects.select_related('address')
+    serializer_class = PhysicalLocationSerializer
+    filterset_fields = ['cabinet', 'shelf']
+    search_fields = ['cabinet', 'shelf', 'slot', 'raw']
+
+
+class PhysicalRecordViewSet(viewsets.ModelViewSet):
+    """ViewSet for PhysicalRecord model.
+
+    Manages original physical artifacts (films, models, charts) linked to encounters.
+    """
+
+    queryset = PhysicalRecord.objects.select_related(
+        'encounter__subject',
+        'record_type',
+        'device',
+    ).prefetch_related(
+        'encounter__subject__identifiers',
+        'locations',
+        'identifiers',
+    )
+    serializer_class = PhysicalRecordSerializer
+    filterset_fields = ['encounter', 'record_type']
+    search_fields = ['^encounter__subject__identifiers__value']
+
+    def get_queryset(self) -> QuerySet:
+        qs = super().get_queryset()
+        encounter_pk = self.kwargs.get('encounter_pk')
+        if encounter_pk:
+            qs = qs.filter(encounter__id=encounter_pk)
+        subject_pk = self.kwargs.get('subject_pk')
+        if subject_pk:
+            qs = qs.filter(encounter__subject__id=subject_pk)
+        return qs
 
 
 class DigitalRecordViewSet(viewsets.ModelViewSet):
@@ -422,6 +464,12 @@ def encounter_create(request):
 def records(request):
     """Render the record list page."""
     return render(request, "archive/records.html")
+
+
+@login_required
+def physical_records(request):
+    """Render the physical record list page."""
+    return render(request, "archive/physical_records.html")
 
 
 @login_required
