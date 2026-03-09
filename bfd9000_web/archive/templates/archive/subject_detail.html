@@ -92,6 +92,7 @@
     }
 
     function displaySubject(subject) {
+        setText('subject-id', subject.subject_identifier || subject.id);
         setText('subject-identifier', subject.subject_identifier || subject.id);
         setText('collection', subject.collection);
         setText('sex', subject.gender);

@@ -22,10 +22,10 @@
         >
             <thead>
                 <tr>
-                    <th>ID</th>
+                    <th>Identifier</th>
                     <th>Record Type</th>
                     <th>Subject</th>
-                    <th>Encounter</th>
+                    <th>Age</th>
                     <th>Acquired</th>
                     <th>Operator</th>
                     <th>Locations</th>
@@ -57,6 +57,15 @@
 </div>
 {% endblock %} {% block head %} {{ block.super }}
 <script>
+    function formatAge(ageYears) {
+        if (ageYears === null || ageYears === undefined) return '-';
+        const wholeYears = Math.floor(ageYears);
+        let months = Math.round((ageYears - wholeYears) * 12);
+        let years = wholeYears;
+        if (months === 12) { years += 1; months = 0; }
+        return `${years}y ${months}m`;
+    }
+
     async function fetchPhysicalRecords(params = {}) {
         const { search = "", page = 1, page_size = 20, ...extra } = params;
         const urlParams = new URLSearchParams({
@@ -98,7 +107,8 @@
                 const row = document.createElement("tr");
 
                 const idCell = document.createElement("td");
-                idCell.textContent = record.id;
+                idCell.textContent = record.identifier_str || "-";
+                idCell.classList.add("font-mono");
 
                 const recordType = document.createElement("td");
                 recordType.textContent = record.record_type?.display || record.record_type?.code || "-";
@@ -115,7 +125,7 @@
                 subject.appendChild(subjectBtn);
 
                 const encounter = document.createElement("td");
-                encounter.textContent = record.encounter_id || "-";
+                encounter.textContent = formatAge(record.age_at_encounter);
 
                 const acquired = document.createElement("td");
                 acquired.textContent = record.acquisition_datetime
