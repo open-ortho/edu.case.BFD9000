@@ -15,6 +15,8 @@ from box_sdk_gen.managers.uploads import (
 from django.conf import settings
 from dataclasses import dataclass
 
+from archive.models import Record
+
 from BFD9000.settings import (
     BOX_DEVELOPER_TOKEN,
     BOX_FOLDER_ID,
@@ -100,15 +102,29 @@ def handle_media_file(file_path: Path) -> bool:
     try:
         logger.debug(f"Handling media file: {file_path}")
         # Attempt to upload the file
-        return upload_file(file_path)
+        box_file_id = upload_file(file_path)
+        if box_file_id:
+            # update the link in the database
+            relative_path = file_path.relative_to(settings.MEDIA_ROOT)
+            qs = Record.objects.filter(source_file=str(relative_path))
+            count = qs.count()
+            if count != 1:
+                logger.error(f"Expected 1 record for {relative_path}, found {count}; skipping DB update")
+                return False
+            qs.update(source_file=f"box://{box_file_id}")
+
+            return True
+        else:
+            return False
     except Exception as e:
         logger.error(f"Error handling file {file_path}: {e}", exc_info=True)
         return False
 
 
-def upload_file(file_path: Path) -> bool:
+def upload_file(file_path: Path) -> str | None:
     """
     Upload a file to Box.com, creating folder structure as needed, and deleting the file if it already exists.
+    Returns the Box file ID on success, or None on failure.
 
     The folder structure in Box will mirror the structure relative to MEDIA_ROOT.
     For example: /media/patient123/scan001/image.jpg -> BOX_FOLDER_ID/patient123/scan001/image.jpg
@@ -129,7 +145,7 @@ def upload_file(file_path: Path) -> bool:
             current_folder_id = _get_or_create_folder(client, current_folder_id, folder_name)
             if not current_folder_id:
                 logger.error(f"Failed to create/navigate to folder: {folder_name}")
-                return False
+                return None
 
         file_size = file_path.stat().st_size
 
@@ -156,7 +172,7 @@ def upload_file(file_path: Path) -> bool:
                         logger.debug(f"Invalidated cache for deleted file: {file_name}")
                 else:
                     logger.error(f"Preflight check failed: {e}")
-                    return False
+                    return None
         if upload_url is None:
             raise RuntimeError("Internal Error: multiple 409 responses recieved when trying to upload file.")
 
@@ -177,14 +193,14 @@ def upload_file(file_path: Path) -> bool:
                 uploaded_file = result.entries[0]  # pyright: ignore[reportOptionalSubscript]
 
             logger.debug(f"Uploaded {file_path} to Box (ID: {uploaded_file.id})")
-            return True
+            return uploaded_file.id
 
     except BoxAPIError as e:
         logger.error(f"Box API error uploading {file_path}: {e}", exc_info=True)
-        return False
+        return None
     except Exception as e:
         logger.error(f"Error uploading {file_path}: {e}", exc_info=True)
-        return False
+        return None
 
 def _get_item_by_name(client: BoxClient, folder_id: str, name: str) -> ItemData | None:
     """
