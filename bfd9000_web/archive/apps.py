@@ -17,8 +17,9 @@ class ArchiveConfig(AppConfig):
 
     def ready(self):
         """Initialize the archive app and start background tasks."""
+        # Only start during runserver, not during migrations, tests, etc.
         # Guard against running twice in development (autoreloader issue)
-        if not self._is_reloader_process():
+        if 'runserver' in sys.argv and not self._is_reloader_process():
             self._start_background_task()
 
     def _is_reloader_process(self):

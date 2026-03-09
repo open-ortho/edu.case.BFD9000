@@ -3,20 +3,23 @@
 import logging
 import time
 from pathlib import Path
+from typing import Literal
 
-from box_sdk_gen import BoxAPIError, BoxClient, BoxDeveloperTokenAuth, CreateFolderParent, Item
+from box_sdk_gen import BoxAPIError, BoxClient, BoxJWTAuth, CreateFolderParent, FileBaseTypeField, FolderBaseTypeField, JWTConfig, WebLinkBaseTypeField
+from box_sdk_gen.box.developer_token_auth import BoxDeveloperTokenAuth
 from box_sdk_gen.managers.uploads import (
     PreflightFileUploadCheckParent,
     UploadFileAttributes,
     UploadFileAttributesParentField,
 )
 from django.conf import settings
+from dataclasses import dataclass
 
 from BFD9000.settings import (
     BOX_ACCESS_TOKEN,
-    BOX_CLIENT_ID,
-    BOX_CLIENT_SECRET,
+    BOX_DEVELOPER_TOKEN,
     BOX_FOLDER_ID,
+    BOX_JWT_CONFIG_FILE,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,12 +27,21 @@ logger = logging.getLogger(__name__)
 # Cache for folder/file lookups: {(parent_folder_id, item_name): (item_id, item_type) | None}
 # This persists across multiple file uploads within the same worker session
 # Using dynamic programming to avoid repeated API calls
-_item_cache: dict[tuple[str, str], tuple[str, str] | None] = {}
+@dataclass
+class ItemData:
+    id: str
+    type: FileBaseTypeField | FolderBaseTypeField | WebLinkBaseTypeField
+
+_item_cache: dict[tuple[str, str], ItemData | None] = {}
 
 
 def _get_box_client() -> BoxClient:
     """Get an authenticated Box client."""
-    auth: BoxDeveloperTokenAuth = BoxDeveloperTokenAuth(token=BOX_ACCESS_TOKEN)  # pyright: ignore[reportArgumentType]
+    if BOX_JWT_CONFIG_FILE:
+        jwt_config = JWTConfig.from_config_file(config_file_path="boxjwt.json")
+        auth = BoxJWTAuth(config=jwt_config)  # pyright: ignore[reportArgumentType]
+    elif BOX_DEVELOPER_TOKEN:
+        auth = BoxDeveloperTokenAuth(token=BOX_DEVELOPER_TOKEN)
     return BoxClient(auth=auth)
 
 
@@ -55,8 +67,8 @@ def media_upload_worker():
 
 
 def process_media_files() -> int:
-    """Process all files in the media directory for upload."""
-    media_root = Path(settings.MEDIA_ROOT)
+    """Process all files in the media/uploads directory for upload."""
+    media_root = Path(settings.MEDIA_ROOT).joinpath("uploads")
 
     if not media_root.exists():
         return 0
@@ -80,8 +92,8 @@ def handle_media_file(file_path: Path) -> bool:
         # Attempt to upload the file
         if upload_file(file_path):
             # Delete the file after successful upload TODO: delete it
-            # file_path.unlink()
-            # logger.debug(f"Deleted local file: {file_path}")
+            file_path.unlink()
+            logger.debug(f"Deleted local file: {file_path}")
 
             # Prune parent directory if empty
             prune_empty_directory(file_path.parent)
@@ -171,8 +183,7 @@ def upload_file(file_path: Path) -> bool:
         logger.error(f"Error uploading {file_path}: {e}", exc_info=True)
         return False
 
-
-def _get_item_by_name(client: BoxClient, folder_id: str, name: str) -> Item | None:
+def _get_item_by_name(client: BoxClient, folder_id: str, name: str) -> ItemData | None:
     """
     Get an item (file or folder) by name within a parent folder.
 
@@ -188,13 +199,11 @@ def _get_item_by_name(client: BoxClient, folder_id: str, name: str) -> Item | No
             logger.debug(f"Cache hit (not found): {name} in folder {folder_id}")
             return None
 
-        cached_id, cached_type = cached_data
-        logger.debug(f"Cache hit: {name} -> {cached_id} (type: {cached_type})")
+        logger.debug(f"Cache hit: {name} -> {cached_data.id} (type: {cached_data.type})")
 
         # Create a minimal Item object from cached data
         # This avoids another API call to fetch the full item
-        item = Item(id=cached_id, type=cached_type)  # pyright: ignore[reportCallIssue]
-        return item
+        return cached_data
 
     # Cache miss - query Box API
     try:
@@ -204,9 +213,10 @@ def _get_item_by_name(client: BoxClient, folder_id: str, name: str) -> Item | No
             for item in items.entries or []:
                 if item.name == name:
                     logger.debug(f"Found item by name: {item.id} {name} (type: {item.type})")
-                    # Cache the result as (id, type) tuple
-                    _item_cache[cache_key] = (item.id, item.type)  # pyright: ignore[reportArgumentType]
-                    return item
+                    # Cache the result as ItemData object
+                    data = ItemData(id=item.id, type=item.type)
+                    _item_cache[cache_key] = data
+                    return data
             if items.next_marker is None:
                 break
             items = client.folders.get_folder_items(folder_id, marker=items.next_marker)
