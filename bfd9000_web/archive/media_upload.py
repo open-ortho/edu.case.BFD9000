@@ -40,8 +40,7 @@ def _get_box_client() -> BoxClient:
         auth = BoxJWTAuth(config=jwt_config)  # pyright: ignore[reportArgumentType]
     elif BOX_DEVELOPER_TOKEN:
         auth = BoxDeveloperTokenAuth(token=BOX_DEVELOPER_TOKEN)
-
-    if auth is None:
+    else:
         raise RuntimeError(
             "Box authentication is not configured. Set BOX_DEVELOPER_TOKEN or "
             "BOX_JWT_CONFIG_FILE to enable Box client authentication."
@@ -162,7 +161,7 @@ def upload_file(file_path: Path) -> bool:
                     logger.error(f"Preflight check failed: {e}")
                     return False
         if upload_url is None:
-            raise RuntimeError("Internal Error: expected upload_url to be set, multiple 409 responses should be impossible")
+            raise RuntimeError("Internal Error: multiple 409 responses recieved when trying to upload file.")
 
         # Upload the file
         with open(file_path, 'rb') as file_stream:

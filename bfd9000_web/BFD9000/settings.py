@@ -49,9 +49,6 @@ if not APP_VERSION:
 if not DEBUG and 'SECRET_KEY' not in os.environ:
     raise RuntimeError('SECRET_KEY must be set when DEBUG=False')
 
-if not DEBUG and 'BOX_ACCESS_TOKEN' not in os.environ:
-    raise RuntimeError('BOX_ACCESS_TOKEN must be set when DEBUG=False')
-
 ALLOWED_HOSTS = os.environ.get(
     'DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 

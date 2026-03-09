@@ -22,7 +22,7 @@ class ArchiveConfig(AppConfig):
             if not self._is_reloader_process():
                 self._start_background_task()
         # are we in production (gunicorn)?
-        elif sys.argv[0] == 'gunicorn':
+        elif os.path.basename(sys.argv[0]) == 'gunicorn':
             self._start_background_task()
         else:
             logger.info("Background tasks not started: conditions have not been met (runserver, gunicorn)")
