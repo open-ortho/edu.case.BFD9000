@@ -8,7 +8,8 @@ from typing import Optional
 
 from django.core.management.base import CommandError
 
-from archive.models import Collection, Identifier, Subject
+from archive.constants import SYSTEM_PROCEDURE
+from archive.models import Coding, Collection, Identifier, Subject
 
 
 @dataclass
@@ -77,6 +78,14 @@ class BaseImporter:
             return date.fromisoformat(raw)
         except ValueError as exc:
             raise CommandError(f"Invalid date format: {value}") from exc
+
+    def _get_or_create_procedure(self) -> Coding:
+        procedure, _ = Coding.objects.get_or_create(
+            system=SYSTEM_PROCEDURE,
+            code="historical-import-encounter",
+            defaults={"display": "Historical imported encounter"},
+        )
+        return procedure
 
     def _cell_str(self, value) -> str:
         if value is None:

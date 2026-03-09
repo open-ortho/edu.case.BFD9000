@@ -5,7 +5,6 @@ This module defines the ViewSets for the API, handling CRUD operations
 for subjects, encounters, records, and related medical entities.
 It also includes custom actions for file serving and valueset retrieval.
 """
-import io
 import os
 from typing import Any, Dict, List, Optional, Type
 
@@ -20,24 +19,25 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count, QuerySet
+from django.db.models import Case, CharField, Count, OuterRef, QuerySet, Subquery, When
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_POST
 from .models import (
     Coding, Identifier, Address, Collection, Subject,
-    Encounter, Location, ImagingStudy, Record, ValueSet
+    ArchiveLocation, Encounter, Endpoint, Location, ImagingStudy, Series, Record, ValueSet
 )
 from .serializers import (
     CodingSerializer, IdentifierSerializer, AddressSerializer,
-    CollectionSerializer, SubjectSerializer, EncounterSerializer,
-    LocationSerializer, ImagingStudySerializer, RecordSerializer,
-    RecordUploadSerializer
+    ArchiveLocationSerializer, CollectionSerializer, SubjectSerializer, EncounterSerializer,
+    EndpointSerializer, LocationSerializer, ImagingStudySerializer, RecordSerializer,
+    RecordUploadSerializer, SeriesSerializer
 )
 from .constants import (
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
     SYSTEM_IDENTIFIER_LANCASTER_SUBJECT,
 )
+from .media_utils import convert_tiff_to_png_bytes
 
 MAX_TIFF_PREVIEW_BYTES = 100 * 1024 * 1024
 MAX_TIFF_PREVIEW_PIXELS = 100_000_000
@@ -148,13 +148,23 @@ class SubjectViewSet(viewsets.ModelViewSet):
     ViewSet for Subject model.
 
     Manages patient/subject information including demographics.
+    Subjects are ordered by their preferred display identifier (official →
+    Bolton system → first), resolved at the database level via correlated
+    subqueries to match the serializer's ``subject_identifier`` field.
     """
     queryset = Subject.objects.prefetch_related(
         'identifiers'
     ).annotate(
         encounter_count=Count('encounters', distinct=True),
-        record_count=Count('encounters__records', distinct=True)
-    ).all()
+        record_count=Count('encounters__imaging_study__series__records', distinct=True),
+        official_identifier=Subquery(
+            Identifier.objects.filter(
+                subjects=OuterRef('pk'),
+                use='official',
+            ).order_by('pk').values('value')[:1],
+            output_field=CharField(),
+        ),
+    ).order_by('official_identifier', 'id')
     serializer_class = SubjectSerializer
     filterset_fields = {
         'identifiers__value',
@@ -179,13 +189,13 @@ class EncounterViewSet(viewsets.ModelViewSet):
     ).prefetch_related(
         'subject__identifiers'
     ).annotate(
-        record_count=Count('records', distinct=True)
+        record_count=Count('imaging_study__series__records', distinct=True)
     ).order_by('-actual_period_start', '-id')
     serializer_class = EncounterSerializer
     filterset_fields = ['subject', 'actual_period_start']
     search_fields = ['subject__identifiers__value']
 
-    def perform_create(self, serializer: serializers.ModelSerializer) -> None:
+    def perform_create(self, serializer: serializers.BaseSerializer) -> None:
         """
         Custom creation logic to handle subject association and age calculation.
         """
@@ -223,7 +233,37 @@ class ImagingStudyViewSet(viewsets.ModelViewSet):
     """
     queryset = ImagingStudy.objects.all()
     serializer_class = ImagingStudySerializer
-    filterset_fields = ['encounter', 'collection', 'scan_datetime']
+    filterset_fields = ['encounter', 'collection']
+
+
+class SeriesViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Series model.
+
+    Exposes series grouped under imaging studies. Standard CRUD.
+    Requires authentication to prevent unauthenticated enumeration of all series.
+    """
+    queryset = Series.objects.select_related('imaging_study', 'record_type', 'modality').prefetch_related('records')
+    serializer_class = SeriesSerializer
+    permission_classes = [IsAuthenticated]
+
+
+class EndpointViewSet(viewsets.ModelViewSet):
+    """ViewSet for archive Endpoint definitions."""
+
+    queryset = Endpoint.objects.all()
+    serializer_class = EndpointSerializer
+    filterset_fields = ['status', 'connection_type']
+    search_fields = ['name', 'address']
+
+
+class ArchiveLocationViewSet(viewsets.ModelViewSet):
+    """ViewSet for archived storage locations of records."""
+
+    queryset = ArchiveLocation.objects.select_related('record', 'endpoint')
+    serializer_class = ArchiveLocationSerializer
+    filterset_fields = ['record', 'endpoint', 'status', 'endpoint__connection_type']
+    search_fields = ['assigned_id', 'record__id', 'endpoint__name', 'endpoint__address']
 
 
 class RecordViewSet(viewsets.ModelViewSet):
@@ -233,20 +273,25 @@ class RecordViewSet(viewsets.ModelViewSet):
     Manages the high-level record entries that link encounters to imaging studies.
     Supports file uploads via a specialized serializer.
     """
+    # Use series -> imaging_study -> encounter chain for related lookups
     queryset = Record.objects.select_related(
-        'encounter', 'encounter__subject'
+        'series__imaging_study__encounter',
+        'series__record_type',
+        'series__modality'
     ).prefetch_related(
-        'encounter__subject__identifiers'
+        'series__imaging_study__encounter__subject__identifiers',
+        'archive_locations__endpoint',
+        'identifiers'
     )
     serializer_class = RecordSerializer
     filterset_fields = [
-        'encounter__id',
-        'encounter__subject',
-        'encounter__subject__collection',
-        'encounter__subject__collection__short_name',
-        'encounter',
+        'series__imaging_study__encounter__id',
+        'series__imaging_study__encounter__subject',
+        'series__imaging_study__encounter__subject__collection',
+        'series__imaging_study__encounter__subject__collection__short_name',
+        'series',
     ]
-    search_fields = ['id', 'encounter__id', 'encounter__subject__id']
+    search_fields = ['id', 'series__imaging_study__encounter__id', 'series__imaging_study__encounter__subject__id']
 
     def get_serializer_class(self) -> Type[serializers.Serializer]:
         """Return the appropriate serializer class based on the action."""
@@ -268,15 +313,20 @@ class RecordViewSet(viewsets.ModelViewSet):
     def get_queryset(self) -> QuerySet:
         """Filter queryset based on nested routes."""
         qs = super().get_queryset()
-        # Filter by nested encounter if present
+        # Filter by nested encounter if present (via series -> imaging_study)
         encounter_pk = self.kwargs.get('encounter_pk')
         if encounter_pk:
-            qs = qs.filter(encounter__id=encounter_pk)
+            qs = qs.filter(series__imaging_study__encounter__id=encounter_pk)
 
         # Filter by nested subject if present
         subject_pk = self.kwargs.get('subject_pk')
         if subject_pk:
-            qs = qs.filter(encounter__subject__id=subject_pk)
+            qs = qs.filter(series__imaging_study__encounter__subject__id=subject_pk)
+
+        # Backward-compatible query param aliases
+        record_type = self.request.query_params.get('record_type')
+        if record_type:
+            qs = qs.filter(series__record_type__id=record_type)
 
         return qs
 
@@ -286,47 +336,14 @@ class RecordViewSet(viewsets.ModelViewSet):
         }
     )
     @action(detail=True, methods=['get'])
-    def image(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Response:
-        """Serve the raw image file associated with the record."""
-        # DRF action signature requires request/pk/kwargs.
+    def image(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Any:
+        """Serve the raw source file (passthrough, no modification)."""
         del request, pk, kwargs
         record = self.get_object()
-        if not record.imaging_study or not record.imaging_study.source_file:
+        if not getattr(record, 'source_file', None):
             return Response({"error": "No image file available"}, status=404)
-
-        source_file = record.imaging_study.source_file
-        ext = os.path.splitext(source_file.name)[1].lower()
-        transform_ops = record.image_transform_ops or []
-        if ext in {'.tif', '.tiff'}:
-            try:
-                source_file.open('rb')
-                png_bytes = _convert_tiff_to_png_bytes(source_file)
-                if transform_ops:
-                    with Image.open(io.BytesIO(png_bytes)) as img:
-                        transformed = _apply_transform_ops(img, transform_ops)
-                        out = io.BytesIO()
-                        transformed.save(out, format='PNG', optimize=True)
-                        png_bytes = out.getvalue()
-                return HttpResponse(png_bytes, content_type='image/png')
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                return Response({"error": f"Error converting TIFF: {e}"}, status=500)
-            finally:
-                source_file.close()
-
-        if transform_ops and ext != '.stl':
-            try:
-                source_file.open('rb')
-                with Image.open(source_file) as img:
-                    transformed = _apply_transform_ops(img, transform_ops)
-                    out = io.BytesIO()
-                    transformed.save(out, format='PNG', optimize=True)
-                    return HttpResponse(out.getvalue(), content_type='image/png')
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                return Response({"error": f"Error transforming image: {e}"}, status=500)
-            finally:
-                source_file.close()
-
-        return FileResponse(source_file)
+        source_file = record.source_file
+        return FileResponse(source_file.open('rb'))
 
     @extend_schema(
         responses={
@@ -334,69 +351,29 @@ class RecordViewSet(viewsets.ModelViewSet):
         }
     )
     @action(detail=True, methods=['get'])
-    def thumbnail(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Response:
-        """Generate and serve a thumbnail for the record's image."""
-        # DRF action signature requires request/pk/kwargs.
+    def thumbnail(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Any:
+        """Serve record thumbnail (persisted), or static fallback if missing."""
+        from django.contrib.staticfiles import finders
         del request, pk, kwargs
         record = self.get_object()
 
-        if not record.imaging_study or not record.imaging_study.source_file:
-            return Response({"error": "No image file available"}, status=404)
+        # Serve persisted thumbnail if available
+        if getattr(record, 'thumbnail', None):
+            try:
+                return FileResponse(record.thumbnail.open('rb'), content_type='image/jpeg')
+            except Exception:
+                pass
 
-        source_file = record.imaging_study.source_file
-        # Check if file exists
-        if not os.path.exists(source_file.path):
-            return Response({"error": "File not found on server"}, status=404)
-
-        ext = os.path.splitext(source_file.name)[1].lower()
-
-        if ext == '.stl':
-            # Return placeholder for STL
-            img = Image.new('RGB', (100, 100), color=(73, 109, 137))
-            buf = io.BytesIO()
-            img.save(buf, format='JPEG')
-            buf.seek(0)
-            return HttpResponse(buf, content_type='image/jpeg')
-
-        try:
-            if ext in {'.tif', '.tiff'}:
-                source_file.open('rb')
-                png_bytes = _convert_tiff_to_png_bytes(source_file)
-                source_file.close()
-                image_stream = io.BytesIO(png_bytes)
-            else:
-                image_stream = source_file
-
-            # Open image using a context manager
-            with Image.open(image_stream) as img:
-                # Use a separate variable for any processed version of the image
-                processed_img = img
-
-                if record.image_transform_ops:
-                    processed_img = _apply_transform_ops(processed_img, record.image_transform_ops)
-
-                # Convert to RGB if RGBA (PNG) or LA
-                if processed_img.mode in ('RGBA', 'LA'):
-                    background = Image.new(
-                        processed_img.mode[:-1], processed_img.size, (255, 255, 255))
-                    background.paste(processed_img, processed_img.split()[-1])
-                    processed_img = background
-
-                if processed_img.mode not in ('RGB', 'RGBA', 'LA', 'L'):
-                    processed_img = processed_img.convert('RGB')
-
-                processed_img.thumbnail((300, 300))
-
-                buf = io.BytesIO()
-                processed_img.save(buf, format='JPEG')
-                buf.seek(0)
-
-                return HttpResponse(buf, content_type='image/jpeg')
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            return Response({"error": f"Error generating thumbnail: {e}"}, status=500)
+        # Serve static fallback if no thumbnail available
+        fallback_path = finders.find('archive/img/no-thumbnail.jpg')
+        if fallback_path:
+            with open(fallback_path, 'rb') as f:
+                return HttpResponse(f.read(), content_type='image/jpeg')
+        # If fallback missing, return 404
+        return JsonResponse({"error": "No thumbnail or fallback available."}, status=404)
 
     @action(detail=True, methods=['get'])
-    def dicom(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Response:
+    def dicom(self, request: Request, pk: Optional[int] = None, **kwargs: Any) -> Any:
         """Serve the DICOM file (Not Implemented)."""
         # DRF action signature requires request/pk/kwargs.
         del request, pk, kwargs
@@ -478,72 +455,6 @@ def scan(request):
     )
 
 
-def _get_bits_per_sample(img: Image.Image) -> Optional[int]:
-    """Best-effort extraction of TIFF bits-per-sample."""
-    tag_v2 = getattr(img, "tag_v2", None)
-    if tag_v2 is None:
-        return None
-
-    bits = tag_v2.get(258)
-    if bits is None:
-        return None
-    if isinstance(bits, tuple):
-        return int(max(bits))
-    return int(bits)
-
-
-def _resize_image_for_preview(img: Image.Image, max_dim: int = 1024) -> Image.Image:
-    """Resize while preserving aspect ratio for display/AI preview."""
-    width, height = img.size
-    largest = max(width, height)
-    if largest <= max_dim:
-        return img
-
-    scale = max_dim / float(largest)
-    new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
-    resample = Image.Resampling.NEAREST if img.mode.startswith("I;16") else Image.Resampling.LANCZOS
-    return img.resize(new_size, resample)
-
-
-def _apply_transform_ops(img: Image.Image, ops: List[Dict[str, Any]]) -> Image.Image:
-    """Apply ordered rotate/flip operations stored on Record."""
-    transformed = img.copy()
-    for op in ops:
-        degrees = int(op.get('rotation', 0)) % 360
-        if degrees:
-            transformed = transformed.rotate(-degrees, expand=True)
-        if bool(op.get('flip', False)):
-            transformed = transformed.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-    return transformed
-
-
-def _convert_tiff_to_png_bytes(upload) -> bytes:
-    """Convert TIFF to PNG, preserving 16-bit grayscale when needed."""
-    with Image.open(upload) as img:
-        bits_per_sample = _get_bits_per_sample(img)
-        high_bit_gray = bits_per_sample in {12, 16} or img.mode in {"I;16", "I;16L", "I;16B"}
-
-        if high_bit_gray:
-            gray = img
-            if gray.mode == "I;16B":
-                gray = gray.convert("I")
-            elif gray.mode not in {"I;16", "I;16L", "I"}:
-                gray = gray.convert("I")
-
-            if bits_per_sample == 12:
-                if gray.mode != "I":
-                    gray = gray.convert("I")
-
-            png_image = gray.convert("I;16")
-            png_image = _resize_image_for_preview(png_image)
-        else:
-            png_image = _resize_image_for_preview(img.convert("RGB"))
-
-        buf = io.BytesIO()
-        png_image.save(buf, format="PNG", optimize=True)
-        return buf.getvalue()
-
-
 @login_required
 @require_POST
 def scan_tiff_preview(request):
@@ -560,7 +471,7 @@ def scan_tiff_preview(request):
         return JsonResponse({"error": "Only TIFF files are supported"}, status=400)
 
     try:
-        png_bytes = _convert_tiff_to_png_bytes(upload)
+        png_bytes = convert_tiff_to_png_bytes(upload)
         return HttpResponse(png_bytes, content_type="image/png")
     except Exception as exc:  # pylint: disable=broad-exception-caught
         return JsonResponse({"error": f"Failed to convert TIFF: {exc}"}, status=400)

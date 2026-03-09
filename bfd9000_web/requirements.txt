@@ -13,3 +13,5 @@ django-stubs>=4.2,<5.0
 djangorestframework-stubs>=3.14,<4.0
 python-dotenv>=1.2.1
 boxsdk>=10.4.0
+pydicom>=3.0,<4.0
+cryptography>=44.0,<45.0

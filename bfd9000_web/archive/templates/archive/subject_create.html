@@ -160,7 +160,7 @@
             }
 
             try {
-                const response = await fetch("/api/subjects/", {
+                const response = await fetch((window.script_name || '') + "/api/subjects/", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",

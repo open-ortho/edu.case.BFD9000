@@ -38,6 +38,13 @@ BOX_FOLDER_ID = os.environ.get('BOX_FOLDER_ID')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+APP_VERSION_FILE = BASE_DIR / 'VERSION'
+APP_VERSION = os.environ.get('APP_VERSION')
+if not APP_VERSION:
+    try:
+        APP_VERSION = APP_VERSION_FILE.read_text(encoding='utf-8').strip()
+    except OSError:
+        APP_VERSION = 'nover'
 
 if not DEBUG and 'SECRET_KEY' not in os.environ:
     raise RuntimeError('SECRET_KEY must be set when DEBUG=False')
@@ -93,6 +100,8 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "BFD9000.context_processors.app_version",
+                "BFD9000.context_processors.script_name_prefix",
             ],
         },
     },
@@ -107,7 +116,7 @@ WSGI_APPLICATION = "BFD9000.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": BASE_DIR / "db" / "db.sqlite3",
     }
 }
 
@@ -146,7 +155,18 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+# Subpath hosting config (DJANGO_FORCE_SCRIPT_NAME env)
+FORCE_SCRIPT_NAME = os.environ.get('DJANGO_FORCE_SCRIPT_NAME', None)
+if FORCE_SCRIPT_NAME == '' or FORCE_SCRIPT_NAME is None:
+    FORCE_SCRIPT_NAME = None
+
+# Prefix-aware STATIC_URL and MEDIA_URL
+def _prefix_url(path):
+    if FORCE_SCRIPT_NAME:
+        return f"{FORCE_SCRIPT_NAME.rstrip('/')}/{path.lstrip('/')}"
+    return f"/{path.lstrip('/')}"
+
+STATIC_URL = _prefix_url('static/')
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 STORAGES = {
@@ -159,7 +179,7 @@ STORAGES = {
 }
 
 # Media files (Uploads)
-MEDIA_URL = '/media/'
+MEDIA_URL = _prefix_url('media/')
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
@@ -195,14 +215,14 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     'TITLE': 'BFD9000 API',
     'DESCRIPTION': 'API for BFD9000 Medical Imaging System',
-    'VERSION': '1.0.0',
+    'VERSION': APP_VERSION,
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
     'SERVE_PERMISSIONS': ['rest_framework.permissions.IsAuthenticated'],
 }
 
 # Authentication
-LOGIN_REDIRECT_URL = '/'
+LOGIN_REDIRECT_URL = 'archive:index'  # Named route, prefix-safe
 LOGIN_URL = 'login'
 
 # CORS Configuration
@@ -210,6 +230,15 @@ CORS_ALLOWED_ORIGINS = os.environ.get(
     'CORS_ALLOWED_ORIGINS',
     "http://localhost:5173,http://127.0.0.1:5173"
 ).split(',')
+
+# CSRF trusted origins — required when Django is accessed from a different
+# origin or behind a reverse proxy. This is separate from CORS_ALLOWED_ORIGINS:
+# CORS_ALLOWED_ORIGINS controls cross-origin response headers (django-cors-headers),
+# while CSRF_TRUSTED_ORIGINS is checked by Django's own CsrfViewMiddleware on
+# every unsafe request (POST, PUT, PATCH, DELETE).
+# Must include scheme, e.g.: https://example.com
+_csrf_trusted = os.environ.get('CSRF_TRUSTED_ORIGINS', '').strip()
+CSRF_TRUSTED_ORIGINS: list[str] = [o.strip() for o in _csrf_trusted.split(',') if o.strip()]
 
 SCANNER_API_BASE = os.environ.get('SCANNER_API_BASE', 'http://localhost:5000')
 SCANNER_DEVICE_ID = os.environ.get('SCANNER_DEVICE_ID', 'scanner-001')
@@ -270,3 +299,14 @@ LOGGING = {
         },
     },
 }
+
+# Thumbnail generation policy (staging and UI previews)
+THUMBNAIL_MAX_WIDTH = int(os.environ.get('THUMBNAIL_MAX_WIDTH', '300'))
+THUMBNAIL_MAX_HEIGHT = int(os.environ.get('THUMBNAIL_MAX_HEIGHT', '300'))
+THUMBNAIL_TARGET_BYTES = int(os.environ.get(
+    'THUMBNAIL_TARGET_BYTES', str(20 * 1024)))
+THUMBNAIL_HARD_MAX_BYTES = int(os.environ.get(
+    'THUMBNAIL_HARD_MAX_BYTES', str(100 * 1024)))
+THUMBNAIL_DEFAULT_QUALITY = int(
+    os.environ.get('THUMBNAIL_DEFAULT_QUALITY', '75'))
+THUMBNAIL_MIN_QUALITY = int(os.environ.get('THUMBNAIL_MIN_QUALITY', '40'))

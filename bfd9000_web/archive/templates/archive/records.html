@@ -46,25 +46,12 @@
             </tbody>
         </table>
     </div>
-    <div class="bg-base-300 p-2 flex">
+    <div class="bg-base-300 p-2 flex items-center gap-3">
         <div class="grow"></div>
-        <div class="join">
-            <button
-                class="join-item btn rounded-l-full"
-                id="prev-button"
-                disabled
-            >
-                «
-            </button>
-            <button class="join-item btn" id="page-button">Page 1 / 0</button>
-            <button
-                class="join-item btn rounded-r-full"
-                id="next-button"
-                disabled
-            >
-                »
-            </button>
-        </div>
+        <span class="text-sm text-base-content/60">
+            <span id="record-count-badge"></span>
+            <span class="ml-1">records</span>
+        </span>
     </div>
 </div>
 {% endblock %} {% block head %} {{ block.super }}
@@ -108,13 +95,13 @@
             params.set("search", search);
         }
         if (subject) {
-            params.set("encounter__subject", subject);
+            params.set("series__imaging_study__encounter__subject", subject);
         }
         if (encounter) {
-            params.set("encounter", encounter);
+            params.set("series__imaging_study__encounter__id", encounter);
         }
 
-        const response = await fetch(`/api/records/?${params}`);
+        const response = await fetch((window.script_name || '') + `/api/records/?${params}`);
         if (!response.ok) {
             throw new Error(`API error: ${response.status}`);
         }
@@ -122,7 +109,7 @@
     }
 
     // ========================================
-    // TABLE SETUP USING PaginatedTableManager
+    // TABLE SETUP USING InfiniteScrollTableManager
     // ========================================
 
     function formatAge(record) {
@@ -155,9 +142,10 @@
         return ageText;
     }
 
-    const tableManager = new PaginatedTableManager({
+    const tableManager = new InfiniteScrollTableManager({
         tableBodyId: "record_table_body",
         columnCount: 6,
+        countBadgeId: "record-count-badge",
         fetchData: fetchRecords,
         renderRows: (records) => {
             return records.map((record) => {
@@ -170,7 +158,7 @@
                 recordBtn.textContent = record.id;
                 recordBtn.onclick = () => {
                     // Navigate to record detail page
-                    window.location.href = `/records/${record.id}/`;
+                    window.location.href = (window.script_name || '') + `/records/${record.id}/`;
                 };
                 recordId.appendChild(recordBtn);
 
@@ -180,7 +168,7 @@
                 encounterBtn.className = "btn btn-soft btn-xs";
                 encounterBtn.textContent = record.encounter_id || "-";
                 encounterBtn.onclick = () =>
-                    (window.location.href = `/encounters/?search=${record.encounter_id}`);
+                    (window.location.href = (window.script_name || '') + `/encounters/?search=${record.encounter_id}`);
                 encounter.appendChild(encounterBtn);
 
                 // Subject ID column with button
@@ -189,7 +177,7 @@
                 subjectBtn.className = "btn btn-soft btn-xs";
                 subjectBtn.textContent = record.subject_identifier || record.subject_id || "-";
                 subjectBtn.onclick = () =>
-                    (window.location.href = `/encounters/?subject=${record.subject_id}`);
+                    (window.location.href = (window.script_name || '') + `/encounters/?subject=${record.subject_id}`);
                 subject.appendChild(subjectBtn);
 
                 // Age column (years/months with uncertainty when applicable)
@@ -202,7 +190,7 @@
 
                 // Image type column (plain text)
                 const imageType = document.createElement("td");
-                imageType.textContent = record.image_type || "-";
+                imageType.textContent = record.image_type?.display || "-";
 
                 row.replaceChildren(
                     recordId,

@@ -5,7 +5,7 @@
     <!-- Header -->
     <div class="mb-4">
         <div class="flex items-center gap-2 mb-2">
-            <a href="/records/" class="btn btn-sm btn-ghost">
+            <a href="{% url 'archive:records' %}" class="btn btn-sm btn-ghost">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                 </svg>
@@ -22,10 +22,11 @@
         <!-- Left: Image -->
         <div class="card bg-base-200 shadow">
             <div class="card-body">
-                <h2 class="card-title text-lg">Image</h2>
+                <h2 class="card-title text-lg">Thumbnail</h2>
                 <div class="flex items-center justify-center bg-base-300 rounded">
-                    <img id="record-image" src="" alt="Record image" class="max-w-full max-h-[600px] object-contain rounded" />
+                    <img id="record-image" src="" alt="Record thumbnail" class="max-w-full max-h-[600px] object-contain rounded" />
                 </div>
+                <button id="download-original-btn" class="btn btn-primary btn-sm mt-2">Download Original</button>
             </div>
         </div>
 
@@ -45,10 +46,6 @@
                                 <tr>
                                     <th>Encounter ID</th>
                                     <td id="encounter-id">-</td>
-                                </tr>
-                                <tr>
-                                    <th>Encounter Date</th>
-                                    <td id="encounter-date">-</td>
                                 </tr>
                                 <tr>
                                     <th>Age at Encounter</th>
@@ -81,32 +78,57 @@
                 </div>
             </div>
 
-            <!-- Imaging Study Details -->
             <div class="card bg-base-200 shadow">
                 <div class="card-body">
-                    <h2 class="card-title text-lg">Imaging Study</h2>
+                    <h2 class="card-title text-lg">Archived Locations</h2>
+                    <div class="overflow-x-auto">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Endpoint</th>
+                                    <th>Type</th>
+                                    <th>Address</th>
+                                    <th>Assigned ID</th>
+                                    <th>Status</th>
+                                    <th>Archived At</th>
+                                </tr>
+                            </thead>
+                            <tbody id="archive-locations-body">
+                                <tr>
+                                    <td colspan="6" class="text-base-content/60">No archived locations</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Series & Acquisition Details -->
+            <div class="card bg-base-200 shadow">
+                <div class="card-body">
+                    <h2 class="card-title text-lg">Series & Acquisition</h2>
                     <div class="overflow-x-auto">
                         <table class="table table-sm">
                             <tbody>
-                                <tr>
-                                    <th>Orientation</th>
-                                    <td id="orientation">-</td>
-                                </tr>
                                 <tr>
                                     <th>Modality</th>
                                     <td id="modality">-</td>
                                 </tr>
                                 <tr>
-                                    <th>Scan Date</th>
-                                    <td id="scan-date">-</td>
+                                    <th>Image Type</th>
+                                    <td id="image-type">-</td>
                                 </tr>
                                 <tr>
-                                    <th>Operator</th>
-                                    <td id="operator">-</td>
+                                    <th>Patient Orientation</th>
+                                    <td id="patient-orientation">-</td>
                                 </tr>
                                 <tr>
-                                    <th>Collection</th>
-                                    <td id="collection">-</td>
+                                    <th>Acquisition</th>
+                                    <td id="acquisition-datetime">-</td>
+                                </tr>
+                                <tr>
+                                    <th>Scan Operator</th>
+                                    <td id="scan-operator">-</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -125,7 +147,7 @@
 
     async function loadRecord() {
         try {
-            const response = await fetch(`/api/records/${recordId}/`);
+            const response = await fetch((window.script_name || '') + `/api/records/${recordId}/`);
             if (!response.ok) {
                 throw new Error(`Failed to load record: ${response.status}`);
             }
@@ -144,36 +166,83 @@
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('content').classList.remove('hidden');
 
-        // Set image
-        document.getElementById('record-image').src = `/api/records/${recordId}/image/`;
+        // Use thumbnail endpoint for all GUI image display
+        document.getElementById('record-image').src = (window.script_name || '') + `/api/records/${recordId}/thumbnail/`;
 
         // Subject & Encounter
         document.getElementById('subject-id').textContent = record.subject_identifier || record.subject_id || '-';
         document.getElementById('encounter-id').textContent = record.encounter_id || '-';
-        document.getElementById('encounter-date').textContent = record.encounter_date || '-';
         document.getElementById('age-at-encounter').textContent = formatAge(record);
 
         // Record Details
-        document.getElementById('record-type').textContent = record.record_type?.display || '-';
+        document.getElementById('record-type').textContent = record.series_record_type?.display || '-';
         document.getElementById('created-at').textContent = record.created_at 
             ? new Date(record.created_at).toLocaleString()
             : '-';
 
-        // Imaging Study (if available)
-        if (record.imaging_study) {
-            fetch(`/api/imaging-studies/${record.imaging_study}/`)
-                .then(res => res.json())
-                .then(study => {
-                    document.getElementById('orientation').textContent = study.view?.display || '-';
-                    document.getElementById('modality').textContent = study.series_modality?.display || '-';
-                    document.getElementById('scan-date').textContent = study.scan_datetime 
-                        ? new Date(study.scan_datetime).toLocaleString()
-                        : '-';
-                    document.getElementById('operator').textContent = study.scan_operator_display || study.scan_operator_username || '-';
-                    document.getElementById('collection').textContent = study.collection || '-';
-                })
-                .catch(err => console.error('Error loading imaging study:', err));
+        // Series & acquisition details come from record payload
+        document.getElementById('modality').textContent = record.series_modality?.display || '-';
+        document.getElementById('image-type').textContent = record.image_type?.display || '-';
+        document.getElementById('patient-orientation').textContent = Array.isArray(record.patient_orientation)
+            ? record.patient_orientation.join('\\')
+            : '-';
+        document.getElementById('acquisition-datetime').textContent = record.acquisition_datetime
+            ? new Date(record.acquisition_datetime).toLocaleString()
+            : '-';
+        document.getElementById('scan-operator').textContent = record.scan_operator || '-';
+        renderArchiveLocations(record.archive_locations || []);
+        setupDownloadButton(record);
+    }
+
+    function renderArchiveLocations(locations) {
+        const body = document.getElementById('archive-locations-body');
+        body.replaceChildren();
+
+        if (!Array.isArray(locations) || locations.length === 0) {
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = 6;
+            cell.className = 'text-base-content/60';
+            cell.textContent = 'No archived locations';
+            row.appendChild(cell);
+            body.appendChild(row);
+            return;
         }
+
+        locations.forEach((location) => {
+            const row = document.createElement('tr');
+            const endpoint = location.endpoint || {};
+
+            const endpointName = document.createElement('td');
+            endpointName.textContent = endpoint.name || '-';
+
+            const endpointType = document.createElement('td');
+            endpointType.textContent = endpoint.connection_type || '-';
+
+            const endpointAddress = document.createElement('td');
+            endpointAddress.textContent = endpoint.address || '-';
+
+            const assignedId = document.createElement('td');
+            assignedId.textContent = location.assigned_id || '-';
+
+            const status = document.createElement('td');
+            status.textContent = location.status || '-';
+
+            const archivedAt = document.createElement('td');
+            archivedAt.textContent = location.archived_at
+                ? new Date(location.archived_at).toLocaleString()
+                : '-';
+
+            row.replaceChildren(
+                endpointName,
+                endpointType,
+                endpointAddress,
+                assignedId,
+                status,
+                archivedAt,
+            );
+            body.appendChild(row);
+        });
     }
 
     function formatAge(record) {
@@ -204,6 +273,101 @@
         }
 
         return ageText;
+    }
+
+    function setupDownloadButton(record) {
+        const btn = document.getElementById('download-original-btn');
+        if (!btn) return;
+
+        const subjectId = record.subject_identifier || record.subject_id || "";
+        const imageType = record.image_type ? record.image_type.code : "";
+        const ageFloat = record.age_at_encounter !== undefined ? parseFloat(record.age_at_encounter) : null;
+
+        // Get extension from image_url
+        function getExtension(url) {
+            if (!url) return "bin";
+            const m = url.match(/\.(\w+)$/);
+            if (m) return m[1];
+            return "bin";
+        }
+
+        const ext = getExtension(record.image_url);
+
+        // Age parsing
+        function parseAge(age) {
+            if (!Number.isFinite(age)) return { years: "00", months: "00" };
+            let years = Math.floor(age);
+            let months = Math.floor((age - years) * 12 + 0.001);
+            return {
+                years: String(years).padStart(2, '0'),
+                months: String(months).padStart(2, '0')
+            };
+        }
+
+        // Map gender
+        function mapGender(g) {
+            switch ((g||"").toLowerCase()) {
+                case "male":    return "M";
+                case "female":  return "F";
+                case "other":   return "O";
+                case "unknown": return "U";
+                default:        return "U";
+            }
+        }
+
+        // Compose filename
+        function makeFilename({subject, imgType, gender, age}) {
+            const parts = [
+                subject || "",
+                imgType || "",
+                gender || "",
+                age.years + "y" + age.months + "m"
+            ].filter(x => x.length).join("");
+            const dotExt = ext ? ("." + ext) : "";
+            return (parts || "record") + dotExt;
+        }
+
+        btn.addEventListener('click', async function () {
+            // Fetch subject gender
+            let gender = "U";
+            try {
+                const resp = await fetch((window.script_name || '') + `/api/subjects/${record.subject_id}/`);
+                if (resp.ok) {
+                    const subj = await resp.json();
+                    gender = mapGender(subj.gender);
+                }
+            } catch (e) {
+                // Keep gender = "U"
+            }
+
+            // Generate filename
+            const age = parseAge(ageFloat);
+            const filename = makeFilename({
+                subject: subjectId,
+                imgType: imageType,
+                gender: gender,
+                age: age
+            });
+
+            // Download
+            const url = (window.script_name || '') + `/api/records/${recordId}/image/`;
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('Download failed');
+                const blob = await res.blob();
+                const link = document.createElement('a');
+                link.href = window.URL.createObjectURL(blob);
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                setTimeout(() => {
+                    window.URL.revokeObjectURL(link.href);
+                    link.remove();
+                }, 100);
+            } catch (err) {
+                alert("Failed to download file: " + err.message);
+            }
+        });
     }
 
     document.addEventListener('DOMContentLoaded', loadRecord);

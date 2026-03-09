@@ -6,24 +6,32 @@ to and from native Python datatypes that can then be easily rendered into JSON, 
 It includes specialized logic for file uploads and validation.
 """
 import datetime
+import logging
+import os
 import importlib
 import json
 from typing import Any, Dict, Optional, cast
+from django.core.files.base import ContentFile
 try:
     magic = importlib.import_module('magic')
 except ImportError:
     magic = None
 from django.db import transaction
 from rest_framework import serializers
+
+logger = logging.getLogger(__name__)
 from .models import (
     Coding,
     Identifier,
     Address,
+    ArchiveLocation,
     Collection,
     Subject,
     Encounter,
+    Endpoint,
     Location,
     ImagingStudy,
+    Series,
     Record,
 )
 from .constants import (
@@ -33,6 +41,7 @@ from .constants import (
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
     SYSTEM_IDENTIFIER_IMAGE_TYPE,
 )
+from .media_utils import generate_thumbnail_jpeg_bytes
 
 
 RECORD_TYPE_CODES = (
@@ -110,6 +119,17 @@ class CollectionSerializer(serializers.ModelSerializer):
     class Meta:
         """Serializer metadata."""
         model = Collection
+        fields = '__all__'
+
+
+class SeriesSerializer(serializers.ModelSerializer):
+    """Serializer for Series model."""
+    record_type = CodingSerializer(read_only=True)
+    modality = CodingSerializer(read_only=True)
+    acquisition_location = LocationSerializer(read_only=True)
+
+    class Meta:
+        model = Series
         fields = '__all__'
 
 class SubjectSerializer(serializers.ModelSerializer):
@@ -220,12 +240,8 @@ class EncounterSerializer(serializers.ModelSerializer):
 class ImagingStudySerializer(serializers.ModelSerializer):
     """Serializer for ImagingStudy model."""
     identifiers = IdentifierSerializer(many=True, read_only=True)
-    record_type = CodingSerializer(read_only=True)
-    view = CodingSerializer(read_only=True)
-    body_site = CodingSerializer(read_only=True)
-    laterality = CodingSerializer(read_only=True)
-    series_modality = CodingSerializer(read_only=True)
-    scan_location = LocationSerializer(read_only=True)
+    # Expose nested series under this study for read-only listing
+    series = serializers.SerializerMethodField()
     scan_operator_username = serializers.SerializerMethodField()
     scan_operator_display = serializers.SerializerMethodField()
 
@@ -234,42 +250,84 @@ class ImagingStudySerializer(serializers.ModelSerializer):
         model = ImagingStudy
         fields = '__all__'
 
+    def get_series(self, obj: ImagingStudy):
+        # Return list of series summaries
+        qs = obj.series.all().select_related('record_type', 'modality')
+        from .serializers import SeriesSerializer  # local import to avoid cycle
+        return SeriesSerializer(qs, many=True, context=self.context).data
+
+    def _latest_operator(self, obj: ImagingStudy):
+        record = (
+            Record.objects
+            .filter(series__imaging_study=obj, scan_operator__isnull=False)
+            .select_related('scan_operator')
+            .order_by('-created_at')
+            .first()
+        )
+        return getattr(record, 'scan_operator', None)
+
     def get_scan_operator_username(self, obj: ImagingStudy) -> Optional[str]:
-        operator = getattr(obj, 'scan_operator', None)
-        if not operator:
-            return None
-        return operator.username
+        operator = self._latest_operator(obj)
+        return getattr(operator, 'username', None)
 
     def get_scan_operator_display(self, obj: ImagingStudy) -> Optional[str]:
-        operator = getattr(obj, 'scan_operator', None)
+        operator = self._latest_operator(obj)
         if not operator:
             return None
-
         full_name = operator.get_full_name().strip()
         if full_name:
             return f"{full_name} ({operator.username})"
         return operator.username
 
+
+class EndpointSerializer(serializers.ModelSerializer):
+    """Serializer for Endpoint model."""
+
+    class Meta:
+        model = Endpoint
+        fields = ('id', 'name', 'status', 'connection_type', 'address', 'config')
+
+
+class ArchiveLocationSerializer(serializers.ModelSerializer):
+    """Serializer for ArchiveLocation model."""
+
+    endpoint = EndpointSerializer(read_only=True)
+    endpoint_id = serializers.IntegerField(source='endpoint.id', read_only=True)
+
+    class Meta:
+        model = ArchiveLocation
+        fields = '__all__'
+
 class RecordSerializer(serializers.ModelSerializer):
     """Serializer for Record model."""
     identifiers = IdentifierSerializer(many=True, read_only=True)
-    record_type = CodingSerializer(read_only=True)
+    # Expose series and related summary fields
+    series_id = serializers.IntegerField(source='series.id', read_only=True)
+    record_type = CodingSerializer(source='series.record_type', read_only=True)
+    series_record_type = CodingSerializer(source='series.record_type', read_only=True)
+    series_modality = CodingSerializer(source='series.modality', read_only=True)
     physical_location = AddressSerializer(read_only=True)
 
     # Add nested encounter and subject data
-    encounter_id = serializers.IntegerField(source='encounter.id', read_only=True)
-    subject_id = serializers.IntegerField(source='encounter.subject.id', read_only=True)
+    encounter_id = serializers.IntegerField(source='series.imaging_study.encounter.id', read_only=True)
+    encounter = serializers.IntegerField(source='series.imaging_study.encounter.id', read_only=True)
+    imaging_study = serializers.IntegerField(source='series.imaging_study.id', read_only=True)
+    subject_id = serializers.IntegerField(source='series.imaging_study.encounter.subject.id', read_only=True)
     subject_identifier = serializers.SerializerMethodField()
-    encounter_date = serializers.DateField(source='encounter.actual_period_start', read_only=True)
-    actual_period_start_precision = serializers.CharField(source='encounter.actual_period_start_precision', read_only=True)
-    actual_period_start_uncertain = serializers.BooleanField(source='encounter.actual_period_start_uncertain', read_only=True)
+    encounter_date = serializers.DateField(source='series.imaging_study.encounter.actual_period_start', read_only=True)
+    actual_period_start_precision = serializers.CharField(source='series.imaging_study.encounter.actual_period_start_precision', read_only=True)
+    actual_period_start_uncertain = serializers.BooleanField(source='series.imaging_study.encounter.actual_period_start_uncertain', read_only=True)
     age_at_encounter = serializers.SerializerMethodField()
     patient_orientation = serializers.SerializerMethodField()
 
     # Add imaging study fields for display
+    acquisition_datetime = serializers.DateTimeField(read_only=True)
     acquisition_date = serializers.SerializerMethodField()
     file_size = serializers.SerializerMethodField()
     image_type = CodingSerializer(read_only=True)
+    thumbnail_url = serializers.SerializerMethodField()
+    image_url = serializers.SerializerMethodField()
+    archive_locations = ArchiveLocationSerializer(many=True, read_only=True)
 
     class Meta:
         """Serializer metadata."""
@@ -278,7 +336,7 @@ class RecordSerializer(serializers.ModelSerializer):
 
     def get_age_at_encounter(self, obj):
         """Get age at encounter in years."""
-        encounter = getattr(obj, 'encounter', None)
+        encounter = getattr(obj.series.imaging_study, 'encounter', None)
         subject = getattr(encounter, 'subject', None)
         birth_date = getattr(subject, 'birth_date', None)
 
@@ -292,26 +350,45 @@ class RecordSerializer(serializers.ModelSerializer):
 
     def get_subject_identifier(self, obj: Record) -> Optional[str]:
         """Return the preferred identifier for the record's subject."""
-        encounter = getattr(obj, 'encounter', None)
+        encounter = getattr(obj.series.imaging_study, 'encounter', None)
         subject = getattr(encounter, 'subject', None)
         if not subject:
             return None
         return _get_preferred_identifier(subject.identifiers.all())
 
     def get_acquisition_date(self, obj):
-        """Get acquisition date from imaging study."""
-        if obj.imaging_study and obj.imaging_study.scan_datetime:
-            return obj.imaging_study.scan_datetime.date()
-        return None
+        # acquisition datetime now stored on Record itself
+        acquisition_datetime = getattr(obj, 'acquisition_datetime', None)
+        if not acquisition_datetime:
+            return None
+        return acquisition_datetime.date()
 
     def get_file_size(self, obj: Record) -> Optional[int]:
-        study = getattr(obj, 'imaging_study', None)
-        if study and getattr(study, 'source_file', None):
-            return study.source_file.size
+        if getattr(obj, 'source_file', None):
+            try:
+                return obj.source_file.size
+            except Exception:
+                return None
         return None
 
     def get_patient_orientation(self, obj: Record) -> list[str]:
         return _decode_patient_orientation(str(getattr(obj, 'patient_orientation', '') or ''))
+
+    def get_thumbnail_url(self, obj: Record) -> Optional[str]:
+        if getattr(obj, 'thumbnail', None):
+            try:
+                return obj.thumbnail.url
+            except Exception:
+                return None
+        return None
+
+    def get_image_url(self, obj: Record) -> Optional[str]:
+        if getattr(obj, 'source_file', None):
+            try:
+                return obj.source_file.url
+            except Exception:
+                return None
+        return None
 
 class RecordUploadSerializer(serializers.ModelSerializer):
     """
@@ -321,16 +398,12 @@ class RecordUploadSerializer(serializers.ModelSerializer):
     ImagingStudy and Record objects within a transaction.
     """
     file = serializers.FileField(write_only=True)
+    thumbnail_preview = serializers.FileField(required=False, write_only=True)
 
     # Use SlugRelatedField for idiomatic lookup by 'code'
     record_type = serializers.SlugRelatedField(
         slug_field='code',
         queryset=Coding.objects.filter(system=SYSTEM_RECORD_TYPE, code__in=RECORD_TYPE_CODES),
-        write_only=True
-    )
-    orientation = serializers.SlugRelatedField(
-        slug_field='code',
-        queryset=Coding.objects.filter(system=SYSTEM_ORIENTATION),
         write_only=True
     )
     modality = serializers.SlugRelatedField(
@@ -369,8 +442,8 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'file',
+            'thumbnail_preview',
             'record_type',
-            'orientation',
             'modality',
             'acquisition_date',
             'encounter',
@@ -466,13 +539,13 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         Wraps creation in a transaction to ensure data integrity.
         """
         file_obj = validated_data.pop('file')
+        thumbnail_preview = validated_data.pop('thumbnail_preview', None)
 
         # These are now Coding objects, not strings!
         rt_coding = validated_data.pop('record_type')
-        view_coding = validated_data.pop('orientation')  # Maps to 'view'
-        mod_coding = validated_data.pop('modality')  # Maps to 'series_modality'
+        mod_coding = validated_data.pop('modality')
 
-        acquisition_date = validated_data.pop('acquisition_date', datetime.date.today())
+        acquisition_date = validated_data.pop('acquisition_date', None)
         image_type = validated_data.pop('image_type', None)
         patient_orientation = validated_data.pop('patient_orientation', None)
         transform_ops = validated_data.pop('image_transform_ops', [])
@@ -488,10 +561,10 @@ class RecordUploadSerializer(serializers.ModelSerializer):
         # Try to get user from request
         request = self.context.get('request')
         scan_operator = None
-        if request and request.user.is_authenticated:
+        if request and getattr(request, 'user', None) and request.user.is_authenticated:
             scan_operator = request.user
 
-        if patient_orientation is None and image_type and image_type.code == LATERAL_IMAGE_TYPE_CODE:
+        if patient_orientation is None and image_type and getattr(image_type, 'code', None) == LATERAL_IMAGE_TYPE_CODE:
             patient_orientation = ['A', 'F']
 
         with transaction.atomic():
@@ -502,28 +575,68 @@ class RecordUploadSerializer(serializers.ModelSerializer):
                     "collection": f"Subject {subject.id} must be assigned to a collection before uploading records."
                 })
 
-            study = ImagingStudy.objects.create(
+            # Get or create ImagingStudy for this encounter
+            study, _ = ImagingStudy.objects.get_or_create(
                 encounter=encounter,
-                collection=collection,
+                defaults={'collection': collection}
+            )
+            # If the subject was moved to a different collection after the study was created,
+            # keep ImagingStudy.collection in sync to avoid collection-scoped query divergence.
+            if study.collection != collection:
+                study.collection = collection
+                study.save(update_fields=['collection'])
+
+            # Get or create Series within the study
+            series, _ = Series.objects.get_or_create(
+                imaging_study=study,
                 record_type=rt_coding,
-                view=view_coding,
-                series_modality=mod_coding,
-                scan_datetime=datetime.datetime.combine(
-                    acquisition_date,
-                    datetime.time.min,
-                    tzinfo=datetime.timezone.utc,
-                ),
-                source_file=file_obj,
-                scan_operator=scan_operator
+                modality=mod_coding,
             )
 
+            # Create record instance first (without file fields)
             record = Record.objects.create(
-                encounter=encounter,
-                record_type=rt_coding,
-                imaging_study=study,
+                series=series,
+                acquisition_datetime=(datetime.datetime.combine(acquisition_date, datetime.time.min, tzinfo=datetime.timezone.utc) if acquisition_date else None),
+                scan_operator=scan_operator,
                 image_type=image_type,
                 patient_orientation=_encode_patient_orientation(patient_orientation),
                 image_transform_ops=transform_ops,
             )
+
+            # Save uploaded file to source_file
+            # Use a stable filename
+            ext = os.path.splitext(file_obj.name)[1].lower()
+            filename = f"{record.id}{ext}"
+            record.source_file.save(filename, file_obj, save=False)
+
+            # Generate thumbnail (JPEG) using unified utility (raster only)
+            try:
+                thumb_bytes = None
+                if thumbnail_preview is not None:
+                    thumb_bytes = generate_thumbnail_jpeg_bytes(
+                        thumbnail_preview,
+                        thumbnail_preview.name,
+                        transform_ops=None,
+                    )
+                else:
+                    file_stream = record.source_file.open('rb')
+                    try:
+                        thumb_bytes = generate_thumbnail_jpeg_bytes(
+                            file_stream,
+                            record.source_file.name,
+                            transform_ops=transform_ops,
+                        )
+                    finally:
+                        file_stream.close()
+
+                if thumb_bytes:
+                    thumb_content = ContentFile(thumb_bytes)
+                    thumb_name = f"{record.id}.jpg"
+                    record.thumbnail.save(thumb_name, thumb_content, save=False)
+            except Exception:
+                # On failure, skip thumbnail generation but log so failures are observable
+                logger.warning("Thumbnail generation failed for record %s", record.pk, exc_info=True)
+
+            record.save()
 
             return record

@@ -46,7 +46,7 @@ Alternatively just install django with python.
     python bfd9000_web/manage.py runserver
     ```
 
-4. Open your web browser and go to `http://127.0.0.1:8000` to view the application.
+4. Open your web browser and go to `http://127.0.0.1:9000` to view the application.
 
 ## Running Tests
 
@@ -81,12 +81,16 @@ docker build -f bfd9000_web/Dockerfile bfd9000_web -t bfd9000-web:test
 Run the container directly:
 
 ```bash
-docker run --rm -p 8000:8000 bfd9000-web:test
+docker run --rm -p 9000:9000 bfd9000-web:test
 ```
 
 Or use the provided compose file:
 
 ```bash
+# Copy the example env file and edit as needed
+cp bfd9000_web/dot-env.example bfd9000_web/.env
+
+docker compose -f bfd9000_web/docker-compose.yml up
 ```
 
 ## Import Historical Subjects
