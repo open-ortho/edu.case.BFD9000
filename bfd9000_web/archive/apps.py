@@ -17,14 +17,19 @@ class ArchiveConfig(AppConfig):
 
     def ready(self):
         """Initialize the archive app and start background tasks."""
-        # Only start during runserver, not during migrations, tests, etc.
         # Guard against running twice in development (autoreloader issue)
-        if 'runserver' in sys.argv and not self._is_reloader_process():
+        if 'runserver' in sys.argv:
+            if not self._is_reloader_process():
+                self._start_background_task()
+        # are we in production (gunicorn)?
+        elif sys.argv[0] == 'gunicorn':
             self._start_background_task()
+        else:
+            logger.info("Background tasks not started: conditions have not been met (runserver, gunicorn)")
 
     def _is_reloader_process(self):
         """Check if this is the reloader process (development only)."""
-        return 'runserver' in sys.argv and os.environ.get('RUN_MAIN') != 'true'
+        return os.environ.get('RUN_MAIN') != 'true'
 
     def _start_background_task(self):
         """Start the background media upload thread."""

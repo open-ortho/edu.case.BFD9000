@@ -3,7 +3,6 @@
 import logging
 import time
 from pathlib import Path
-from typing import Literal
 
 from box_sdk_gen import BoxAPIError, BoxClient, BoxJWTAuth, CreateFolderParent, FileBaseTypeField, FolderBaseTypeField, JWTConfig, WebLinkBaseTypeField
 from box_sdk_gen.box.developer_token_auth import BoxDeveloperTokenAuth
@@ -16,7 +15,6 @@ from django.conf import settings
 from dataclasses import dataclass
 
 from BFD9000.settings import (
-    BOX_ACCESS_TOKEN,
     BOX_DEVELOPER_TOKEN,
     BOX_FOLDER_ID,
     BOX_JWT_CONFIG_FILE,
@@ -38,16 +36,23 @@ _item_cache: dict[tuple[str, str], ItemData | None] = {}
 def _get_box_client() -> BoxClient:
     """Get an authenticated Box client."""
     if BOX_JWT_CONFIG_FILE:
-        jwt_config = JWTConfig.from_config_file(config_file_path="boxjwt.json")
+        jwt_config = JWTConfig.from_config_file(config_file_path=BOX_JWT_CONFIG_FILE)
         auth = BoxJWTAuth(config=jwt_config)  # pyright: ignore[reportArgumentType]
     elif BOX_DEVELOPER_TOKEN:
         auth = BoxDeveloperTokenAuth(token=BOX_DEVELOPER_TOKEN)
+
+    if auth is None:
+        raise RuntimeError(
+            "Box authentication is not configured. Set BOX_DEVELOPER_TOKEN or "
+            "BOX_JWT_CONFIG_FILE to enable Box client authentication."
+        )
+
     return BoxClient(auth=auth)
 
 
 def media_upload_worker():
-    if not BOX_ACCESS_TOKEN:
-        logger.error("worker cannot start: envar BOX_ACCESS_TOKEN is not set")
+    if not BOX_DEVELOPER_TOKEN and not BOX_JWT_CONFIG_FILE:
+        logger.error("worker cannot start: neither envar BOX_DEVELOPER_TOKEN nor BOX_JWT_CONFIG_FILE is set")
         return
     if not BOX_FOLDER_ID:
         logger.error("worker cannot start: envar BOX_FOLDER_ID is not set")
@@ -91,7 +96,7 @@ def handle_media_file(file_path: Path) -> bool:
         logger.debug(f"Handling media file: {file_path}")
         # Attempt to upload the file
         if upload_file(file_path):
-            # Delete the file after successful upload TODO: delete it
+            # Delete the file after successful upload
             file_path.unlink()
             logger.debug(f"Deleted local file: {file_path}")
 
@@ -145,7 +150,7 @@ def upload_file(file_path: Path) -> bool:
             except BoxAPIError as e:
                 if e.response_info.status_code == 409:
                     logger.debug(f"File already exists! deleting {file_name}...")
-                    file_id = e.response_info.context_info['conflicts']['id']  # pyright: ignore[reportTypedDictNotRequiredAccess]
+                    file_id = e.response_info.context_info['conflicts']['id']  # pyright: ignore[reportOptionalSubscript]
                     client.files.delete_file_by_id(file_id)
 
                     # Invalidate cache for this file
@@ -156,6 +161,8 @@ def upload_file(file_path: Path) -> bool:
                 else:
                     logger.error(f"Preflight check failed: {e}")
                     return False
+        if upload_url is None:
+            raise RuntimeError("Internal Error: expected upload_url to be set, multiple 409 responses should be impossible")
 
         # Upload the file
         with open(file_path, 'rb') as file_stream:
@@ -246,7 +253,7 @@ def _get_or_create_folder(client: BoxClient, parent_folder_id: str, folder_name:
 
             # Update cache with newly created folder
             cache_key = (parent_folder_id, folder_name)
-            _item_cache[cache_key] = (subfolder.id, 'folder')  # pyright: ignore[reportArgumentType]
+            _item_cache[cache_key] = ItemData(id=subfolder.id, type=FolderBaseTypeField.FOLDER)
 
             return subfolder.id
         elif item.type == 'folder':
