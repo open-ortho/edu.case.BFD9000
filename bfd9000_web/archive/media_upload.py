@@ -15,7 +15,7 @@ from box_sdk_gen.managers.uploads import (
 from django.conf import settings
 from dataclasses import dataclass
 
-from archive.models import Record
+from archive.models import DigitalRecord
 
 from BFD9000.settings import (
     BOX_DEVELOPER_TOKEN,
@@ -106,7 +106,7 @@ def handle_media_file(file_path: Path) -> bool:
         if box_file_id:
             # update the link in the database
             relative_path = file_path.relative_to(settings.MEDIA_ROOT)
-            qs = Record.objects.filter(source_file=str(relative_path))
+            qs = DigitalRecord.objects.filter(source_file=str(relative_path))
             count = qs.count()
             if count != 1:
                 logger.error(f"Expected 1 record for {relative_path}, found {count}; skipping DB update")

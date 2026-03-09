@@ -13,11 +13,17 @@ Alternatively just install django with python.
 
 ## Running the Django Application
 
-1. Make sure to apply any database migrations:
+1. Make sure to apply any database migrations and import data into the database:
 
    ```bash
    cd bfd9000_web
    python manage.py migrate
+   
+   # import data into database
+   cd docs/collections_data
+   python ../../manage.py import_subjects bolton
+   python ../../manage.py import_valuesets
+   cd ../../
    ```
 
 2. ONLY IF YOU ARE DEVELOPING THE FRONTEND, install DaisyUI and run tailwindcss in a seperate terminal window.
@@ -41,9 +47,8 @@ Alternatively just install django with python.
 
     ```bash
     # add yourself as a user
-    python bfd9000_web/manage.py createsuperuser
-    
-    python bfd9000_web/manage.py runserver
+    python manage.py createsuperuser
+    python manage.py runserver
     ```
 
 4. Open your web browser and go to `http://127.0.0.1:9000` to view the application.
