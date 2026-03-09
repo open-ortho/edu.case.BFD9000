@@ -3,6 +3,7 @@
 import logging
 import time
 from pathlib import Path
+from typing import List
 
 from box_sdk_gen import BoxAPIError, BoxClient, BoxJWTAuth, CreateFolderParent, FileBaseTypeField, FolderBaseTypeField, JWTConfig, WebLinkBaseTypeField
 from box_sdk_gen.box.developer_token_auth import BoxDeveloperTokenAuth
@@ -79,14 +80,19 @@ def process_media_files() -> int:
 
     # Find all image files in media directory
     image_extensions = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"}
-    files_processed = 0
+    files_processed: List[Path] = []
 
     for file_path in media_root.rglob("*"):
-        if file_path.is_file() and file_path.suffix.lower() in image_extensions:
+        if file_path.exists() and file_path.is_file() and file_path.suffix.lower() in image_extensions:
             if handle_media_file(file_path):
-                files_processed += 1
+                files_processed.append(file_path)
 
-    return files_processed
+    for path in files_processed:
+        path.unlink()
+        logger.debug(f"Deleted local file: {path}")
+        prune_empty_directory(path.parent)
+
+    return len(files_processed)
 
 
 def handle_media_file(file_path: Path) -> bool:
@@ -94,16 +100,7 @@ def handle_media_file(file_path: Path) -> bool:
     try:
         logger.debug(f"Handling media file: {file_path}")
         # Attempt to upload the file
-        if upload_file(file_path):
-            # Delete the file after successful upload
-            file_path.unlink()
-            logger.debug(f"Deleted local file: {file_path}")
-
-            # Prune parent directory if empty
-            prune_empty_directory(file_path.parent)
-            return True
-        else:
-            return False
+        return upload_file(file_path)
     except Exception as e:
         logger.error(f"Error handling file {file_path}: {e}", exc_info=True)
         return False
