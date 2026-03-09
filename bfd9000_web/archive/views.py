@@ -33,6 +33,7 @@ from .serializers import (
     EndpointSerializer, LocationSerializer, ImagingStudySerializer, RecordSerializer,
     RecordUploadSerializer, SeriesSerializer
 )
+from .media_upload import download_file
 from .constants import (
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
     SYSTEM_IDENTIFIER_LANCASTER_SUBJECT,
@@ -342,8 +343,14 @@ class RecordViewSet(viewsets.ModelViewSet):
         record = self.get_object()
         if not getattr(record, 'source_file', None):
             return Response({"error": "No image file available"}, status=404)
-        source_file = record.source_file
-        return FileResponse(source_file.open('rb'))
+        source_file_name = record.source_file.name
+        if source_file_name.startswith("box://"):
+            import mimetypes
+            box_file_id = source_file_name[len("box://"):]
+            stream, filename = download_file(box_file_id)
+            content_type, _ = mimetypes.guess_type(filename)
+            return FileResponse(stream, content_type=content_type or "application/octet-stream", filename=filename)
+        return FileResponse(record.source_file.open('rb'))
 
     @extend_schema(
         responses={

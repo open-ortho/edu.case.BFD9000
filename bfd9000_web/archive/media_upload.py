@@ -3,7 +3,7 @@
 import logging
 import time
 from pathlib import Path
-from typing import List
+from typing import IO, List
 
 from box_sdk_gen import BoxAPIError, BoxClient, BoxJWTAuth, CreateFolderParent, FileBaseTypeField, FolderBaseTypeField, JWTConfig, WebLinkBaseTypeField
 from box_sdk_gen.box.developer_token_auth import BoxDeveloperTokenAuth
@@ -119,6 +119,19 @@ def handle_media_file(file_path: Path) -> bool:
     except Exception as e:
         logger.error(f"Error handling file {file_path}: {e}", exc_info=True)
         return False
+
+
+def download_file(box_file_id: str) -> tuple[IO[bytes], str]:
+    """Download a file from Box by its file ID.
+
+    Returns a (stream, filename) tuple.
+    """
+    client = _get_box_client()
+    file_info = client.files.get_file_by_id(box_file_id)
+    stream = client.downloads.download_file(box_file_id)
+    if stream is None:
+        raise RuntimeError(f"Box returned no content for file id {box_file_id}")
+    return stream, file_info.name  # type: ignore[return-value]
 
 
 def upload_file(file_path: Path) -> str | None:
