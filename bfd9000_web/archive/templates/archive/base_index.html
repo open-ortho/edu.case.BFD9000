@@ -239,7 +239,10 @@ class InfiniteScrollTableManager {
             this._observer.disconnect();
             this._observer = null;
         }
-        this._sentinel = null;
+        if (this._sentinel) {
+            this._sentinel.remove();
+            this._sentinel = null;
+        }
     }
 
     async _loadNextPage() {
@@ -288,16 +291,6 @@ class InfiniteScrollTableManager {
             if (!this.hasMore) {
                 // Remove sentinel when all rows are loaded
                 this._disconnectObserver();
-                if (this._sentinel) {
-                    this._sentinel.remove();
-                    this._sentinel = null;
-                }
-            } else {
-                // Shrink sentinel to a minimal spinner so it doesn't take vertical space
-                const cell = this._sentinel.querySelector('td');
-                if (cell) {
-                    cell.innerHTML = `<span class="loading loading-spinner loading-xs"></span>`;
-                }
             }
         } catch (error) {
             console.error('Failed to load data:', error);
