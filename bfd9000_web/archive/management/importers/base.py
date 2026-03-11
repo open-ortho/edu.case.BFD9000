@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Dict, Optional, Tuple
 
 from django.core.management.base import CommandError
 
@@ -104,3 +104,40 @@ class BaseImporter:
         end = date(year + 1, 1, 1)
         midpoint_days = (end - start).days // 2
         return start + timedelta(days=midpoint_days)
+
+    def _build_class_codes(self) -> Dict[str, Optional[str]]:
+        """Map Angle/molar class labels to SNOMED codes."""
+        return {
+            'Class I': '248292005',
+            'Class II': '248293000',
+            'Class III': '248294006',
+            'NULL': None,
+        }
+
+    def _load_skeletal_coding_cache(self) -> Dict[Tuple[str, str], Coding]:
+        """Load SNOMED skeletal-pattern Coding objects into a cache dict keyed by (system, code)."""
+        skeletal_system = 'http://snomed.info/sct'
+        skeletal_codes = ['248292005', '248293000', '248294006']
+        codings = Coding.objects.filter(system=skeletal_system, code__in=skeletal_codes)
+        cache: Dict[Tuple[str, str], Coding] = {(c.system, c.code): c for c in codings}
+        missing = [code for code in skeletal_codes if (skeletal_system, code) not in cache]
+        if missing:
+            raise CommandError(
+                'Missing SNOMED skeletal Coding entries. Run migrations to seed codes. '
+                f'Missing: {", ".join(missing)}'
+            )
+        return cache
+
+    def _resolve_skeletal_pattern(
+        self,
+        label: str,
+        class_codes: Dict[str, Optional[str]],
+        coding_cache: Dict[Tuple[str, str], Coding],
+    ) -> Optional[Coding]:
+        """Return the Coding for an Angle class label (e.g. 'Class I'), or None."""
+        if not label:
+            return None
+        code = class_codes.get(label.strip())
+        if not code:
+            return None
+        return coding_cache.get(('http://snomed.info/sct', code))

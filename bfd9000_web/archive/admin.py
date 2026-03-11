@@ -12,6 +12,7 @@ from .models import (
     Identifier,
     ImagingStudy,
     Location,
+    PhysicalLocation,
     Series,
     PhysicalRecord,
     DigitalRecord,
@@ -239,7 +240,12 @@ class SeriesAdmin(TimestampedAdmin):
     )
 
 
-
+@admin.register(PhysicalLocation)
+class PhysicalLocationAdmin(admin.ModelAdmin):
+    list_display = ['id', 'cabinet', 'shelf', 'slot', 'address', 'raw']
+    list_filter = ['cabinet', 'shelf']
+    search_fields = ['cabinet', 'shelf', 'slot', 'raw']
+    autocomplete_fields = ['address']
 
 
 @admin.register(PhysicalRecord)
@@ -248,13 +254,11 @@ class PhysicalRecordAdmin(admin.ModelAdmin):
     list_filter = ['record_type']
     search_fields = [
         'id',
-        'physical_location_box',
-        'physical_location_shelf',
         'encounter__subject__humanname_family',
         'encounter__subject__humanname_given',
     ]
-    autocomplete_fields = ['encounter', 'record_type', 'device', 'physical_location']
-    filter_horizontal = ['identifiers']
+    autocomplete_fields = ['encounter', 'record_type', 'device']
+    filter_horizontal = ['identifiers', 'locations']
     fieldsets = (
         (None, {
             'fields': ('encounter', 'record_type', 'identifiers')
@@ -262,14 +266,8 @@ class PhysicalRecordAdmin(admin.ModelAdmin):
         ('Acquisition', {
             'fields': ('acquisition_datetime', 'operator', 'device')
         }),
-        ('Physical Location', {
-            'fields': (
-                'physical_location',
-                'physical_location_box',
-                'physical_location_shelf',
-                'physical_location_tray',
-                'physical_location_compartment',
-            )
+        ('Physical Locations', {
+            'fields': ('locations',)
         }),
     )
 

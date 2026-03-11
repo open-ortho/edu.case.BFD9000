@@ -51,7 +51,6 @@ Whenever a large change is made, documenting it in `./bfd9000_web/docs` is good 
 
 REFERENCE THE API IN bfd9000_web/docs/api_requirements.md
 
-
 ## Database Compatibility
 
 The local development environment (`python manage.py runserver`) uses **SQLite** by default. Production and the local docker-compose environment use **PostgreSQL 17**.
@@ -65,3 +64,7 @@ To maintain compatibility between dev and production:
   1. Document the trade-off clearly in the PR description and in a code comment.
   2. Ensure the feature degrades gracefully or is guarded by a database-engine check so that local SQLite development still works.
   3. Flag the incompatibility explicitly to the developer so they can decide.
+
+## Records Identifier
+
+- Records have internal id/pk and identifiers. The user never sees the internal id/pk, they always only see the identifier.official (mostly) and the others in the detail views.

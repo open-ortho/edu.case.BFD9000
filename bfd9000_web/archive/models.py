@@ -6,10 +6,11 @@ core entities like Subject, Encounter, ImagingStudy, and Record, as well as
 supporting entities like Coding, Identifier, and Collection.
 """
 import json
-from typing import Any
+from typing import Any, Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 from django.db import models
+from django.db.models import Max
 from .media_utils import generate_dicom_uid
 from django.db.models import QuerySet
 from django.conf import settings
@@ -19,8 +20,81 @@ from .constants import (
     STUDYINSTANCEUID_ROOT,
     SERIESINSTANCEUID_ROOT,
     SOPINSTANCEUID_ROOT,
+    SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
+    SYSTEM_IDENTIFIER_BOLTON_PHYSICAL_RECORD,
+    SYSTEM_IDENTIFIER_BOLTON_DIGITAL_RECORD,
 )
 
+
+def _get_preferred_subject_identifier(identifiers) -> Optional[str]:
+    """Return the preferred subject identifier value: official first, then Bolton system, then first available."""
+    official: Optional[str] = None
+    bolton: Optional[str] = None
+    first: Optional[str] = None
+    for ident in identifiers:
+        if first is None:
+            first = ident.value
+        if official is None and ident.use == 'official':
+            official = ident.value
+        if bolton is None and ident.system == SYSTEM_IDENTIFIER_BOLTON_SUBJECT:
+            bolton = ident.value
+    return official or bolton or first
+
+
+def compute_bolton_record_id(
+    subject_identifiers,
+    record_type_code: Optional[str],
+    gender: str,
+    age_years: Optional[float],
+    sequence_number: Optional[int],
+) -> str:
+    """
+    Compute the Bolton-style record identifier string.
+
+    Schema: <subject_identifier><record_type_code><sex_code><age><seq>
+    Example: R001LM08y06m01
+
+    Returns empty string if subject_identifier or record_type_code is missing.
+    """
+    subject_identifier: Optional[str] = _get_preferred_subject_identifier(subject_identifiers)
+    if not subject_identifier or not record_type_code:
+        return ''
+    sex_map: dict[str, str] = {'male': 'M', 'female': 'F', 'other': 'O', 'unknown': 'U'}
+    sex: str = sex_map.get(gender, 'U')
+    if age_years is not None:
+        total_months: int = int(round(age_years * 12))
+        years: int = total_months // 12
+        months: int = total_months % 12
+        age_str: str = f"{years:02d}y{months:02d}m"
+    else:
+        age_str = ''
+    seq: int = sequence_number or 1
+    return f"{subject_identifier}{record_type_code}{sex}{age_str}{seq:02d}"
+
+
+def _compute_age_years_from_encounter(encounter: 'Encounter', subject: 'Subject') -> Optional[float]:
+    """Return age in decimal years for the given encounter+subject, or None if not computable."""
+    import datetime as _dt
+    birth_date = getattr(subject, 'birth_date', None)
+    if getattr(encounter, 'procedure_occurrence_age', None):
+        return round(encounter.procedure_occurrence_age.days / 365.25, 2)
+    if encounter.actual_period_start and birth_date:
+        # Guard: DateField values may be strings if the instance was not round-tripped
+        # through the database (e.g. immediately after create() in tests).
+        start = encounter.actual_period_start
+        bd = birth_date
+        if isinstance(start, str):
+            try:
+                start = _dt.date.fromisoformat(start)
+            except ValueError:
+                return None
+        if isinstance(bd, str):
+            try:
+                bd = _dt.date.fromisoformat(bd)
+            except ValueError:
+                return None
+        return round((start - bd).days / 365.25, 2)
+    return None
 
 
 class TimestampedModel(models.Model):
@@ -320,6 +394,11 @@ class Subject(TimestampedModel):
         blank=True,
         related_name='subjects',
         help_text="Collection/dataset the subject belongs to"
+    )
+    notes = models.TextField(
+        blank=True,
+        default='',
+        help_text='Free-text notes about this subject (e.g. archival condition notes)'
     )
 
     class Meta(TimestampedModel.Meta):
@@ -650,6 +729,51 @@ class Device(TimestampedModel):
         return ' — '.join(parts)
 
 
+class PhysicalLocation(TimestampedModel):
+    """
+    A physical storage slot in an archive (e.g. a single compartment in a cabinet).
+
+    Structured as cabinet / shelf / slot so that a single box string like
+    ``1-A-16/17`` can be split into two rows sharing the same cabinet and shelf.
+    A free-form ``raw`` field preserves the original box string for provenance.
+    """
+    address = models.ForeignKey(
+        Address,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='physical_locations',
+        help_text='Address of the building or facility where this storage slot is located',
+    )
+    cabinet = models.CharField(
+        max_length=64, blank=True,
+        help_text='Cabinet or box number within the facility (e.g. "1", "10")',
+    )
+    shelf = models.CharField(
+        max_length=64, blank=True,
+        help_text='Shelf identifier within the cabinet (e.g. "A", "B")',
+    )
+    slot = models.CharField(
+        max_length=64, blank=True,
+        help_text='Slot or compartment identifier on the shelf (e.g. "16", "30")',
+    )
+    raw = models.CharField(
+        max_length=256, blank=True,
+        help_text='Original unparsed location string from the source spreadsheet',
+    )
+
+    class Meta(TimestampedModel.Meta):
+        """Model metadata."""
+        ordering = ['cabinet', 'shelf', 'slot']
+        indexes = [
+            models.Index(fields=['cabinet', 'shelf', 'slot']),
+        ]
+
+    def __str__(self) -> str:
+        parts = [p for p in [self.cabinet, self.shelf, self.slot] if p]
+        label = '-'.join(parts) if parts else '(empty)'
+        return f"PhysicalLocation {label}"
+
+
 class PhysicalRecord(TimestampedModel):
     """
     The original physical artifact produced at an encounter: an acetate film,
@@ -670,6 +794,13 @@ class PhysicalRecord(TimestampedModel):
         related_name='physical_records_record_type',
         help_text='CWRU record type code identifying the clinical study type (e.g. L, SM)'
     )
+    sequence_number = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text=(
+            'One-based sequence within (encounter, record_type). '
+            'Auto-assigned on first save. Used in identifier_str suffix.'
+        ),
+    )
     acquisition_datetime = models.DateTimeField(
         null=True, blank=True,
         help_text='When the original was acquired (X-ray taken, model cast, etc.)'
@@ -687,24 +818,11 @@ class PhysicalRecord(TimestampedModel):
         related_name='physical_records',
         help_text='Device used to acquire the patient data (e.g. cephalostat)'
     )
-    physical_location = models.ForeignKey(
-        Address,
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name='physical_records_location',
-        help_text='Address of the physical archive where this artifact is stored'
-    )
-    physical_location_box = models.CharField(
-        max_length=128, blank=True, help_text='Box identifier in physical archive'
-    )
-    physical_location_shelf = models.CharField(
-        max_length=128, blank=True, help_text='Shelf identifier in physical archive'
-    )
-    physical_location_tray = models.CharField(
-        max_length=128, blank=True, help_text='Tray identifier in physical archive'
-    )
-    physical_location_compartment = models.CharField(
-        max_length=128, blank=True, help_text='Compartment identifier in physical archive'
+    locations = models.ManyToManyField(
+        PhysicalLocation,
+        blank=True,
+        related_name='physical_records',
+        help_text='Physical archive storage slots where this artifact is held',
     )
     identifiers = models.ManyToManyField(
         Identifier,
@@ -712,17 +830,16 @@ class PhysicalRecord(TimestampedModel):
         related_name='physical_records',
         help_text='External identifiers for this physical artifact'
     )
+    notes = models.TextField(
+        blank=True,
+        default='',
+        help_text='Free-text notes about this physical artifact'
+    )
 
     class Meta(TimestampedModel.Meta):
         """Model metadata."""
         ordering = ['-acquisition_datetime']
         indexes = [models.Index(fields=['encounter'])]
-        constraints = [
-            models.UniqueConstraint(
-                fields=['record_type', 'encounter'],
-                name='unique_physical_record_type_encounter'
-            )
-        ]
 
     @property
     def subject(self) -> 'Subject':
@@ -731,6 +848,62 @@ class PhysicalRecord(TimestampedModel):
 
     def __str__(self) -> str:
         return f"PhysicalRecord {self.pk} ({self.record_type})"
+
+    @property
+    def bolton_record_id(self) -> str:
+        """Compute the Bolton-style record identifier for this physical record."""
+        encounter = getattr(self, 'encounter', None)
+        if not encounter:
+            return ''
+        subject = getattr(encounter, 'subject', None)
+        if not subject:
+            return ''
+        age: Optional[float] = _compute_age_years_from_encounter(encounter, subject)
+        rt_code: Optional[str] = self.record_type.code if self.record_type else None
+        return compute_bolton_record_id(
+            subject_identifiers=subject.identifiers.all(),
+            record_type_code=rt_code,
+            gender=subject.gender,
+            age_years=age,
+            sequence_number=self.sequence_number,
+        )
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        encounter_pk: Optional[int] = self.encounter_id  # type: ignore[attr-defined]
+        record_type_pk: Optional[int] = self.record_type_id  # type: ignore[attr-defined]
+        if self.sequence_number is None and encounter_pk and record_type_pk:
+            max_seq: Optional[int] = PhysicalRecord.objects.select_for_update().filter(
+                encounter_id=encounter_pk,
+                record_type_id=record_type_pk,
+            ).aggregate(m=Max('sequence_number'))['m']
+            self.sequence_number = (max_seq or 0) + 1
+        super().save(*args, **kwargs)
+        self._assign_bolton_record_identifier()
+
+    def _assign_bolton_record_identifier(self) -> None:
+        """Create or update the stored Bolton record identifier on the M2M identifiers field."""
+        new_value: str = self.bolton_record_id
+        if not new_value:
+            return
+        existing = list(self.identifiers.filter(system=SYSTEM_IDENTIFIER_BOLTON_PHYSICAL_RECORD))
+        official_existing = [i for i in existing if i.use == 'official']
+        if official_existing and official_existing[0].value == new_value:
+            # Already up to date
+            return
+        # Mark any existing official as old
+        for old_ident in official_existing:
+            old_ident.use = 'old'
+            old_ident.save(update_fields=['use'])
+        # Create or fetch new identifier
+        new_ident, _ = Identifier.objects.get_or_create(
+            system=SYSTEM_IDENTIFIER_BOLTON_PHYSICAL_RECORD,
+            value=new_value,
+            defaults={'use': 'official'},
+        )
+        if new_ident.use != 'official':
+            new_ident.use = 'official'
+            new_ident.save(update_fields=['use'])
+        self.identifiers.add(new_ident)
 
 
 class DigitalRecord(TimestampedModel):
@@ -810,6 +983,13 @@ class DigitalRecord(TimestampedModel):
         related_name='digital_records',
         help_text='External identifiers for this digital instance'
     )
+    sequence_number = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text=(
+            'One-based sequence within (encounter, record_type) among DigitalRecords. '
+            'Auto-assigned on first save. Used in identifier_str suffix.'
+        ),
+    )
 
     class Meta(TimestampedModel.Meta):
         """Model metadata."""
@@ -841,10 +1021,71 @@ class DigitalRecord(TimestampedModel):
     def __str__(self) -> str:
         return f"DigitalRecord {self.pk} ({self.record_type})"
 
-    def save(self, *args, **kwargs) -> None:
+    @property
+    def bolton_record_id(self) -> str:
+        """Compute the Bolton-style record identifier for this digital record."""
+        try:
+            encounter = self.series.imaging_study.encounter
+        except AttributeError:
+            return ''
+        subject = getattr(encounter, 'subject', None)
+        if not subject:
+            return ''
+        age: Optional[float] = _compute_age_years_from_encounter(encounter, subject)
+        rt_code: Optional[str] = self.record_type.code if self.record_type else None
+        return compute_bolton_record_id(
+            subject_identifiers=subject.identifiers.all(),
+            record_type_code=rt_code,
+            gender=subject.gender,
+            age_years=age,
+            sequence_number=self.sequence_number,
+        )
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if not self.sop_instance_uid:
             self.sop_instance_uid = generate_dicom_uid(SOPINSTANCEUID_ROOT)
+        if self.sequence_number is None:
+            series_pk: Optional[int] = self.series_id  # type: ignore[attr-defined]
+            record_type_pk: Optional[int] = self.record_type_id  # type: ignore[attr-defined]
+            if series_pk and record_type_pk:
+                # Resolve encounter via DB rather than traversing ORM relations
+                # so we don't require a pre-fetched series on a new instance.
+                encounter_ids = (
+                    ImagingStudy.objects
+                    .filter(series__id=series_pk)
+                    .values_list('encounter_id', flat=True)
+                )
+                if encounter_ids:
+                    encounter_id = encounter_ids[0]
+                    max_seq: Optional[int] = DigitalRecord.objects.select_for_update().filter(
+                        series__imaging_study__encounter_id=encounter_id,
+                        record_type_id=record_type_pk,
+                    ).aggregate(m=Max('sequence_number'))['m']
+                    self.sequence_number = (max_seq or 0) + 1
         super().save(*args, **kwargs)
+        self._assign_bolton_record_identifier()
+
+    def _assign_bolton_record_identifier(self) -> None:
+        """Create or update the stored Bolton record identifier on the M2M identifiers field."""
+        new_value: str = self.bolton_record_id
+        if not new_value:
+            return
+        existing = list(self.identifiers.filter(system=SYSTEM_IDENTIFIER_BOLTON_DIGITAL_RECORD))
+        official_existing = [i for i in existing if i.use == 'official']
+        if official_existing and official_existing[0].value == new_value:
+            return
+        for old_ident in official_existing:
+            old_ident.use = 'old'
+            old_ident.save(update_fields=['use'])
+        new_ident, _ = Identifier.objects.get_or_create(
+            system=SYSTEM_IDENTIFIER_BOLTON_DIGITAL_RECORD,
+            value=new_value,
+            defaults={'use': 'official'},
+        )
+        if new_ident.use != 'official':
+            new_ident.use = 'official'
+            new_ident.save(update_fields=['use'])
+        self.identifiers.add(new_ident)
 
 
 

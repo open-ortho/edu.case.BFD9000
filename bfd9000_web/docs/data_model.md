@@ -5,12 +5,14 @@ This document defines the archive concepts and rationale used by the Django mode
 - [Archive Data Model](#archive-data-model)
   - [Core hierarchy](#core-hierarchy)
   - [Models](#models)
+    - [Subject](#subject)
     - [Encounter](#encounter)
       - [Encounter Date](#encounter-date)
       - [Encounter Age](#encounter-age)
     - [ImagingStudy](#imagingstudy)
     - [Series](#series)
     - [PhysicalRecord](#physicalrecord)
+    - [PhysicalLocation](#physicallocation)
     - [DigitalRecord](#digitalrecord)
     - [Device](#device)
     - [Endpoint and ArchiveLocation](#endpoint-and-archivelocation)
@@ -58,6 +60,19 @@ Example: one encounter contains cephalometric films and scanned study models. Th
 ## Models
 
 These rules are strict.
+
+### Subject
+
+Represents a human or animal whose data is held in the archive.
+
+| Field | Notes |
+|-------|-------|
+| `identifiers` | M2M → Identifier. Typed, system-scoped references (e.g. Bolton ID, Richardson R-number). |
+| `gender` | FHIR `Patient.gender` values: `male`, `female`, `other`, `unknown`. |
+| `skeletal_pattern` | FK → Coding (null). SNOMED skeletal class code. |
+| `notes` | Free-text notes from import sources (e.g. "misc" column from Richardson spreadsheet). Null if empty. |
+
+Name, date-of-birth, and other PII fields exist in the model but are **not exposed** via the API or UI at this time.
 
 ### Encounter
 
@@ -108,22 +123,46 @@ Represents the original physical artifact produced at an encounter.
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `encounter`                     | FK → Encounter (non-null)                                                                                                                                                       |
 | `record_type`                   | FK → Coding (non-null). CWRU record type (e.g. `L`, `SM`).                                                                                                                      |
+| `sequence_number`               | `PositiveSmallIntegerField` (null until first save). One-based sequence within `(encounter, record_type)`. Auto-assigned on `save()`. Used in `identifier_str` suffix.           |
 | `medium`                        | Derived `@property` from `record_type`. Not a stored field.                                                                                                                     |
 | `acquisition_datetime`          | When the original was acquired (X-ray taken, model cast, etc.).                                                                                                                 |
 | `operator`                      | `CharField`, default `"Unknown"`. The technician who operated the acquisition device. No FK — operator identity is typically not in the system for historical physical records. |
 | `device`                        | FK → Device (null). Device used to acquire the patient data (e.g. cephalostat).                                                                                                 |
-| `physical_location`             | FK → Address (null). Address of the physical archive.                                                                                                                           |
-| `physical_location_box`         | Box identifier in the physical archive.                                                                                                                                         |
-| `physical_location_shelf`       | Shelf identifier.                                                                                                                                                               |
-| `physical_location_tray`        | Tray identifier.                                                                                                                                                                |
-| `physical_location_compartment` | Compartment identifier.                                                                                                                                                         |
+| `locations`                     | M2M → PhysicalLocation. Physical archive storage slots where this artifact is held.                                                                                             |
 | `identifiers`                   | M2M → Identifier. External identifiers.                                                                                                                                         |
+| `notes`                         | Free-text notes from import sources (e.g. "Errors/Misc." column from Richardson spreadsheet). Null if empty.                                                                   |
 
 **Constraints:**
 
 - `record_type` cannot be null.
-- Unique on `(record_type, encounter)`: at each encounter a subject is collected only once per record type.
+- No uniqueness constraint on `(record_type, encounter)`. Multiple physical records of the same type may exist per encounter (e.g. multiple photographs taken on the same visit).
 - `medium` is derived from `record_type` via a model method/property — it is not stored. This avoids duplication and sync errors.
+
+### PhysicalLocation
+
+Represents a single physical storage slot (cabinet/shelf/slot) in an archive facility. Introduced to replace the flat `physical_location_box/shelf/tray/compartment` fields on `PhysicalRecord` with a structured, reusable model.
+
+| Field | Notes |
+|-------|-------|
+| `address` | FK → Address (null). Building/facility address. |
+| `cabinet` | Cabinet or box number within the facility (e.g. `"1"`, `"10"`). |
+| `shelf` | Shelf identifier within the cabinet (e.g. `"A"`, `"B"`). |
+| `slot` | Slot or compartment on the shelf (e.g. `"16"`, `"30"`). |
+| `raw` | Original unparsed box string from the source spreadsheet. Preserved for provenance. |
+
+A single box string like `1-A-16/17` from the Richardson spreadsheet is parsed into **two** `PhysicalLocation` rows (cabinet=1, shelf=A, slot=16) and (cabinet=1, shelf=A, slot=17), both linked to the same `PhysicalRecord` via M2M.
+
+`PhysicalLocation` rows are created with `get_or_create` keyed on `(cabinet, shelf, slot)`, so the same physical location is shared across records rather than duplicated.
+
+**Parsing rules (Richardson importer):**
+
+| Input | Result |
+|-------|--------|
+| `1-A-3` | one location: (1, A, 3) |
+| `1-A-16/17` | two locations: (1, A, 16) and (1, A, 17) |
+| `1-A-30/B-1` | two locations: (1, A, 30) and (1, B, 1) |
+| `10-9/10` | two locations with inferred shelf `A`: (10, A, 9) and (10, A, 10) |
+| `R Archive Box` | one location with cabinet=full string, shelf='', slot='' |
 
 ### DigitalRecord
 
@@ -143,6 +182,7 @@ Represents one digital instance: either a digitization of a `PhysicalRecord` or 
 | `image_transform_ops` | Ordered JSON list of transform ops applied to the preview image. |
 | `device` | FK → Device (null). Device used to digitize the physical record, or to acquire born-digital data. |
 | `identifiers` | M2M → Identifier. External identifiers (e.g. DICOM UIDs from source systems). |
+| `sequence_number` | `PositiveSmallIntegerField` (null until first save). One-based sequence within `(encounter, record_type)` among `DigitalRecord`s. Auto-assigned on `save()`. Used in `identifier_str` suffix. |
 
 **Constraints:**
 
@@ -259,16 +299,32 @@ Additional rules:
 
 For planning: 500k thumbnails at ~20 KB is roughly 10 GB total.
 
-## Record display identifier (`identifier_str`)
+## Record display identifier (`identifier_str` / Bolton record ID)
 
 Each Collection has a specific Subject identifier. The BBGSC has devised, over the years, a schema to produce a unique identifier for each record, which can be computed from subject id, encounter age, gender and record type.
 
-`identifier_str` is a computed, read-only field returned by the `DigitalRecord` API serializer. It is **not stored** in the database and is **not** one of the `identifiers` M2M entries on `Subject` or `DigitalRecord`.
+`identifier_str` is a computed, read-only field returned by both the `PhysicalRecord` and `DigitalRecord` API serializers. It is produced by the `bolton_record_id` model property (defined in `models.py`).
+
+The computed value is **also persisted** as a stored `Identifier` entry on the `identifiers` M2M field of both `PhysicalRecord` and `DigitalRecord`, using the system URL:
+
+```
+https://orthodontics.case.edu/fhir/identifier-system/bolton-record-id
+```
+
+(`SYSTEM_IDENTIFIER_BOLTON_RECORD` in `constants.py`)
+
+This stored identifier is assigned automatically on `save()` and enables database-level search (e.g. `?search=r011l` on the records API). The `identifier_str` serializer field continues to return the computed value for UI display and download filenames.
+
+**Lifecycle:**
+- On first save (when sequence number is assigned and all required data is present): an `Identifier` with `use='official'` is created and attached.
+- On subsequent saves where the computed value has changed (e.g. encounter date corrected): the old `Identifier` entry is updated to `use='old'` (kept for historical reference), and a new `use='official'` entry is created and attached.
+- Identifiers with `use='old'` are excluded from search.
+- If required data is missing (no subject identifier, no record type), no stored identifier is assigned.
 
 ### Schema
 
 ```
-<subject_identifier><record_type_code><sex_code><age>
+<subject_identifier><record_type_code><sex_code><age><seq>
 ```
 
 | Component | Source | Example |
@@ -277,27 +333,36 @@ Each Collection has a specific Subject identifier. The BBGSC has devised, over t
 | `record_type_code` | `DigitalRecord.record_type.code` | `L` |
 | `sex_code` | `Subject.gender` mapped: `male→M`, `female→F`, `other→O`, `unknown→U` (FHIR [Patient.gender](https://hl7.org/fhir/patient-definitions.html#Patient.gender)) | `M` |
 | `age` | Age at encounter formatted as `{years:02d}y{months:02d}m` (zero-padded). Omitted if encounter has no age data. | `08y06m` |
+| `seq` | `DigitalRecord.sequence_number` formatted as `{seq:02d}` (two-digit, zero-padded, one-based). Always present. | `01` |
 
 ### Example
 
-Subject `B001`, lateral cephalogram (`L`), male (`M`), age 8 years 6 months:
+Subject `B001`, lateral cephalogram (`L`), male (`M`), age 8 years 6 months, first record:
 
 ```
-B001LM08y06m
+B001LM08y06m01
+```
+
+No-age variant (encounter has no age data), first record:
+
+```
+B001LM01
 ```
 
 ### Usage
 
 - **UI display**: shown in the records list as the human-readable label for each record button (fallback to `record.id` if absent).
 - **Download filenames**: the download button in `record_detail.html` uses `identifier_str` as the base filename (e.g. `B001LM08y06m.png`).
-- **Not for linking**: do not use `identifier_str` as a stable identifier for API queries, foreign keys, or external system integration. Use the integer PK or a stored `Identifier` entry for that purpose.
+- **API search**: the stored Bolton record ID (`identifiers__value`) enables `?search=r011l` on the `/api/records/` and `/api/physical-records/` endpoints.
+- **Not for foreign keys**: do not use `identifier_str` as a stable FK or external-system integration key. Use the integer PK for that purpose.
 
 ### Critical distinction
 
-`identifier_str` differs from the stored `identifiers` (M2M `Identifier` objects on `Subject` and `DigitalRecord`):
+`identifier_str` (the serializer field) and the stored `identifiers` M2M entries are related but different:
 
-- `identifiers` are persistent, typed, system-scoped references (e.g. DICOM UIDs, Bolton IDs).
-- `identifier_str` is a transient display string assembled at serialization time for human-readable labelling and file naming only.
+- The **stored Bolton record ID** (`Identifier` with `system=SYSTEM_IDENTIFIER_BOLTON_RECORD`) is a persistent, database-searchable entry, auto-assigned on `save()`.
+- `identifier_str` (the serializer field) returns the same value computed at serialization time — it reads from `bolton_record_id` model property, which recomputes live from related fields rather than reading the stored identifier.
+- Other `identifiers` entries (DICOM UIDs, subject Bolton IDs, etc.) remain unchanged.
 
 ## API and UI implications
 
