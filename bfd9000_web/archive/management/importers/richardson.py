@@ -406,6 +406,10 @@ class RichardsonImporter(BaseImporter):
                 slots = [s.strip() for s in slot_part.split('/')]
                 for slot in slots:
                     if slot:
+                        # Richardson data originates from a single facility; `address` is
+                        # intentionally omitted from the lookup key. If this importer is
+                        # adapted for multi-facility use, include `address` in the lookup
+                        # to avoid cross-facility slot collisions.
                         loc, _ = PhysicalLocation.objects.get_or_create(
                             cabinet=cabinet, shelf='A', slot=slot,
                             defaults={'raw': raw},
@@ -413,6 +417,10 @@ class RichardsonImporter(BaseImporter):
                         locations.append(loc)
             else:
                 # Freeform: store entire string in cabinet
+                # Richardson data originates from a single facility; `address` is
+                # intentionally omitted from the lookup key. If this importer is
+                # adapted for multi-facility use, include `address` in the lookup
+                # to avoid cross-facility slot collisions.
                 loc, _ = PhysicalLocation.objects.get_or_create(
                     cabinet=raw.strip(), shelf='', slot='',
                     defaults={'raw': raw},
@@ -428,6 +436,10 @@ class RichardsonImporter(BaseImporter):
         # slot_part may be "16", "16/17", or "30/B-1"
         if '/' not in slot_part:
             # Simple single slot
+            # Richardson data originates from a single facility; `address` is
+            # intentionally omitted from the lookup key. If this importer is
+            # adapted for multi-facility use, include `address` in the lookup
+            # to avoid cross-facility slot collisions.
             loc, _ = PhysicalLocation.objects.get_or_create(
                 cabinet=cabinet, shelf=shelf, slot=slot_part,
                 defaults={'raw': raw},
@@ -447,6 +459,10 @@ class RichardsonImporter(BaseImporter):
                 else:
                     slot = token
                 if slot:
+                    # Richardson data originates from a single facility; `address` is
+                    # intentionally omitted from the lookup key. If this importer is
+                    # adapted for multi-facility use, include `address` in the lookup
+                    # to avoid cross-facility slot collisions.
                     loc, _ = PhysicalLocation.objects.get_or_create(
                         cabinet=cabinet, shelf=current_shelf, slot=slot,
                         defaults={'raw': raw},

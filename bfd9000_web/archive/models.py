@@ -21,7 +21,8 @@ from .constants import (
     SERIESINSTANCEUID_ROOT,
     SOPINSTANCEUID_ROOT,
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
-    SYSTEM_IDENTIFIER_BOLTON_RECORD,
+    SYSTEM_IDENTIFIER_BOLTON_PHYSICAL_RECORD,
+    SYSTEM_IDENTIFIER_BOLTON_DIGITAL_RECORD,
 )
 
 
@@ -871,7 +872,7 @@ class PhysicalRecord(TimestampedModel):
         encounter_pk: Optional[int] = self.encounter_id  # type: ignore[attr-defined]
         record_type_pk: Optional[int] = self.record_type_id  # type: ignore[attr-defined]
         if self.sequence_number is None and encounter_pk and record_type_pk:
-            max_seq: Optional[int] = PhysicalRecord.objects.filter(
+            max_seq: Optional[int] = PhysicalRecord.objects.select_for_update().filter(
                 encounter_id=encounter_pk,
                 record_type_id=record_type_pk,
             ).aggregate(m=Max('sequence_number'))['m']
@@ -884,7 +885,7 @@ class PhysicalRecord(TimestampedModel):
         new_value: str = self.bolton_record_id
         if not new_value:
             return
-        existing = list(self.identifiers.filter(system=SYSTEM_IDENTIFIER_BOLTON_RECORD))
+        existing = list(self.identifiers.filter(system=SYSTEM_IDENTIFIER_BOLTON_PHYSICAL_RECORD))
         official_existing = [i for i in existing if i.use == 'official']
         if official_existing and official_existing[0].value == new_value:
             # Already up to date
@@ -895,7 +896,7 @@ class PhysicalRecord(TimestampedModel):
             old_ident.save(update_fields=['use'])
         # Create or fetch new identifier
         new_ident, _ = Identifier.objects.get_or_create(
-            system=SYSTEM_IDENTIFIER_BOLTON_RECORD,
+            system=SYSTEM_IDENTIFIER_BOLTON_PHYSICAL_RECORD,
             value=new_value,
             defaults={'use': 'official'},
         )
@@ -1025,7 +1026,7 @@ class DigitalRecord(TimestampedModel):
         """Compute the Bolton-style record identifier for this digital record."""
         try:
             encounter = self.series.imaging_study.encounter
-        except Exception:
+        except AttributeError:
             return ''
         subject = getattr(encounter, 'subject', None)
         if not subject:
@@ -1056,7 +1057,7 @@ class DigitalRecord(TimestampedModel):
                 )
                 if encounter_ids:
                     encounter_id = encounter_ids[0]
-                    max_seq: Optional[int] = DigitalRecord.objects.filter(
+                    max_seq: Optional[int] = DigitalRecord.objects.select_for_update().filter(
                         series__imaging_study__encounter_id=encounter_id,
                         record_type_id=record_type_pk,
                     ).aggregate(m=Max('sequence_number'))['m']
@@ -1069,7 +1070,7 @@ class DigitalRecord(TimestampedModel):
         new_value: str = self.bolton_record_id
         if not new_value:
             return
-        existing = list(self.identifiers.filter(system=SYSTEM_IDENTIFIER_BOLTON_RECORD))
+        existing = list(self.identifiers.filter(system=SYSTEM_IDENTIFIER_BOLTON_DIGITAL_RECORD))
         official_existing = [i for i in existing if i.use == 'official']
         if official_existing and official_existing[0].value == new_value:
             return
@@ -1077,7 +1078,7 @@ class DigitalRecord(TimestampedModel):
             old_ident.use = 'old'
             old_ident.save(update_fields=['use'])
         new_ident, _ = Identifier.objects.get_or_create(
-            system=SYSTEM_IDENTIFIER_BOLTON_RECORD,
+            system=SYSTEM_IDENTIFIER_BOLTON_DIGITAL_RECORD,
             value=new_value,
             defaults={'use': 'official'},
         )

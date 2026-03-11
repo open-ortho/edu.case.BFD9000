@@ -694,17 +694,23 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
                     physical_record.record_type = rt_coding
                     physical_record.save(update_fields=['record_type'])
             else:
-                physical_record = PhysicalRecord.objects.filter(
+                pr_matches = list(PhysicalRecord.objects.filter(
                     record_type=rt_coding,
-                    encounter=encounter
-                ).first()
-                if not physical_record:
-                    physical_record = PhysicalRecord.objects.create(
-                        record_type=rt_coding,
-                        encounter=encounter,
-                        operator="Unknown",
-                        device=device,
-                    )
+                    encounter=encounter,
+                ))
+                if len(pr_matches) > 1:
+                    raise serializers.ValidationError({
+                        "physical_record": (
+                            "Multiple physical records exist for this encounter and record type. "
+                            "Provide 'physical_record' explicitly to identify which one to link."
+                        )
+                    })
+                physical_record = pr_matches[0] if pr_matches else PhysicalRecord.objects.create(
+                    record_type=rt_coding,
+                    encounter=encounter,
+                    operator="Unknown",
+                    device=device,
+                )
 
             digital_record = DigitalRecord(
                 series=series,

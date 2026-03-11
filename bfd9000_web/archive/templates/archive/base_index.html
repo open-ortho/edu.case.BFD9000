@@ -729,7 +729,7 @@ class PaginatedTableManager {
 function attachSearchTooltip(containerId) {
     const tooltipHTML = `
 <div class="tooltip tooltip-bottom before:max-w-xs before:text-left before:whitespace-pre-wrap"
-     data-tip="Search matches subject identifiers, record type codes, and record type names (case-insensitive, substring match).&#10;Example: &quot;R001&quot; returns all records for subject R001.&#10;Example: &quot;Lateral&quot; or &quot;L&quot; returns all lateral records.">
+     data-tip="Search matches the start of record identifiers (e.g. &quot;R001&quot; matches &quot;R001LM08y06m01&quot;).">
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
          stroke-width="1.5" stroke="currentColor" class="size-5 text-base-content/50 cursor-help">
         <path stroke-linecap="round" stroke-linejoin="round"

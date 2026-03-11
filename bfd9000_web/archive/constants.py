@@ -11,7 +11,8 @@ SYSTEM_IDENTIFIER_LANCASTER_SUBJECT = 'https://cleftclinic.org/fhir/identifier-s
 SYSTEM_IDENTIFIER_RICHARDSON_SUBJECT = 'https://orthodontics.case.edu/fhir/identifier-system/richardson-subject-id'
 SYSTEM_IDENTIFIER_RICHARDSON_OLD = 'https://orthodontics.case.edu/fhir/identifier-system/richardson-old-id'
 SYSTEM_IDENTIFIER_IMAGE_TYPE = 'https://orthodontics.case.edu/fhir/identifier-system/image-type'
-SYSTEM_IDENTIFIER_BOLTON_RECORD = 'https://orthodontics.case.edu/fhir/identifier-system/bolton-record-id'
+SYSTEM_IDENTIFIER_BOLTON_PHYSICAL_RECORD = 'https://orthodontics.case.edu/fhir/identifier-system/bolton-physical-record-id'
+SYSTEM_IDENTIFIER_BOLTON_DIGITAL_RECORD = 'https://orthodontics.case.edu/fhir/identifier-system/bolton-digital-record-id'
 
 RECORD_TYPE_MODALITY_MAP = {
     # Map CWRU record type codes to DICOM modality codes.
