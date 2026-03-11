@@ -20,8 +20,80 @@ from .constants import (
     STUDYINSTANCEUID_ROOT,
     SERIESINSTANCEUID_ROOT,
     SOPINSTANCEUID_ROOT,
+    SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
+    SYSTEM_IDENTIFIER_BOLTON_RECORD,
 )
 
+
+def _get_preferred_subject_identifier(identifiers) -> Optional[str]:
+    """Return the preferred subject identifier value: official first, then Bolton system, then first available."""
+    official: Optional[str] = None
+    bolton: Optional[str] = None
+    first: Optional[str] = None
+    for ident in identifiers:
+        if first is None:
+            first = ident.value
+        if official is None and ident.use == 'official':
+            official = ident.value
+        if bolton is None and ident.system == SYSTEM_IDENTIFIER_BOLTON_SUBJECT:
+            bolton = ident.value
+    return official or bolton or first
+
+
+def compute_bolton_record_id(
+    subject_identifiers,
+    record_type_code: Optional[str],
+    gender: str,
+    age_years: Optional[float],
+    sequence_number: Optional[int],
+) -> str:
+    """
+    Compute the Bolton-style record identifier string.
+
+    Schema: <subject_identifier><record_type_code><sex_code><age><seq>
+    Example: R001LM08y06m01
+
+    Returns empty string if subject_identifier or record_type_code is missing.
+    """
+    subject_identifier: Optional[str] = _get_preferred_subject_identifier(subject_identifiers)
+    if not subject_identifier or not record_type_code:
+        return ''
+    sex_map: dict[str, str] = {'male': 'M', 'female': 'F', 'other': 'O', 'unknown': 'U'}
+    sex: str = sex_map.get(gender, 'U')
+    if age_years is not None:
+        total_months: int = int(round(age_years * 12))
+        years: int = total_months // 12
+        months: int = total_months % 12
+        age_str: str = f"{years:02d}y{months:02d}m"
+    else:
+        age_str = ''
+    seq: int = sequence_number or 1
+    return f"{subject_identifier}{record_type_code}{sex}{age_str}{seq:02d}"
+
+
+def _compute_age_years_from_encounter(encounter: 'Encounter', subject: 'Subject') -> Optional[float]:
+    """Return age in decimal years for the given encounter+subject, or None if not computable."""
+    import datetime as _dt
+    birth_date = getattr(subject, 'birth_date', None)
+    if getattr(encounter, 'procedure_occurrence_age', None):
+        return round(encounter.procedure_occurrence_age.days / 365.25, 2)
+    if encounter.actual_period_start and birth_date:
+        # Guard: DateField values may be strings if the instance was not round-tripped
+        # through the database (e.g. immediately after create() in tests).
+        start = encounter.actual_period_start
+        bd = birth_date
+        if isinstance(start, str):
+            try:
+                start = _dt.date.fromisoformat(start)
+            except ValueError:
+                return None
+        if isinstance(bd, str):
+            try:
+                bd = _dt.date.fromisoformat(bd)
+            except ValueError:
+                return None
+        return round((start - bd).days / 365.25, 2)
+    return None
 
 
 class TimestampedModel(models.Model):
@@ -776,6 +848,25 @@ class PhysicalRecord(TimestampedModel):
     def __str__(self) -> str:
         return f"PhysicalRecord {self.pk} ({self.record_type})"
 
+    @property
+    def bolton_record_id(self) -> str:
+        """Compute the Bolton-style record identifier for this physical record."""
+        encounter = getattr(self, 'encounter', None)
+        if not encounter:
+            return ''
+        subject = getattr(encounter, 'subject', None)
+        if not subject:
+            return ''
+        age: Optional[float] = _compute_age_years_from_encounter(encounter, subject)
+        rt_code: Optional[str] = self.record_type.code if self.record_type else None
+        return compute_bolton_record_id(
+            subject_identifiers=subject.identifiers.all(),
+            record_type_code=rt_code,
+            gender=subject.gender,
+            age_years=age,
+            sequence_number=self.sequence_number,
+        )
+
     def save(self, *args: Any, **kwargs: Any) -> None:
         encounter_pk: Optional[int] = self.encounter_id  # type: ignore[attr-defined]
         record_type_pk: Optional[int] = self.record_type_id  # type: ignore[attr-defined]
@@ -786,6 +877,32 @@ class PhysicalRecord(TimestampedModel):
             ).aggregate(m=Max('sequence_number'))['m']
             self.sequence_number = (max_seq or 0) + 1
         super().save(*args, **kwargs)
+        self._assign_bolton_record_identifier()
+
+    def _assign_bolton_record_identifier(self) -> None:
+        """Create or update the stored Bolton record identifier on the M2M identifiers field."""
+        new_value: str = self.bolton_record_id
+        if not new_value:
+            return
+        existing = list(self.identifiers.filter(system=SYSTEM_IDENTIFIER_BOLTON_RECORD))
+        official_existing = [i for i in existing if i.use == 'official']
+        if official_existing and official_existing[0].value == new_value:
+            # Already up to date
+            return
+        # Mark any existing official as old
+        for old_ident in official_existing:
+            old_ident.use = 'old'
+            old_ident.save(update_fields=['use'])
+        # Create or fetch new identifier
+        new_ident, _ = Identifier.objects.get_or_create(
+            system=SYSTEM_IDENTIFIER_BOLTON_RECORD,
+            value=new_value,
+            defaults={'use': 'official'},
+        )
+        if new_ident.use != 'official':
+            new_ident.use = 'official'
+            new_ident.save(update_fields=['use'])
+        self.identifiers.add(new_ident)
 
 
 class DigitalRecord(TimestampedModel):
@@ -903,6 +1020,26 @@ class DigitalRecord(TimestampedModel):
     def __str__(self) -> str:
         return f"DigitalRecord {self.pk} ({self.record_type})"
 
+    @property
+    def bolton_record_id(self) -> str:
+        """Compute the Bolton-style record identifier for this digital record."""
+        try:
+            encounter = self.series.imaging_study.encounter
+        except Exception:
+            return ''
+        subject = getattr(encounter, 'subject', None)
+        if not subject:
+            return ''
+        age: Optional[float] = _compute_age_years_from_encounter(encounter, subject)
+        rt_code: Optional[str] = self.record_type.code if self.record_type else None
+        return compute_bolton_record_id(
+            subject_identifiers=subject.identifiers.all(),
+            record_type_code=rt_code,
+            gender=subject.gender,
+            age_years=age,
+            sequence_number=self.sequence_number,
+        )
+
     def save(self, *args: Any, **kwargs: Any) -> None:
         if not self.sop_instance_uid:
             self.sop_instance_uid = generate_dicom_uid(SOPINSTANCEUID_ROOT)
@@ -925,6 +1062,29 @@ class DigitalRecord(TimestampedModel):
                     ).aggregate(m=Max('sequence_number'))['m']
                     self.sequence_number = (max_seq or 0) + 1
         super().save(*args, **kwargs)
+        self._assign_bolton_record_identifier()
+
+    def _assign_bolton_record_identifier(self) -> None:
+        """Create or update the stored Bolton record identifier on the M2M identifiers field."""
+        new_value: str = self.bolton_record_id
+        if not new_value:
+            return
+        existing = list(self.identifiers.filter(system=SYSTEM_IDENTIFIER_BOLTON_RECORD))
+        official_existing = [i for i in existing if i.use == 'official']
+        if official_existing and official_existing[0].value == new_value:
+            return
+        for old_ident in official_existing:
+            old_ident.use = 'old'
+            old_ident.save(update_fields=['use'])
+        new_ident, _ = Identifier.objects.get_or_create(
+            system=SYSTEM_IDENTIFIER_BOLTON_RECORD,
+            value=new_value,
+            defaults={'use': 'official'},
+        )
+        if new_ident.use != 'official':
+            new_ident.use = 'official'
+            new_ident.save(update_fields=['use'])
+        self.identifiers.add(new_ident)
 
 
 

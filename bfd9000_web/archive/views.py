@@ -9,7 +9,7 @@ import os
 from typing import Any, Dict, List, Optional, Type
 
 from PIL import Image
-from rest_framework import viewsets, serializers
+from rest_framework import viewsets, serializers, filters
 from rest_framework.decorators import action
 from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
@@ -278,6 +278,21 @@ class ArchiveLocationViewSet(viewsets.ModelViewSet):
     search_fields = ['assigned_id', 'digital_record__id', 'endpoint__name', 'endpoint__address']
 
 
+
+class BoltonRecordSearchFilter(filters.SearchFilter):
+    """SearchFilter subclass that applies .distinct() only when a search query is active.
+
+    Prevents duplicate rows from the identifiers M2M JOIN on non-search requests,
+    while ensuring correct results when searching via identifiers__value.
+    """
+
+    def filter_queryset(self, request, queryset, view):
+        search_terms = self.get_search_terms(request)
+        if search_terms:
+            queryset = queryset.distinct()
+        return super().filter_queryset(request, queryset, view)
+
+
 class PhysicalLocationViewSet(viewsets.ModelViewSet):
     """ViewSet for PhysicalLocation — archive storage slots."""
 
@@ -304,7 +319,8 @@ class PhysicalRecordViewSet(viewsets.ModelViewSet):
     )
     serializer_class = PhysicalRecordSerializer
     filterset_fields = ['encounter', 'record_type']
-    search_fields = ['^encounter__subject__identifiers__value']
+    filter_backends = [BoltonRecordSearchFilter, filters.OrderingFilter]
+    search_fields = ['^identifiers__value']
 
     def get_queryset(self) -> QuerySet:
         qs = super().get_queryset()
@@ -338,7 +354,8 @@ class DigitalRecordViewSet(viewsets.ModelViewSet):
     )
     serializer_class = DigitalRecordSerializer
     filterset_class = DigitalRecordFilter
-    search_fields = ['^series__imaging_study__encounter__subject__identifiers__value']
+    filter_backends = [BoltonRecordSearchFilter, filters.OrderingFilter]
+    search_fields = ['^identifiers__value']
 
     def get_serializer_class(self) -> Type[serializers.Serializer]:
         if self.action == 'create':

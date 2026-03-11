@@ -355,36 +355,8 @@ class PhysicalRecordSerializer(serializers.ModelSerializer):
         return _get_preferred_identifier(subject.identifiers.all())
 
     def get_identifier_str(self, obj: PhysicalRecord) -> str:
-        """
-        Return the Bolton-style physical record display identifier:
-            <subject_identifier><record_type_code><sex_code><age_years_months><seq:02d>
-        Example: R001PHF08y06m01
-        Returns empty string if key data is missing.
-        """
-        encounter = getattr(obj, 'encounter', None)
-        if not encounter:
-            return ''
-        subject = getattr(encounter, 'subject', None)
-        if not subject:
-            return ''
-
-        identifier: str = _get_preferred_identifier(subject.identifiers.all()) or ''
-        rt_code: str = obj.record_type.code if obj.record_type else ''
-
-        sex_map: Dict[str, str] = {'male': 'M', 'female': 'F', 'other': 'O', 'unknown': 'U'}
-        sex: str = sex_map.get(subject.gender, 'U')
-
-        age_years: Optional[float] = _compute_age_years(encounter, subject)
-        if age_years is not None:
-            total_months: int = int(round(age_years * 12))
-            years: int = total_months // 12
-            months: int = total_months % 12
-            age_str: str = f"{years:02d}y{months:02d}m"
-        else:
-            age_str = ''
-
-        seq: int = obj.sequence_number or 1
-        return f"{identifier}{rt_code}{sex}{age_str}{seq:02d}"
+        """Return the Bolton-style record identifier. Delegates to the model property."""
+        return obj.bolton_record_id
 
     def get_age_at_encounter(self, obj: PhysicalRecord) -> Optional[float]:
         encounter = getattr(obj, 'encounter', None)
@@ -438,36 +410,8 @@ class DigitalRecordSerializer(serializers.ModelSerializer):
         return _compute_age_years(encounter, subject)
 
     def get_identifier_str(self, obj: DigitalRecord) -> str:
-        """
-        Return the Bolton-style record display identifier:
-            <subject_identifier><record_type_code><sex_code><age_years_months><seq:02d>
-        Example: R001PHF08y06m01
-        Returns empty string if key data is missing.
-        """
-        encounter = getattr(obj.series.imaging_study, 'encounter', None)
-        if not encounter:
-            return ''
-        subject = getattr(encounter, 'subject', None)
-        if not subject:
-            return ''
-
-        identifier: str = _get_preferred_identifier(subject.identifiers.all()) or ''
-        rt_code: str = obj.record_type.code if obj.record_type else ''
-
-        sex_map: Dict[str, str] = {'male': 'M', 'female': 'F', 'other': 'O', 'unknown': 'U'}
-        sex: str = sex_map.get(subject.gender, 'U')
-
-        age_years: Optional[float] = _compute_age_years(encounter, subject)
-        if age_years is not None:
-            total_months: int = int(round(age_years * 12))
-            years: int = total_months // 12
-            months: int = total_months % 12
-            age_str: str = f"{years:02d}y{months:02d}m"
-        else:
-            age_str = ''
-
-        seq: int = obj.sequence_number or 1
-        return f"{identifier}{rt_code}{sex}{age_str}{seq:02d}"
+        """Return the Bolton-style record identifier. Delegates to the model property."""
+        return obj.bolton_record_id
 
     def get_subject_identifier(self, obj) -> Optional[str]:
         encounter = getattr(obj.series.imaging_study, 'encounter', None)

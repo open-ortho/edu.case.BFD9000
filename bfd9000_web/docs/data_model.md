@@ -299,11 +299,27 @@ Additional rules:
 
 For planning: 500k thumbnails at ~20 KB is roughly 10 GB total.
 
-## Record display identifier (`identifier_str`)
+## Record display identifier (`identifier_str` / Bolton record ID)
 
 Each Collection has a specific Subject identifier. The BBGSC has devised, over the years, a schema to produce a unique identifier for each record, which can be computed from subject id, encounter age, gender and record type.
 
-`identifier_str` is a computed, read-only field returned by the `DigitalRecord` API serializer. It is **not stored** in the database and is **not** one of the `identifiers` M2M entries on `Subject` or `DigitalRecord`.
+`identifier_str` is a computed, read-only field returned by both the `PhysicalRecord` and `DigitalRecord` API serializers. It is produced by the `bolton_record_id` model property (defined in `models.py`).
+
+The computed value is **also persisted** as a stored `Identifier` entry on the `identifiers` M2M field of both `PhysicalRecord` and `DigitalRecord`, using the system URL:
+
+```
+https://orthodontics.case.edu/fhir/identifier-system/bolton-record-id
+```
+
+(`SYSTEM_IDENTIFIER_BOLTON_RECORD` in `constants.py`)
+
+This stored identifier is assigned automatically on `save()` and enables database-level search (e.g. `?search=r011l` on the records API). The `identifier_str` serializer field continues to return the computed value for UI display and download filenames.
+
+**Lifecycle:**
+- On first save (when sequence number is assigned and all required data is present): an `Identifier` with `use='official'` is created and attached.
+- On subsequent saves where the computed value has changed (e.g. encounter date corrected): the old `Identifier` entry is updated to `use='old'` (kept for historical reference), and a new `use='official'` entry is created and attached.
+- Identifiers with `use='old'` are excluded from search.
+- If required data is missing (no subject identifier, no record type), no stored identifier is assigned.
 
 ### Schema
 
@@ -337,14 +353,16 @@ B001LM01
 
 - **UI display**: shown in the records list as the human-readable label for each record button (fallback to `record.id` if absent).
 - **Download filenames**: the download button in `record_detail.html` uses `identifier_str` as the base filename (e.g. `B001LM08y06m.png`).
-- **Not for linking**: do not use `identifier_str` as a stable identifier for API queries, foreign keys, or external system integration. Use the integer PK or a stored `Identifier` entry for that purpose.
+- **API search**: the stored Bolton record ID (`identifiers__value`) enables `?search=r011l` on the `/api/records/` and `/api/physical-records/` endpoints.
+- **Not for foreign keys**: do not use `identifier_str` as a stable FK or external-system integration key. Use the integer PK for that purpose.
 
 ### Critical distinction
 
-`identifier_str` differs from the stored `identifiers` (M2M `Identifier` objects on `Subject` and `DigitalRecord`):
+`identifier_str` (the serializer field) and the stored `identifiers` M2M entries are related but different:
 
-- `identifiers` are persistent, typed, system-scoped references (e.g. DICOM UIDs, Bolton IDs).
-- `identifier_str` is a transient display string assembled at serialization time for human-readable labelling and file naming only.
+- The **stored Bolton record ID** (`Identifier` with `system=SYSTEM_IDENTIFIER_BOLTON_RECORD`) is a persistent, database-searchable entry, auto-assigned on `save()`.
+- `identifier_str` (the serializer field) returns the same value computed at serialization time — it reads from `bolton_record_id` model property, which recomputes live from related fields rather than reading the stored identifier.
+- Other `identifiers` entries (DICOM UIDs, subject Bolton IDs, etc.) remain unchanged.
 
 ## API and UI implications
 
