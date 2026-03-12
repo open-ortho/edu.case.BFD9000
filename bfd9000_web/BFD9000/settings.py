@@ -10,19 +10,31 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import logging
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
+
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get(
     'SECRET_KEY', 'django-insecure-+6m#s88j*)qb+a%2s%cw31e2k04um&*a-fk!jgcpl3849(w4sm')
+
+# Box.com Configuration
+BOX_DEVELOPER_TOKEN = os.environ.get('BOX_DEVELOPER_TOKEN')
+BOX_JWT_CONFIG_FILE = os.environ.get('BOX_JWT_CONFIG_FILE')
+BOX_FOLDER_ID = os.environ.get('BOX_FOLDER_ID')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
@@ -242,8 +254,63 @@ CSRF_TRUSTED_ORIGINS: list[str] = [o.strip() for o in _csrf_trusted.split(',') i
 
 SCANNER_API_BASE = os.environ.get('SCANNER_API_BASE', 'http://localhost:5000')
 SCANNER_DEVICE_ID = os.environ.get('SCANNER_DEVICE_ID', 'scanner-001')
-BFD9020_BASE_URL = os.environ.get(
-    'BFD9020_BASE_URL', 'https://wingate.case.edu/bfd9020')
+BFD9020_BASE_URL = os.environ.get('BFD9020_BASE_URL', 'https://wingate.case.edu/bfd9020')
+
+# Logging Configuration
+class PrettyFormatter(logging.Formatter):
+    """A custom formatter to add color to stdout log records."""
+
+    GRAY = "\x1b[90m"
+    YELLOW = "\x1b[33;21m"
+    RED = "\x1b[31;21m"
+    BOLD_RED = "\x1b[31;1m"
+    RESET = "\x1b[0m"
+
+    # Define a different format for each level
+    FORMATS = {
+        logging.DEBUG: f"{GRAY}%(asctime)s {GRAY}DEBUG {GRAY}%(name)s: {RESET}%(message)s",
+        logging.INFO: f"{GRAY}%(asctime)s {RESET}INFO  {GRAY}%(name)s: {RESET}%(message)s",
+        logging.WARNING: f"{GRAY}%(asctime)s {YELLOW}WARN  {GRAY}%(name)s: {RESET}%(message)s",
+        logging.ERROR: f"{GRAY}%(asctime)s {RED}ERROR {GRAY}%(name)s: {RESET}%(message)s",
+        logging.CRITICAL: f"{GRAY}%(asctime)s {BOLD_RED}CRIT  {GRAY}%(name)s: {RESET}%(message)s"
+    }
+
+    def format(self, record):
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'pretty': {
+            '()': PrettyFormatter,
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'pretty',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'archive': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+}
 
 # Thumbnail generation policy (staging and UI previews)
 THUMBNAIL_MAX_WIDTH = int(os.environ.get('THUMBNAIL_MAX_WIDTH', '300'))
