@@ -9,6 +9,8 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import BaseCommand, CommandError, call_command
 
+from archive.constants import VALUESET_EXPAND_URLS
+
 
 class Command(BaseCommand):
     """Run migrate, create superuser, and import seed subject datasets."""
@@ -43,7 +45,7 @@ class Command(BaseCommand):
 
         parser.add_argument(
             "--import-source",
-            choices=["all", "bolton", "lancaster"],
+            choices=["all", "bolton", "lancaster", "richardson"],
             default="all",
             help="Which dataset importer(s) to run",
         )
@@ -56,6 +58,11 @@ class Command(BaseCommand):
             "--lancaster-file",
             default=str(settings.BASE_DIR / "docs" / "collections_data" / "LancasterDemographic.csv"),
             help="Path to LancasterDemographic.csv",
+        )
+        parser.add_argument(
+            "--richardson-file",
+            default=str(settings.BASE_DIR / "docs" / "collections_data" / "Richardson Collectionv3.xlsx"),
+            help="Path to 'Richardson Collectionv3.xlsx'",
         )
         parser.add_argument(
             "--include-names",
@@ -74,6 +81,17 @@ class Command(BaseCommand):
         if not options["skip_migrate"]:
             self.stdout.write(self.style.NOTICE("Running migrate..."))
             call_command("migrate", verbosity=verbosity)
+
+            self.stdout.write(self.style.NOTICE("Importing all valuesets..."))
+            try:
+                call_command(
+                    "import_valuesets",
+                    "--all",
+                    verbosity=verbosity,
+                )
+            except Exception as exc:
+                import warnings
+                self.stdout.write(self.style.WARNING(f"WARNING: import_valuesets --all failed: {exc}"))
 
         if not options["skip_superuser"]:
             self._run_createsuperuser(options, verbosity)
@@ -150,6 +168,17 @@ class Command(BaseCommand):
                 "import_subjects",
                 "lancaster",
                 file=str(lancaster_file),
+                include_names=include_names,
+                verbosity=verbosity,
+            )
+
+        if source in ("all", "richardson"):
+            richardson_file = Path(options["richardson_file"]).expanduser().resolve()
+            self.stdout.write(self.style.NOTICE(f"Importing Richardson collection from {richardson_file}..."))
+            call_command(
+                "import_subjects",
+                "richardson",
+                file=str(richardson_file),
                 include_names=include_names,
                 verbosity=verbosity,
             )

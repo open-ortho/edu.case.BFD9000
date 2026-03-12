@@ -125,14 +125,6 @@ class BoltonImporter(BaseImporter):
             raise CommandError(f"Missing required columns: {', '.join(missing)}")
         return {name: normalized.index(name) for name in required}
 
-    def _build_class_codes(self) -> Dict[str, Optional[str]]:
-        return {
-            "Class I": "248292005",
-            "Class II": "248293000",
-            "Class III": "248294006",
-            "NULL": None,
-        }
-
     def _load_coding_cache(self) -> Dict[Tuple[str, str], Coding]:
         skeletal_system = "http://snomed.info/sct"
         race_system = "urn:oid:2.16.840.1.113883.6.238"
@@ -313,21 +305,6 @@ class BoltonImporter(BaseImporter):
                     procedure_code=procedure_code,
                 )
                 stats.encounters_created += 1
-
-    def _resolve_skeletal_pattern(
-        self,
-        angle_class: str,
-        class_codes: Dict[str, Optional[str]],
-        coding_cache: Dict[Tuple[str, str], Coding],
-    ) -> Optional[Coding]:
-        if not angle_class:
-            return None
-        normalized = angle_class.strip()
-        code = class_codes.get(normalized)
-        if not code:
-            return None
-        system = "http://snomed.info/sct"
-        return coding_cache.get((system, code))
 
     def _resolve_race(self, value, coding_cache: Dict[Tuple[str, str], Coding]) -> Optional[Coding]:
         race_map = {

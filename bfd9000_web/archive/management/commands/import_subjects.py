@@ -9,6 +9,7 @@ from django.core.management.base import BaseCommand, CommandError
 from archive.constants import SYSTEM_IDENTIFIER_LANCASTER_SUBJECT
 from archive.management.importers.bolton import BoltonImporter
 from archive.management.importers.lancaster import LancasterImporter
+from archive.management.importers.richardson import RichardsonImporter
 
 
 class Command(BaseCommand):
@@ -88,6 +89,26 @@ class Command(BaseCommand):
             help="Collection full name for Lancaster dataset",
         )
 
+        richardson = subparsers.add_parser("richardson", help="Import Richardson subjects and physical records")
+        richardson.add_argument(
+            "--file",
+            default=str(
+                Path(__file__).resolve().parents[4]
+                / "docs" / "collections_data" / "Richardson Collectionv3.xlsx"
+            ),
+            help="Path to 'Richardson Collectionv3.xlsx'",
+        )
+        richardson.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Parse and validate without writing to the database",
+        )
+        richardson.add_argument(
+            "--include-names",
+            action="store_true",
+            help="Populate first/last names when available (PHI — use with caution)",
+        )
+
     def handle(self, *args, **options) -> None:
         source = options.get("source")
         if source == "bolton":
@@ -113,6 +134,16 @@ class Command(BaseCommand):
                 identifier_system=options["identifier_system"],
                 collection_short_name=options["collection_short_name"],
                 collection_full_name=options["collection_full_name"],
+            )
+            importer.run(Path(options["file"]).expanduser().resolve())
+            return
+
+        if source == "richardson":
+            importer = RichardsonImporter(
+                dry_run=options["dry_run"],
+                include_names=options["include_names"],
+                stdout=self.stdout,
+                stderr=self.stderr,
             )
             importer.run(Path(options["file"]).expanduser().resolve())
             return

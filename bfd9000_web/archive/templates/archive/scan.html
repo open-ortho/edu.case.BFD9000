@@ -7,45 +7,68 @@
         <div class="card-body">
             <h2 class="card-title text-lg">Subject & Encounter</h2>
             <div class="grid grid-cols-1 gap-4">
-                <!-- Subject Selection -->
-                <div class="form-control flex flex-row items-center">
-                    <div class="join mr-4">
+
+                <!-- Subject Search Row -->
+                <div class="form-control flex flex-row items-center gap-4 flex-wrap">
+                    <div class="min-w-64">
                         <input
                             type="text"
                             id="subject-id"
-                            placeholder="Enter official subject ID..."
-                            class="input input-bordered input-sm join-item flex-1"
+                            placeholder="Search subject ID..."
+                            autocomplete="off"
+                            class="input input-bordered input-sm w-full"
                         />
-                        <button id="search-subject" class="btn btn-sm btn-primary join-item">
-                            Search
-                        </button>
                     </div>
-                    <div id="subject-info" class="text-sm text-base-content/70 hidden !mt-0">
-                        <div class="alert alert-info !p-1">
-                            <strong>Subject ID:</strong> <span id="subject-official-id"></span>
+                    <div id="subject-info" class="text-sm text-base-content/70 hidden">
+                        <div class="alert alert-info !p-1 gap-2">
+                            <strong>ID:</strong> <span id="subject-official-id"></span>
                             <strong>Collection:</strong> <span id="subject-collection"></span>
                             <strong>Sex:</strong> <span id="subject-sex"></span>
                             <strong>Encounters:</strong> <span id="subject-encounters"></span>
                         </div>
                     </div>
-                    <div id="subject-error" class="mt-2 text-sm text-error hidden"></div>
+                    <div id="subject-error" class="text-sm text-error hidden"></div>
+                </div>
+
+                <!-- Physical Record Selection (shown when subject has physical records) -->
+                <div id="physical-record-row" class="form-control flex flex-row items-center gap-4 flex-wrap hidden">
+                    <div class="min-w-64">
+                        <select id="physical-record-select" class="select select-bordered select-sm w-full" disabled>
+                            <option value="">Select subject first...</option>
+                        </select>
+                    </div>
+                    <div id="physical-record-info" class="text-sm text-base-content/70 hidden">
+                        <div class="alert alert-info !p-1 gap-2">
+                            <strong>ID:</strong> <span id="physical-record-identifier-str"></span>
+                        </div>
+                    </div>
+                    <div id="physical-record-error" class="text-sm text-error hidden"></div>
+                </div>
+
+                <!-- Encounter Override (shown only when physical records exist) -->
+                <div id="encounter-override-row" class="form-control hidden">
+                    <label class="label cursor-pointer justify-start gap-3">
+                        <input type="checkbox" id="encounter-override-checkbox" class="checkbox checkbox-sm" />
+                        <span class="label-text text-sm text-base-content/70">Override: select encounter manually instead</span>
+                    </label>
                 </div>
 
                 <!-- Encounter Selection -->
-                <div class="form-control flex flex-row items-center">
-                    <div class="mr-4 min-w-64">
+                <div class="form-control flex flex-row items-center gap-4 flex-wrap">
+                    <div class="min-w-64">
                         <select id="encounter-select" class="select select-bordered select-sm w-full" disabled>
                             <option value="">Select subject first...</option>
                         </select>
                     </div>
-                    <div id="encounter-info" class="text-sm text-base-content/70 hidden !mt-0">
-                        <div class="alert alert-info !p-1">
+                    <div id="encounter-info" class="text-sm text-base-content/70 hidden">
+                        <div class="alert alert-info !p-1 gap-2">
                             <strong>Age:</strong> <span id="encounter-age"></span>
                             <strong>Records:</strong> <span id="encounter-records"></span>
                         </div>
                     </div>
                     <div id="encounter-error" class="text-sm text-error hidden"></div>
                 </div>
+
             </div>
         </div>
     </div>
@@ -143,17 +166,7 @@
                         <label class="label">
                             <span class="label-text">Record Type <span class="text-error">*</span></span>
                         </label>
-                        <select id="record-type" class="select select-bordered select-sm">
-                            <option value="">Loading...</option>
-                        </select>
-                    </div>
-
-                    <!-- Modality -->
-                    <div class="form-control">
-                        <label class="label">
-                            <span class="label-text">Modality <span class="text-error">*</span></span>
-                        </label>
-                        <select id="modality" class="select select-bordered select-sm">
+                        <select id="record-type" class="select select-bordered select-sm font-mono">
                             <option value="">Loading...</option>
                         </select>
                     </div>
@@ -241,17 +254,16 @@
     // ========================================
     const state = {
         subject: null,
+        physicalRecord: null,
         encounter: null,
         file: null,
         previewFile: null,
         aiFile: null,
         requiresServerTransform: false,
         transformOps: [],
-        aiImageTypeCode: null,
-        aiPatientOrientation: null,
+        device: null,
         valuesets: {
             record_types: [],
-            modalities: []
         }
     };
     const defaultOperatorDisplay = "{{ operator_display|default:''|escapejs }}";
@@ -296,6 +308,15 @@
         return data.results || [];
     }
 
+    async function fetchPhysicalRecordsForSubject(subjectId) {
+        const response = await fetch((window.script_name || '') + `/api/subjects/${subjectId}/physical-records/`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch physical records: ${response.status}`);
+        }
+        const data = await response.json();
+        return data.results || [];
+    }
+
     async function fetchValueset(type) {
         const response = await fetch((window.script_name || '') + `/api/valuesets/?type=${type}`);
         if (!response.ok) {
@@ -306,8 +327,26 @@
 
     async function createRecord(encounterId, formData) {
         const csrftoken = getCsrfToken();
-        
+
         const response = await fetch((window.script_name || '') + `/api/encounters/${encounterId}/records/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken
+            },
+            body: formData
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            console.error('Record creation failed:', error);
+            throw new Error(error.error?.message || JSON.stringify(error) || `API error: ${response.status}`);
+        }
+        return await response.json();
+    }
+
+    async function createRecordViaPhysicalRecord(physicalRecordId, formData) {
+        const csrftoken = getCsrfToken();
+        formData.append('physical_record', physicalRecordId);
+        const response = await fetch((window.script_name || '') + `/api/records/`, {
             method: 'POST',
             headers: {
                 'X-CSRFToken': csrftoken
@@ -390,7 +429,12 @@
         const r = await resp2.json();
         console.log(r);
 
-        return result;
+        return {
+            ...result,
+            class_code: r.code,
+            class_prediction: r.prediction,
+            class_probability: r.probability,
+        };
     }
 
     async function performScannerScan() {
@@ -428,6 +472,20 @@
             const binary = binaryEntry.resource;
             const contentType = binary.contentType || 'image/png';
             const file = binaryToFile(binary.data, contentType, 'scanner');
+
+            // Fetch device info at scan time to guarantee we capture the actual scanner used
+            try {
+                const device = await fetchScannerDeviceInfo();
+                state.device = {
+                    serial: device.serialNumber || '',
+                    manufacturer: device.manufacturer || '',
+                    model: device.modelNumber || '',
+                };
+            } catch (deviceError) {
+                console.warn('Could not fetch device info at scan time:', deviceError);
+                state.device = null;
+            }
+
             applyScannedFile(file);
             showScanStatus('Scan completed');
         } catch (error) {
@@ -560,8 +618,14 @@
             const device = await fetchScannerDeviceInfo();
             const model = device.modelNumber || device.deviceName?.[0]?.name || 'Unknown model';
             document.getElementById('scanner-model').textContent = model;
+            state.device = {
+                serial: device.serialNumber || '',
+                manufacturer: device.manufacturer || '',
+                model: device.modelNumber || '',
+            };
         } catch (error) {
             document.getElementById('scanner-model').textContent = 'Scanner not connected';
+            state.device = null;
         }
     }
 
@@ -577,42 +641,15 @@
         return new File([blob], `${baseName}.${ext}`, { type: contentType });
     }
 
-    function applyScannedFile(file) {
+    async function applyScannedFile(file) {
         state.file = file;
-        state.previewFile = file;
-        state.aiFile = file;
         state.requiresServerTransform = false;
         state.transformOps = [];
-        state.aiImageTypeCode = null;
-        state.aiPatientOrientation = null;
-        showFilePreview(file, file);
+        const resized = await resizeImage(file);
+        state.aiFile = resized;
+        state.previewFile = resized;
+        showFilePreview(state.file, state.previewFile);
         updateSubmitButton();
-    }
-
-    function mapAIType(typePrediction) {
-        const mapping = {
-            'Lateral': {
-                recordType: '201456002',
-                imageType: 'L',
-                patientOrientation: ['A', 'F'],
-            },
-            'Hip & Pelvis': {
-                recordType: '268425006',
-                imageType: 'P',
-                patientOrientation: null,
-            },
-            'Foot & Ankle': {
-                recordType: '1597004',
-                imageType: 'FA',
-                patientOrientation: null,
-            },
-            'Hand & Wrist': {
-                recordType: '39714003',
-                imageType: 'H',
-                patientOrientation: null,
-            },
-        };
-        return mapping[typePrediction] || null;
     }
 
     // ========================================
@@ -647,6 +684,39 @@
         document.getElementById('encounter-info').classList.add('hidden');
     }
 
+    function populatePhysicalRecordSelect(physicalRecords) {
+        const select = document.getElementById('physical-record-select');
+        select.innerHTML = '';
+
+        if (physicalRecords.length === 0) {
+            select.innerHTML = '<option value="">No physical records found</option>';
+            select.disabled = true;
+            return;
+        }
+
+        // Sort by age ascending (null ages go last)
+        const sorted = [...physicalRecords].sort((a, b) => {
+            const ageA = a.age_at_encounter ?? Infinity;
+            const ageB = b.age_at_encounter ?? Infinity;
+            return ageA - ageB;
+        });
+
+        select.innerHTML = '<option value="">Select physical record...</option>';
+        sorted.forEach(pr => {
+            const option = document.createElement('option');
+            option.value = pr.id;
+            const identifierStr = pr.identifier_str || '';
+            const typeCode = pr.record_type?.code || pr.record_type || '';
+            const typeDisplay = pr.record_type?.display || typeCode || '?';
+            const ageText = formatAge(pr.age_at_encounter);
+            option.textContent = `${ageText} \u2013 ${typeDisplay}`;
+            option.dataset.identifierStr = identifierStr;
+            option.dataset.recordTypeCode = typeCode;
+            select.appendChild(option);
+        });
+        select.disabled = false;
+    }
+
     function populateEncounterSelect(encounters) {
         const select = document.getElementById('encounter-select');
         select.innerHTML = '';
@@ -663,7 +733,7 @@
             option.value = enc.id;
             const age = formatAge(enc.age_at_encounter, enc.actual_period_start_precision, enc.actual_period_start_uncertain);
             const records = enc.record_count ? `${enc.record_count} records` : '0 records';
-            option.textContent = `Encounter ${enc.id} - ${age} - ${records}`;
+            option.textContent = `${age} \u2013 ${records}`;
             select.appendChild(option);
         });
         select.disabled = false;
@@ -695,17 +765,21 @@
     function populateSelect(selectId, options) {
         const select = document.getElementById(selectId);
         select.innerHTML = '<option value="">Select...</option>';
+        const maxCodeLength = Math.max(
+            1,
+            ...options.map(opt => String(opt.id || '').length)
+        );
         options.forEach(opt => {
             const option = document.createElement('option');
             option.value = opt.id;
-            option.textContent = opt.display;
+            const code = String(opt.id || '').padEnd(maxCodeLength, ' ');
+            option.textContent = `[${code}] - ${opt.display}`;
             select.appendChild(option);
         });
     }
 
     function clearFormFields() {
         document.getElementById('record-type').value = '';
-        document.getElementById('modality').value = '';
         document.getElementById('operator').value = defaultOperatorDisplay;
         // Reset acquisition date to today
         document.getElementById('acquisition-date').valueAsDate = new Date();
@@ -716,11 +790,11 @@
     function updateSubmitButton() {
         const hasSubject = state.subject !== null;
         const hasEncounter = state.encounter !== null;
+        const hasPhysicalRecord = state.physicalRecord !== null;
         const hasFile = state.file !== null;
         const hasRecordType = document.getElementById('record-type').value !== '';
-        const hasModality = document.getElementById('modality').value !== '';
 
-        const canSubmit = hasSubject && hasEncounter && hasFile && hasRecordType && hasModality;
+        const canSubmit = hasSubject && (hasEncounter || hasPhysicalRecord) && hasFile && hasRecordType;
         document.getElementById('submit-button').disabled = !canSubmit;
 
         // Update AI and image manipulation buttons (need file and must be PNG)
@@ -736,7 +810,7 @@
         statusDiv.className = `alert ${isError ? 'alert-error' : 'alert-success'} py-2 px-3`;
         statusDiv.textContent = message;
         statusDiv.classList.remove('hidden');
-        setTimeout(() => statusDiv.classList.add('hidden'), 3000);
+        setTimeout(() => statusDiv.classList.add('hidden'), 8000);
     }
 
     function showSubmitStatus(message, isError = false) {
@@ -792,8 +866,102 @@
     // ========================================
     // IMAGE MANIPULATION FUNCTIONS
     // ========================================
-    
-    // modify image by rotating / flipping
+
+    /**
+     * Resize an image file to fit within maxWidth x maxHeight, preserving aspect ratio.
+     * Returns a new PNG File. If the image already fits, returns the original file unchanged.
+     * Always outputs image/png.
+     */
+    async function resizeImage(file, maxWidth = 800, maxHeight = 600) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const url = URL.createObjectURL(file);
+            img.onload = () => {
+                URL.revokeObjectURL(url);
+                if (img.width <= maxWidth && img.height <= maxHeight) {
+                    resolve(file);
+                    return;
+                }
+                const ratio = Math.min(maxWidth / img.width, maxHeight / img.height);
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(img.width * ratio);
+                canvas.height = Math.round(img.height * ratio);
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        resolve(new File([blob], file.name, { type: 'image/png' }));
+                    } else {
+                        reject(new Error('resizeImage: canvas.toBlob failed'));
+                    }
+                }, 'image/png');
+            };
+            img.onerror = () => {
+                URL.revokeObjectURL(url);
+                reject(new Error('resizeImage: failed to load image'));
+            };
+            img.src = url;
+        });
+    }
+
+    // Apply all current transformOps to state.aiFile to re-render state.previewFile.
+    // base: the clean untransformed image to start from (defaults to state.aiFile)
+    async function applyTransformOpsToPreview(base) {
+        base = base || state.aiFile;
+        if (!base) return;
+
+        let currentFile = base;
+
+        for (const op of state.transformOps) {
+            currentFile = await new Promise((resolve, reject) => {
+                const img = new Image();
+                const url = URL.createObjectURL(currentFile);
+                img.onload = () => {
+                    URL.revokeObjectURL(url);
+                    const degrees = op.rotation || 0;
+                    const flip = op.flip || false;
+                    const radians = (degrees * Math.PI) / 180;
+
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+
+                    if (Math.abs(degrees) === 90 || Math.abs(degrees) === 270) {
+                        canvas.width = img.height;
+                        canvas.height = img.width;
+                    } else {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                    }
+
+                    ctx.save();
+                    ctx.translate(canvas.width / 2, canvas.height / 2);
+                    ctx.rotate(radians);
+                    if (flip) {
+                        ctx.scale(-1, 1);
+                    }
+                    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+                    ctx.restore();
+
+                    canvas.toBlob((blob) => {
+                        if (blob) {
+                            resolve(new File([blob], 'preview.png', { type: 'image/png' }));
+                        } else {
+                            reject(new Error('applyTransformOpsToPreview: canvas.toBlob failed'));
+                        }
+                    }, 'image/png');
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    reject(new Error('applyTransformOpsToPreview: failed to load image'));
+                };
+                img.src = url;
+            });
+        }
+
+        state.previewFile = currentFile;
+        showFilePreview(state.file, state.previewFile);
+    }
+
+    // modify image by rotating / flipping: appends one op and re-renders preview
     async function modifyImage(degrees, flip = false) {
         if (!state.aiFile) return;
 
@@ -802,55 +970,119 @@
             flip: !!flip,
         });
 
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
+        await applyTransformOpsToPreview();
+    }
 
-        return new Promise((resolve, reject) => {
-            img.onload = () => {
-                // For 90 or -90 degree rotation, swap width and height
-                const radians = (degrees * Math.PI) / 180;
+    // ========================================
+    // SUBJECT LIVE-SEARCH DROPDOWN
+    // ========================================
 
-                if (Math.abs(degrees) === 90 || Math.abs(degrees) === 270) {
-                    canvas.width = img.height;
-                    canvas.height = img.width;
-                } else {
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                }
+    let _subjectSearchTimer = null;
+    let _subjectDropdownIndex = -1; // currently highlighted item index
 
-                // Clear canvas
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+    function _getSubjectDropdown() {
+        return document.getElementById('subject-dropdown');
+    }
 
-                // Move to center of canvas, rotate, then draw image centered
-                ctx.save();
-                ctx.translate(canvas.width / 2, canvas.height / 2);
-                ctx.rotate(radians);
-                if (flip) {
-                    ctx.scale(-1, 1);
-                }
-                ctx.drawImage(img, -img.width / 2, -img.height / 2);
-                ctx.restore();
+    function _getDropdownItems() {
+        return Array.from(_getSubjectDropdown().querySelectorAll('li.dd-item'));
+    }
 
-                canvas.toBlob((blob) => {
-                    if (blob) {
-                        const newFile = new File([blob], 'preview.png', { type: 'image/png' });
-                        state.previewFile = newFile;
-                        state.aiFile = newFile;
-                        if (state.file && state.file.type === 'image/png') {
-                            state.file = newFile;
-                        }
-                        showFilePreview(state.file, state.previewFile);
-                        resolve();
-                    } else {
-                        reject(new Error('Failed to create rotated image'));
-                    }
-                }, 'image/png');
-            };
+    function _positionDropdown() {
+        const input = document.getElementById('subject-id');
+        const dd = _getSubjectDropdown();
+        const rect = input.getBoundingClientRect();
+        dd.style.top = `${rect.bottom + window.scrollY}px`;
+        dd.style.left = `${rect.left + window.scrollX}px`;
+        dd.style.width = `${rect.width}px`;
+    }
 
-            img.onerror = () => reject(new Error('Failed to load image'));
-            img.src = URL.createObjectURL(state.aiFile);
+    function _highlightItem(index) {
+        const items = _getDropdownItems();
+        _subjectDropdownIndex = Math.max(-1, Math.min(index, items.length - 1));
+        items.forEach((li, i) => {
+            if (i === _subjectDropdownIndex) {
+                li.classList.add('bg-base-200');
+                li.scrollIntoView({ block: 'nearest' });
+            } else {
+                li.classList.remove('bg-base-200');
+            }
         });
+    }
+
+    function closeSubjectDropdown() {
+        const dd = _getSubjectDropdown();
+        dd.innerHTML = '';
+        dd.classList.add('hidden');
+        _subjectDropdownIndex = -1;
+    }
+
+    async function handleSubjectInput() {
+        clearTimeout(_subjectSearchTimer);
+        const query = document.getElementById('subject-id').value.trim();
+
+        if (!query) {
+            closeSubjectDropdown();
+            // If subject was previously selected and user cleared input, reset state
+            if (state.subject) {
+                state.subject = null;
+                state.physicalRecord = null;
+                state.encounter = null;
+                document.getElementById('subject-info').classList.add('hidden');
+                document.getElementById('physical-record-row').classList.add('hidden');
+                document.getElementById('encounter-override-row').classList.add('hidden');
+                const encounterSelect = document.getElementById('encounter-select');
+                encounterSelect.innerHTML = '<option value="">Select subject first...</option>';
+                encounterSelect.disabled = true;
+                updateSubmitButton();
+            }
+            return;
+        }
+
+        _subjectSearchTimer = setTimeout(async () => {
+            try {
+                const subjects = await searchSubjects(query);
+                const dd = _getSubjectDropdown();
+                dd.innerHTML = '';
+                _subjectDropdownIndex = -1;
+
+                if (subjects.length === 0) {
+                    const li = document.createElement('li');
+                    li.className = 'px-3 py-2 text-sm text-base-content/50';
+                    li.textContent = 'No results found';
+                    dd.appendChild(li);
+                    _positionDropdown();
+                    dd.classList.remove('hidden');
+                    return;
+                }
+
+                subjects.forEach(subject => {
+                    const li = document.createElement('li');
+                    li.className = 'dd-item px-3 py-2 text-sm cursor-pointer hover:bg-base-200 flex gap-4';
+                    const idStr = subject.subject_identifier || String(subject.id);
+                    const col = subject.collection || '-';
+                    const sex = subject.gender || '-';
+                    const enc = subject.encounter_count ?? 0;
+                    li.innerHTML = `<span class="font-mono font-semibold">${escapeHtml(idStr)}</span><span class="text-base-content/60">${escapeHtml(col)}</span><span class="text-base-content/60">${escapeHtml(sex)}</span><span class="text-base-content/60">${enc} enc</span>`;
+                    li.dataset.subjectJson = JSON.stringify(subject);
+                    li.addEventListener('mousedown', async (e) => {
+                        e.preventDefault(); // prevent input blur before click fires
+                        closeSubjectDropdown();
+                        try {
+                            await selectSubject(subject);
+                        } catch (error) {
+                            showSubjectError(error.message);
+                        }
+                    });
+                    dd.appendChild(li);
+                });
+
+                _positionDropdown();
+                dd.classList.remove('hidden');
+            } catch (error) {
+                closeSubjectDropdown();
+            }
+        }, 250);
     }
 
     // ========================================
@@ -877,31 +1109,71 @@
             });
             const subject = exactMatch || subjects[0];
 
-            state.subject = subject;
-            showSubjectInfo(subject);
-
-            // Load encounters for this subject
-            const encounters = await fetchEncountersForSubject(subject.id);
-            populateEncounterSelect(encounters);
-
-            // Reset encounter selection
-            state.encounter = null;
-            document.getElementById('encounter-info').classList.add('hidden');
-            document.getElementById('encounter-error').classList.add('hidden');
-
-            updateSubmitButton();
+            await selectSubject(subject);
         } catch (error) {
             state.subject = null;
+            state.physicalRecord = null;
             state.encounter = null;
             showSubjectError(error.message);
 
-            // Reset encounter dropdown
-            const select = document.getElementById('encounter-select');
-            select.innerHTML = '<option value="">Select subject first...</option>';
-            select.disabled = true;
+            // Reset all dropdowns
+            const encounterSelect = document.getElementById('encounter-select');
+            encounterSelect.innerHTML = '<option value="">Select subject first...</option>';
+            encounterSelect.disabled = true;
+
+            const physicalRecordSelect = document.getElementById('physical-record-select');
+            physicalRecordSelect.innerHTML = '<option value="">Select subject first...</option>';
+            physicalRecordSelect.disabled = true;
+
+            document.getElementById('physical-record-row').classList.add('hidden');
+            document.getElementById('encounter-override-row').classList.add('hidden');
 
             updateSubmitButton();
         }
+    }
+
+    async function selectSubject(subject) {
+        state.subject = subject;
+        state.physicalRecord = null;
+        state.encounter = null;
+        showSubjectInfo(subject);
+
+        // Update input to show selected subject identifier
+        document.getElementById('subject-id').value = subject.subject_identifier || subject.id || '';
+
+        // Hide info/error areas
+        document.getElementById('encounter-info').classList.add('hidden');
+        document.getElementById('encounter-error').classList.add('hidden');
+        document.getElementById('physical-record-info').classList.add('hidden');
+        document.getElementById('physical-record-error').classList.add('hidden');
+
+        // Load physical records for this subject
+        const physicalRecords = await fetchPhysicalRecordsForSubject(subject.id);
+
+        if (physicalRecords.length > 0) {
+            // Physical records exist: show physical record dropdown, disable encounter, show override checkbox
+            populatePhysicalRecordSelect(physicalRecords);
+            document.getElementById('physical-record-row').classList.remove('hidden');
+            document.getElementById('encounter-override-row').classList.remove('hidden');
+            document.getElementById('encounter-override-checkbox').checked = false;
+
+            // Disable encounter dropdown — user must check override to use it
+            const encounterSelect = document.getElementById('encounter-select');
+            encounterSelect.innerHTML = '<option value="">Use physical record above...</option>';
+            encounterSelect.disabled = true;
+        } else {
+            // No physical records: hide physical record UI, load encounters directly
+            document.getElementById('physical-record-row').classList.add('hidden');
+            document.getElementById('encounter-override-row').classList.add('hidden');
+            const physicalRecordSelect = document.getElementById('physical-record-select');
+            physicalRecordSelect.innerHTML = '<option value="">No physical records found</option>';
+            physicalRecordSelect.disabled = true;
+
+            const encounters = await fetchEncountersForSubject(subject.id);
+            populateEncounterSelect(encounters);
+        }
+
+        updateSubmitButton();
     }
 
     async function handleEncounterSelect() {
@@ -926,6 +1198,96 @@
         }
     }
 
+    async function handlePhysicalRecordSelect() {
+        const select = document.getElementById('physical-record-select');
+        const physicalRecordId = select.value;
+
+        if (!physicalRecordId) {
+            state.physicalRecord = null;
+            document.getElementById('physical-record-info').classList.add('hidden');
+            document.getElementById('physical-record-error').classList.add('hidden');
+            updateSubmitButton();
+            return;
+        }
+
+        // Find in already-loaded list (we stored them on the select options)
+        const selectedOption = select.options[select.selectedIndex];
+        const identifierStr = selectedOption.dataset.identifierStr || '';
+        const recordTypeCode = selectedOption.dataset.recordTypeCode || '';
+
+        state.physicalRecord = {
+            id: parseInt(physicalRecordId, 10),
+            record_type_code: recordTypeCode,
+            identifier_str: identifierStr,
+        };
+
+        // Show physical record info
+        document.getElementById('physical-record-identifier-str').textContent = identifierStr || '-';
+        document.getElementById('physical-record-info').classList.remove('hidden');
+        document.getElementById('physical-record-error').classList.add('hidden');
+
+        // Auto-fill and lock record type
+        const recordTypeSelect = document.getElementById('record-type');
+        let matched = false;
+        for (const option of recordTypeSelect.options) {
+            if (option.value === recordTypeCode) {
+                recordTypeSelect.value = recordTypeCode;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched && recordTypeCode) {
+            // Try case-insensitive match
+            for (const option of recordTypeSelect.options) {
+                if (option.value.toLowerCase() === recordTypeCode.toLowerCase()) {
+                    recordTypeSelect.value = option.value;
+                    matched = true;
+                    break;
+                }
+            }
+        }
+        // Do NOT lock the record type — user may correct it; the correction will be
+        // propagated to the PhysicalRecord on submit.
+        recordTypeSelect.disabled = false;
+
+        updateSubmitButton();
+    }
+
+    async function handleEncounterOverrideChange() {
+        const checked = document.getElementById('encounter-override-checkbox').checked;
+        const encounterSelect = document.getElementById('encounter-select');
+
+        if (checked) {
+            // Override: clear physical record selection, load encounters, enable encounter dropdown
+            state.physicalRecord = null;
+            document.getElementById('physical-record-select').value = '';
+            document.getElementById('physical-record-info').classList.add('hidden');
+
+            // Unlock record type
+            document.getElementById('record-type').disabled = false;
+
+            if (state.subject) {
+                try {
+                    const encounters = await fetchEncountersForSubject(state.subject.id);
+                    populateEncounterSelect(encounters);
+                } catch (error) {
+                    encounterSelect.innerHTML = '<option value="">Failed to load encounters</option>';
+                    encounterSelect.disabled = true;
+                }
+            }
+            state.encounter = null;
+            document.getElementById('encounter-info').classList.add('hidden');
+        } else {
+            // Unchecked: go back to physical record mode
+            state.encounter = null;
+            encounterSelect.innerHTML = '<option value="">Use physical record above...</option>';
+            encounterSelect.disabled = true;
+            document.getElementById('encounter-info').classList.add('hidden');
+        }
+
+        updateSubmitButton();
+    }
+
     async function handleFileUpload(event) {
         const file = event.target.files[0];
         if (!file) {
@@ -934,8 +1296,6 @@
             state.aiFile = null;
             state.requiresServerTransform = false;
             state.transformOps = [];
-            state.aiImageTypeCode = null;
-            state.aiPatientOrientation = null;
             document.getElementById('file-preview').classList.add('hidden');
             clearFormFields();
             updateSubmitButton();
@@ -963,21 +1323,23 @@
             return;
         }
 
+        // Manual file upload — no scanner device associated
+        state.device = null;
         state.file = file;
         state.transformOps = [];
-        state.aiImageTypeCode = null;
-        state.aiPatientOrientation = null;
         if (ext === 'png') {
             state.requiresServerTransform = false;
-            state.previewFile = file;
-            state.aiFile = file;
+            const resized = await resizeImage(file);
+            state.aiFile = resized;
+            state.previewFile = resized;
             showFilePreview(file, state.previewFile);
         } else if (ext === 'tif' || ext === 'tiff') {
             state.requiresServerTransform = true;
             try {
                 const pngPreview = await convertTiffToPng(file);
-                state.previewFile = pngPreview;
-                state.aiFile = pngPreview;
+                const resized = await resizeImage(pngPreview);
+                state.aiFile = resized;
+                state.previewFile = resized;
                 showFilePreview(file, state.previewFile);
             } catch (error) {
                 state.previewFile = null;
@@ -1046,26 +1408,44 @@
         try {
             const result = await queryAI(state.aiFile);
 
-            // Map AI type_prediction to record_type select value
-            if (result.type_prediction) {
-                const mapped = mapAIType(result.type_prediction);
-                const recordTypeSelect = document.getElementById('record-type');
-                if (mapped && mapped.recordType) {
-                    recordTypeSelect.value = mapped.recordType;
-                    state.aiImageTypeCode = mapped.imageType;
-                    state.aiPatientOrientation = mapped.patientOrientation;
+            const recordTypeSelect = document.getElementById('record-type');
+            const aiCode = result.class_code || result.code;
+            if (aiCode) {
+                const option = state.valuesets.record_types.find(x => x.id === aiCode);
+                if (option) {
+                    recordTypeSelect.value = aiCode;
                 }
-            }
-            
-            if (result.flip || result.rotation) {
-                try {
-                    await modifyImage(result.rotation || 0, result.flip || false);
-                } catch (error) {
-                    alert('Failed to transform image: ' + error.message);
+            } else if (result.type_prediction) {
+                const option = state.valuesets.record_types.find(x => x.display === result.type_prediction);
+                if (option) {
+                    recordTypeSelect.value = option.id;
                 }
+            } else {
+                showAIStatus('AI classification failed: no valid code returned. Please classify manually.', true);
             }
 
-            showAIStatus(`Fields populated from AI analysis. Confidence: ${result.type_probability.toFixed(2)}`);
+            // Replace transformOps with AI result (do not append — AI resets orientation).
+            // Note: result.rotation can be 0 (falsy) but still valid, so check for null explicitly.
+            if (result.rotation !== null && result.rotation !== undefined) {
+                state.transformOps = [{
+                    rotation: result.rotation || 0,
+                    flip: result.flip || false,
+                }];
+            } else {
+                // AI returned no orientation data — reset transforms and show clean base
+                state.transformOps = [];
+            }
+            try {
+                await applyTransformOpsToPreview();
+            } catch (error) {
+                alert('Failed to transform image: ' + error.message);
+            }
+
+            const confidence = (result.class_probability ?? result.type_probability)?.toFixed(2) ?? 'N/A';
+            const classification = result.class_code || result.type_prediction || 'N/A';
+            const rotation = result.rotation !== null && result.rotation !== undefined ? `${result.rotation}°` : 'none';
+            const flip = result.flip ? 'yes' : 'no';
+            showAIStatus(`AI: class=${classification} conf=${confidence} rotation=${rotation} flip=${flip}`);
             updateSubmitButton();
         } catch (error) {
             showAIStatus('AI processing failed: ' + error.message, true);
@@ -1076,7 +1456,7 @@
     }
 
     async function handleSubmit() {
-        if (!state.encounter || !state.file) return;
+        if ((!state.encounter && !state.physicalRecord) || !state.file) return;
 
         const button = document.getElementById('submit-button');
         button.disabled = true;
@@ -1089,17 +1469,17 @@
             if (state.previewFile) {
                 formData.append('thumbnail_preview', state.previewFile, 'thumbnail_preview.png');
             }
-            formData.append('record_type', document.getElementById('record-type').value);
-            formData.append('modality', document.getElementById('modality').value);
 
-            if (state.aiImageTypeCode) {
-                formData.append('image_type', state.aiImageTypeCode);
+            const recordType = document.getElementById('record-type').value;
+            if (!recordType) {
+                throw new Error('Record type is required.');
             }
-            if (state.aiPatientOrientation && state.aiPatientOrientation.length === 2) {
-                formData.append('patient_orientation', state.aiPatientOrientation[0]);
-                formData.append('patient_orientation', state.aiPatientOrientation[1]);
+            if (!state.valuesets.record_types.find(x => x.id === recordType)) {
+                throw new Error(`Expected record type ${recordType} to exist in valueset record_types`);
             }
-            if (state.requiresServerTransform && state.transformOps.length > 0) {
+            formData.append('record_type', recordType);
+
+            if (state.transformOps.length > 0) {
                 formData.append('image_transform_ops', JSON.stringify(state.transformOps));
             }
 
@@ -1108,7 +1488,18 @@
                 formData.append('acquisition_date', acquisitionDate);
             }
 
-            const record = await createRecord(state.encounter.id, formData);
+            if (state.device && state.device.serial) {
+                formData.append('device_serial', state.device.serial);
+                formData.append('device_manufacturer', state.device.manufacturer);
+                formData.append('device_model', state.device.model);
+            }
+
+            let record;
+            if (state.physicalRecord) {
+                record = await createRecordViaPhysicalRecord(state.physicalRecord.id, formData);
+            } else {
+                record = await createRecord(state.encounter.id, formData);
+            }
 
             showSubmitStatus('Record created successfully!');
 
@@ -1140,6 +1531,19 @@
         document.getElementById('subject-info').classList.add('hidden');
         document.getElementById('subject-error').classList.add('hidden');
 
+        // Clear physical record
+        state.physicalRecord = null;
+        const physicalRecordSelect = document.getElementById('physical-record-select');
+        physicalRecordSelect.innerHTML = '<option value="">Select subject first...</option>';
+        physicalRecordSelect.disabled = true;
+        document.getElementById('physical-record-row').classList.add('hidden');
+        document.getElementById('physical-record-info').classList.add('hidden');
+        document.getElementById('physical-record-error').classList.add('hidden');
+
+        // Clear encounter override
+        document.getElementById('encounter-override-checkbox').checked = false;
+        document.getElementById('encounter-override-row').classList.add('hidden');
+
         // Clear encounter
         state.encounter = null;
         const encounterSelect = document.getElementById('encounter-select');
@@ -1148,14 +1552,15 @@
         document.getElementById('encounter-info').classList.add('hidden');
         document.getElementById('encounter-error').classList.add('hidden');
 
+        // Unlock record type in case it was locked by a physical record selection
+        document.getElementById('record-type').disabled = false;
+
         // Clear file
         state.file = null;
         state.previewFile = null;
         state.aiFile = null;
         state.requiresServerTransform = false;
         state.transformOps = [];
-        state.aiImageTypeCode = null;
-        state.aiPatientOrientation = null;
         document.getElementById('file-upload').value = '';
         document.getElementById('file-preview').classList.add('hidden');
         document.getElementById('scan-status').textContent = '';
@@ -1174,29 +1579,75 @@
         // Reset all state on page load
         resetPageState();
 
+        // Create the subject search dropdown and attach it to <body> so it floats
+        // above all other elements regardless of stacking context.
+        const subjectDropdown = document.createElement('ul');
+        subjectDropdown.id = 'subject-dropdown';
+        subjectDropdown.className = 'fixed z-[9999] bg-base-100 border border-base-300 rounded shadow-xl max-h-60 overflow-y-auto hidden';
+        subjectDropdown.style.minWidth = '16rem';
+        document.body.appendChild(subjectDropdown);
+
         // Set today's date as default
         document.getElementById('acquisition-date').valueAsDate = new Date();
 
         // Load valuesets
         try {
-            const [recordTypes, modalities] = await Promise.all([
-                fetchValueset('record_types'),
-                fetchValueset('modalities')
-            ]);
+            const record_types = await fetchValueset('record_types');
 
-            state.valuesets.record_types = recordTypes;
-            state.valuesets.modalities = modalities;
+            state.valuesets.record_types = record_types;
             console.log(state.valuesets);
 
-            populateSelect('record-type', recordTypes);
-            populateSelect('modality', modalities);
+            populateSelect('record-type', record_types);
         } catch (error) {
             console.error('Failed to load valuesets:', error);
             alert('Failed to load form options. Please refresh the page.');
         }
 
         // Attach event listeners
-        document.getElementById('search-subject').addEventListener('click', handleSearchSubject);
+        document.getElementById('subject-id').addEventListener('input', handleSubjectInput);
+        document.getElementById('subject-id').addEventListener('blur', closeSubjectDropdown);
+        document.getElementById('subject-id').addEventListener('keydown', async (e) => {
+            const dd = _getSubjectDropdown();
+            const items = _getDropdownItems();
+            const isOpen = !dd.classList.contains('hidden') && items.length > 0;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (isOpen) {
+                    _highlightItem(_subjectDropdownIndex + 1);
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (isOpen) {
+                    _highlightItem(_subjectDropdownIndex - 1);
+                }
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (isOpen && _subjectDropdownIndex >= 0) {
+                    // Select the highlighted item
+                    const highlighted = items[_subjectDropdownIndex];
+                    highlighted.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                } else if (isOpen && items.length > 0) {
+                    // Select the first item if none highlighted
+                    items[0].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                } else {
+                    await handleSearchSubject();
+                }
+            } else if (e.key === 'Escape') {
+                closeSubjectDropdown();
+            }
+        });
+
+        // Reposition dropdown on scroll or resize
+        window.addEventListener('scroll', () => {
+            if (!_getSubjectDropdown().classList.contains('hidden')) _positionDropdown();
+        }, true);
+        window.addEventListener('resize', () => {
+            if (!_getSubjectDropdown().classList.contains('hidden')) _positionDropdown();
+        });
+
+        document.getElementById('physical-record-select').addEventListener('change', handlePhysicalRecordSelect);
+        document.getElementById('encounter-override-checkbox').addEventListener('change', handleEncounterOverrideChange);
         document.getElementById('encounter-select').addEventListener('change', handleEncounterSelect);
         document.getElementById('file-upload').addEventListener('change', handleFileUpload);
         document.getElementById('scan-button').addEventListener('click', performScannerScan);
@@ -1209,13 +1660,8 @@
         document.getElementById('ai-fill-button').addEventListener('click', handleAIFill);
         document.getElementById('submit-button').addEventListener('click', handleSubmit);
 
-        // Enable Enter key for subject search
-        document.getElementById('subject-id').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') handleSearchSubject();
-        });
-
         // Watch form fields for changes
-        ['record-type', 'modality'].forEach(id => {
+        ['record-type'].forEach(id => {
             document.getElementById(id).addEventListener('change', updateSubmitButton);
         });
 

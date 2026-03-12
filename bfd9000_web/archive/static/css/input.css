@@ -4,3 +4,16 @@
 @source not "./daisyui{,*}.mjs";
 
 @plugin "./daisyui.mjs";
+
+/*
+ * Build command (run from repo root so all templates are scanned):
+ *   bfd9000_web/archive/static/css/tailwindcss \
+ *     -i bfd9000_web/archive/static/css/input.css \
+ *     -o bfd9000_web/archive/static/css/output.css
+ *
+ * Classes injected dynamically by JS must be safelisted so the scanner does
+ * not drop them.  @source inline() covers Tailwind utilities; DaisyUI
+ * component classes (e.g. tooltip) are always emitted when the CLI is run
+ * from the repo root (where templates are visible to the scanner).
+ */
+@source inline("tooltip tooltip-bottom");

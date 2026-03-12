@@ -50,3 +50,21 @@ Whenever a large change is made, documenting it in `./bfd9000_web/docs` is good 
     - Docs for the AI endpoint are stored at <https://wingate.case.edu/bfd9020/docs#/>
 
 REFERENCE THE API IN bfd9000_web/docs/api_requirements.md
+
+## Database Compatibility
+
+The local development environment (`python manage.py runserver`) uses **SQLite** by default. Production and the local docker-compose environment use **PostgreSQL 17**.
+
+To maintain compatibility between dev and production:
+
+- Write all ORM queries, annotations, and aggregations using standard Django ORM constructs that work on both backends.
+- Do not use PostgreSQL-specific field types (`ArrayField`, `HStoreField`, `JSONField` operators like `@>` or `?`, `tsvector`/`tsquery` full-text search, etc.) unless there is a strong production benefit.
+- Do not write raw SQL that uses PostgreSQL-specific syntax (e.g., `RETURNING`, `ON CONFLICT DO UPDATE`, `ILIKE` in raw queries, dollar-quoting).
+- If a PostgreSQL-specific feature would be **greatly beneficial** in production (e.g., native full-text search, `JSONB` indexing, `COPY` bulk loads), implement it but:
+  1. Document the trade-off clearly in the PR description and in a code comment.
+  2. Ensure the feature degrades gracefully or is guarded by a database-engine check so that local SQLite development still works.
+  3. Flag the incompatibility explicitly to the developer so they can decide.
+
+## Records Identifier
+
+- Records have internal id/pk and identifiers. The user never sees the internal id/pk, they always only see the identifier.official (mostly) and the others in the detail views.
