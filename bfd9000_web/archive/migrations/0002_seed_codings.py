@@ -15,7 +15,6 @@ from django.db import migrations
 SCT = "http://snomed.info/sct"
 DCM = "http://dicom.nema.org/resources/ontology/DCM"
 RACE = "urn:oid:2.16.840.1.113883.6.238"
-IMAGE_TYPE_SYSTEM = "https://orthodontics.case.edu/fhir/identifier-system/image-type"
 RECORD_TYPE_SYSTEM = "https://orthodontics.case.edu/fhir/identifier-system/record-type"
 
 
@@ -168,17 +167,6 @@ CODINGS = {
     ],
     "procedures": [
         (SCT, "ortho-visit", "Orthodontic Visit", ""),
-    ],
-    "image_types": [
-        (IMAGE_TYPE_SYSTEM, "L", "Lateral", ""),
-        (IMAGE_TYPE_SYSTEM, "F", "Frontal", ""),
-        (IMAGE_TYPE_SYSTEM, "P", "Pelvis", ""),
-        (IMAGE_TYPE_SYSTEM, "FA", "Foot & Ankle", ""),
-        (IMAGE_TYPE_SYSTEM, "H", "Hand & Wrist", ""),
-        (IMAGE_TYPE_SYSTEM, "RE", "Record of Examination", ""),
-        (IMAGE_TYPE_SYSTEM, "RF", "Record of Facial and Jaw Examination", ""),
-        (IMAGE_TYPE_SYSTEM, "SM", "Scan of Study Model", ""),
-        (IMAGE_TYPE_SYSTEM, "FM", "Scan of Facial Moulage", ""),
     ],
     "skeletal-pattern": [
         (SCT, "248292005", "Class I facial skeletal pattern", "Class I facial skeletal pattern (finding)"),

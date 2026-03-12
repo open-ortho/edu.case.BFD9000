@@ -11,7 +11,10 @@ help: ## Show available targets
 build-test-docker: ## Build test Docker image with compose
 	docker compose -f $(COMPOSE_FILE) build
 
-run-test-docker: ## Run test Docker stack with compose
+set-media-volume-permissions: ## Set permissions for media volume to allow non-root access: see dockers.md
+	docker run --rm -v bfd9000_media_volume:/data alpine sh -c "chown -R 1000:1000 /data"
+
+run-test-docker: set-media-volume-permissions ## Run test Docker stack with compose
 	docker compose -f $(COMPOSE_FILE) up
 
 build-mock-bfd9010: ## Build mock BFD9010 Docker image
