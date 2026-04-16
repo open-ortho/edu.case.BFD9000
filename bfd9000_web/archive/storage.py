@@ -6,21 +6,121 @@ Backends use URI-style links to identify stored files:
 
 Usage::
 
-    backend = get_backend(link)
-    stream, filename = backend.download(link)
+    # Download an existing file by its stored link
+    stream, filename = get_backend(link).download(link)
 
-    link = backend.upload(file_obj, "patient/scan")
-    links = backend.list("patient/scan/")
+    # Upload a new file (tries Box, falls back to local)
+    link = get_upload_backend().upload(file_obj, "patient/scan/image.tif")
+    links = get_upload_backend().list("patient/scan/")
 """
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
 
+from box_sdk_gen import FileBaseTypeField
+from box_sdk_gen.schemas.folder_mini import FolderBaseTypeField
 from django.conf import settings
 
+logger = logging.getLogger(__name__)
+
+
+# ── Box client helpers ────────────────────────────────────────────────────────
+
+@dataclass
+class _ItemData:
+    id: str
+    type: FolderBaseTypeField | FileBaseTypeField
+
+
+# avoid repeated API calls. (parent_id, name) -> _ItemData | None
+_box_item_cache: dict[tuple[str, str], _ItemData | None] = {}
+
+
+def _get_box_client():
+    """Return an authenticated Box client."""
+    from box_sdk_gen import BoxClient, BoxJWTAuth, JWTConfig
+    from box_sdk_gen.box.developer_token_auth import BoxDeveloperTokenAuth
+    from BFD9000.settings import BOX_DEVELOPER_TOKEN, BOX_JWT_CONFIG_FILE
+
+    if BOX_JWT_CONFIG_FILE:
+        jwt_config = JWTConfig.from_config_file(config_file_path=BOX_JWT_CONFIG_FILE)
+        auth = BoxJWTAuth(config=jwt_config)  # pyright: ignore[reportArgumentType]
+    elif BOX_DEVELOPER_TOKEN:
+        auth = BoxDeveloperTokenAuth(token=BOX_DEVELOPER_TOKEN)
+    else:
+        raise RuntimeError(
+            "Box authentication is not configured. Set BOX_DEVELOPER_TOKEN or "
+            "BOX_JWT_CONFIG_FILE to enable Box client authentication."
+        )
+    return BoxClient(auth=auth)
+
+
+def _get_item_by_name(client, folder_id: str, name: str) -> _ItemData | None:
+    """Look up a file or folder by name within a Box folder, with caching."""
+    cache_key = (folder_id, name)
+    if cache_key in _box_item_cache:
+        result = _box_item_cache[cache_key]
+        logger.debug(
+            "Cache hit (%s): %s in folder %s",
+            "not found" if result is None else result.id,
+            name,
+            folder_id,
+        )
+        return result
+
+    try:
+        items = client.folders.get_folder_items(folder_id)
+        while True:
+            for item in items.entries or []:
+                if item.name == name:
+                    logger.debug("Found item by name: %s %s (type: %s)", item.id, name, item.type)
+                    data = _ItemData(id=item.id, type=item.type)
+                    _box_item_cache[cache_key] = data
+                    return data
+            if items.next_marker is None:
+                break
+            items = client.folders.get_folder_items(folder_id, marker=items.next_marker)
+
+        logger.debug("Item not found (caching negative result): %s in folder %s", name, folder_id)
+        _box_item_cache[cache_key] = None
+    except Exception as exc:
+        logger.error("Box API error getting item by name: %s", exc, exc_info=True)
+
+    return None
+
+
+def _get_or_create_folder(client, parent_folder_id: str, folder_name: str) -> str | None:
+    """Return the ID of a Box folder, creating it if it does not exist."""
+    from box_sdk_gen import BoxAPIError, CreateFolderParent
+
+    try:
+        item = _get_item_by_name(client, parent_folder_id, folder_name)
+        if item is None:
+            subfolder = client.folders.create_folder(
+                name=folder_name,
+                parent=CreateFolderParent(id=parent_folder_id),
+            )
+            logger.debug("Created Box folder: %s (ID: %s)", folder_name, subfolder.id)
+            _box_item_cache[(parent_folder_id, folder_name)] = _ItemData(id=subfolder.id, type=FolderBaseTypeField.FOLDER)
+            return subfolder.id
+        if item.type == FolderBaseTypeField.FOLDER:
+            return item.id
+        logger.error("Item '%s' exists but is not a folder (type: %s)", folder_name, item.type)
+        return None
+    except BoxAPIError as exc:
+        logger.error("Box API error creating folder %s: %s", folder_name, exc, exc_info=True)
+        return None
+    except Exception as exc:
+        logger.error("Error creating folder %s: %s", folder_name, exc, exc_info=True)
+        return None
+
+
+# ── Abstract interface ────────────────────────────────────────────────────────
 
 class StorageBackend(ABC):
     """Abstract interface for a file storage backend."""
@@ -35,11 +135,10 @@ class StorageBackend(ABC):
 
     @abstractmethod
     def download(self, link: str) -> tuple[IO[bytes], str]:
-        """Download the resource identified by *link*.
+        """Download the resource identified by *link*; return ``(stream, filename)``."""
 
-        Returns a ``(stream, filename)`` tuple.
-        """
 
+# ── Concrete backends ─────────────────────────────────────────────────────────
 
 class BoxStorageBackend(StorageBackend):
     """Box.com storage backend.  Links use the ``box://<file_id>`` scheme."""
@@ -49,10 +148,15 @@ class BoxStorageBackend(StorageBackend):
     def upload(self, file: IO[bytes], path: str) -> str:
         """Upload *file* to Box, mirroring the directory structure of *path*.
 
+        Handles preflight checks and 409 conflicts (file already exists → delete
+        and retry).  Raises ``NotImplementedError`` for files larger than 50 MB
+        until chunked upload is implemented.
+
         Returns a ``box://<file_id>`` link.
         """
-        from .media_upload import _get_box_client, _get_or_create_folder
+        from box_sdk_gen import BoxAPIError
         from box_sdk_gen.managers.uploads import (
+            PreflightFileUploadCheckParent,
             UploadFileAttributes,
             UploadFileAttributesParentField,
         )
@@ -60,15 +164,49 @@ class BoxStorageBackend(StorageBackend):
 
         client = _get_box_client()
         parts = Path(path)
-        folder_parts = parts.parent.parts
         file_name = parts.name
-
         current_folder_id = BOX_FOLDER_ID or "0"
-        for folder_name in folder_parts:
+
+        for folder_name in parts.parent.parts:
             fid = _get_or_create_folder(client, current_folder_id, folder_name)
             if fid is None:
                 raise RuntimeError(f"Failed to create/navigate to Box folder: {folder_name}")
             current_folder_id = fid
+
+        # Determine file size for preflight check (best-effort on seekable streams).
+        file_size = 0
+        try:
+            pos = file.tell()
+            file.seek(0, 2)
+            file_size = file.tell()
+            file.seek(pos)
+        except (AttributeError, OSError):
+            pass
+
+        if file_size > 50_000_000:
+            raise NotImplementedError("Chunked uploads (> 50 MB) are not yet implemented.")
+
+        # Preflight check; retry up to 3 times on 409 (file exists → delete first).
+        upload_url = None
+        for _ in range(3):
+            try:
+                upload_url = client.uploads.preflight_file_upload_check(
+                    name=file_name,
+                    size=file_size,
+                    parent=PreflightFileUploadCheckParent(id=current_folder_id),
+                )
+                break
+            except BoxAPIError as exc:
+                if exc.response_info.status_code == 409:
+                    logger.debug("File already exists in Box; deleting %s …", file_name)
+                    file_id = exc.response_info.context_info["conflicts"]["id"]  # pyright: ignore[reportOptionalSubscript]
+                    client.files.delete_file_by_id(file_id)
+                    _box_item_cache.pop((current_folder_id, file_name), None)
+                else:
+                    raise exc
+
+        if upload_url is None:
+            raise RuntimeError("Multiple 409 responses received during Box preflight check.")
 
         result = client.uploads.upload_file(
             attributes=UploadFileAttributes(
@@ -78,11 +216,11 @@ class BoxStorageBackend(StorageBackend):
             file=file,  # type: ignore[arg-type]
         )
         uploaded_file = result.entries[0]  # pyright: ignore[reportOptionalSubscript]
+        logger.debug("Uploaded %s to Box (ID: %s)", path, uploaded_file.id)
         return f"{self.SCHEME}{uploaded_file.id}"
 
     def list(self, path: str) -> list[str]:
         """Return ``box://<file_id>`` links for every file under *path* in Box."""
-        from .media_upload import _get_box_client, _get_item_by_name
         from BFD9000.settings import BOX_FOLDER_ID
 
         client = _get_box_client()
@@ -90,7 +228,7 @@ class BoxStorageBackend(StorageBackend):
 
         for folder_name in Path(path).parts:
             item = _get_item_by_name(client, current_folder_id, folder_name)
-            if item is None or item.type != "folder":
+            if item is None or item.type != FolderBaseTypeField.FOLDER:
                 return []
             current_folder_id = item.id
 
@@ -98,7 +236,7 @@ class BoxStorageBackend(StorageBackend):
         items = client.folders.get_folder_items(current_folder_id)
         while True:
             for item in items.entries or []:
-                if item.type == "file":
+                if item.type == FileBaseTypeField.FILE:
                     links.append(f"{self.SCHEME}{item.id}")
             if items.next_marker is None:
                 break
@@ -107,17 +245,17 @@ class BoxStorageBackend(StorageBackend):
 
     def download(self, link: str) -> tuple[IO[bytes], str]:
         """Download the Box file identified by *link*; return ``(stream, filename)``."""
-        from .media_upload import download_file
-
+        client = _get_box_client()
         file_id = link[len(self.SCHEME):]
-        return download_file(file_id)
+        file_info = client.files.get_file_by_id(file_id)
+        stream = client.downloads.download_file(file_id)
+        if stream is None:
+            raise RuntimeError(f"Box returned no content for file id {file_id}")
+        return stream, file_info.name  # type: ignore[return-value]
 
 
 class LocalStorageBackend(StorageBackend):
-    """Local filesystem storage backend.
-
-    Links are paths relative to ``MEDIA_ROOT``.
-    """
+    """Local filesystem storage backend.  Links are paths relative to ``MEDIA_ROOT``."""
 
     def upload(self, file: IO[bytes], path: str) -> str:
         """Write *file* to *path* (relative to ``MEDIA_ROOT``) and return the path as a link."""
@@ -144,7 +282,7 @@ class LocalStorageBackend(StorageBackend):
         return open(full_path, "rb"), full_path.name
 
 
-class DefaultStorageBackend(StorageBackend):
+class FallbackStorageBackend(StorageBackend):
     """Upload backend that tries Box first and falls back to local storage on failure.
 
     ``download`` and ``list`` delegate to the backend matching the link scheme,
@@ -153,8 +291,6 @@ class DefaultStorageBackend(StorageBackend):
 
     def upload(self, file: IO[bytes], path: str) -> str:
         """Try Box; on any error reset the stream and write locally instead."""
-        import logging
-        logger = logging.getLogger(__name__)
         try:
             return BoxStorageBackend().upload(file, path)
         except Exception as exc:
@@ -165,7 +301,7 @@ class DefaultStorageBackend(StorageBackend):
 
     def list(self, path: str) -> list[str]:
         """Return links from both backends merged."""
-        box_links = []
+        box_links: list[str] = []
         try:
             box_links = BoxStorageBackend().list(path)
         except Exception:
@@ -177,8 +313,10 @@ class DefaultStorageBackend(StorageBackend):
         return get_backend(link).download(link)
 
 
+# ── Factory functions ─────────────────────────────────────────────────────────
+
 def get_backend(link: str) -> StorageBackend:
-    """Return the backend that owns *link* (for download/list by known link)."""
+    """Return the backend that owns *link* (for download by known link)."""
     if link.startswith(BoxStorageBackend.SCHEME):
         return BoxStorageBackend()
     return LocalStorageBackend()
@@ -186,4 +324,4 @@ def get_backend(link: str) -> StorageBackend:
 
 def get_upload_backend() -> StorageBackend:
     """Return the default backend for new uploads (Box with local fallback)."""
-    return DefaultStorageBackend()
+    return FallbackStorageBackend()
