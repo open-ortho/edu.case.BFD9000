@@ -47,11 +47,11 @@ def _get_box_client():
     from box_sdk_gen.box.developer_token_auth import BoxDeveloperTokenAuth
     from BFD9000.settings import BOX_DEVELOPER_TOKEN, BOX_JWT_CONFIG_FILE
 
-    if BOX_JWT_CONFIG_FILE:
+    if BOX_DEVELOPER_TOKEN:
+        auth = BoxDeveloperTokenAuth(token=BOX_DEVELOPER_TOKEN)
+    elif BOX_JWT_CONFIG_FILE:
         jwt_config = JWTConfig.from_config_file(config_file_path=BOX_JWT_CONFIG_FILE)
         auth = BoxJWTAuth(config=jwt_config)  # pyright: ignore[reportArgumentType]
-    elif BOX_DEVELOPER_TOKEN:
-        auth = BoxDeveloperTokenAuth(token=BOX_DEVELOPER_TOKEN)
     else:
         raise RuntimeError(
             "Box authentication is not configured. Set BOX_DEVELOPER_TOKEN or "
