@@ -22,14 +22,14 @@
           python = pkgs.python311;
 
           # Custom build for boxsdk
-          boxsdk = python.pkgs.buildPythonPackage rec {
-            pname = "boxsdk";
-            version = "10.4.0";
+          box_sdk_gen = python.pkgs.buildPythonPackage rec {
+            pname = "box_sdk_gen";
+            version = "1.17.0";
             format = "setuptools";
 
             src = pkgs.fetchPypi {
               inherit pname version;
-              sha256 = "sha256-SivU2qxxpkAD8dvuRVDFvIFvNMuBIT6JqT3HF7e1HKQ=";
+              sha256 = "sha256-UgDqRRA/Ag0iRzxQKasQLay7A0xF7XmJWi45tMVfXi4=";
             };
 
             propagatedBuildInputs = with python.pkgs; [
@@ -56,7 +56,7 @@
               python
               python.pkgs.pip
               python.pkgs.python-dotenv
-              boxsdk
+              box_sdk_gen
               pkgs.watchman
             ];
 
