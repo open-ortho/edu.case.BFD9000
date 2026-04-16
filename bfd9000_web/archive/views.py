@@ -5,6 +5,7 @@ This module defines the ViewSets for the API, handling CRUD operations
 for subjects, encounters, records, and related medical entities.
 It also includes custom actions for file serving and valueset retrieval.
 """
+import mimetypes
 import os
 from typing import Any, Dict, List, Optional, Type
 
@@ -403,7 +404,6 @@ class DigitalRecordViewSet(viewsets.ModelViewSet):
         digital_record = self.get_object()
         if not getattr(digital_record, 'source_file', None):
             return Response({"error": "No image file available"}, status=404)
-        import mimetypes
         source_file_name = digital_record.source_file.name
         backend = get_backend(source_file_name)
         

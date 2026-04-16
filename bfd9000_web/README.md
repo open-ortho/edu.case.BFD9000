@@ -93,7 +93,7 @@ Or use the provided compose file:
 
 ```bash
 # Copy the example env file and edit as needed
-cp bfd9000_web/dot-env.example bfd9000_web/.env
+cp bfd9000_web/.env.example bfd9000_web/.env
 
 docker compose -f bfd9000_web/docker-compose.yml up
 ```

@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import logging
 import os
 from pathlib import Path
+import sys
 
 from dotenv import load_dotenv
 
@@ -276,9 +277,9 @@ class PrettyFormatter(logging.Formatter):
     }
 
     def format(self, record):
-        log_fmt = self.FORMATS.get(record.levelno)
-        formatter = logging.Formatter(log_fmt)
-        return formatter.format(record)
+        use_color = hasattr(sys.stderr, 'isatty') and sys.stderr.isatty()
+        log_fmt = self.FORMATS.get(record.levelno) if use_color else '%(asctime)s %(levelname)-5s %(name)s: %(message)s'
+        return logging.Formatter(log_fmt).format(record)
 
 LOGGING = {
     'version': 1,
