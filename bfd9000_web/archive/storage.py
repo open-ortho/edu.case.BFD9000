@@ -184,7 +184,7 @@ class BoxStorageBackend(StorageBackend):
             pass
 
         if file_size > 50_000_000:
-            raise NotImplementedError("Chunked uploads (> 50 MB) are not yet implemented.")
+            logger.warning("Chunked uploads (> 50 MB) are not yet implemented.")
 
         # Preflight check; retry up to 3 times on 409 (file exists → delete first).
         upload_url = None
