@@ -42,6 +42,14 @@
                     Records
                 </a>
             </li>
+            <li>
+                <a href="{% url 'archive:physical_records' %}" data-nav="physical-records">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
+                    </svg>
+                    Physical
+                </a>
+            </li>
             <script>
                 // Highlight active navigation item based on current path, after stripping script_name prefix
                 document.addEventListener('DOMContentLoaded', () => {
@@ -231,7 +239,10 @@ class InfiniteScrollTableManager {
             this._observer.disconnect();
             this._observer = null;
         }
-        this._sentinel = null;
+        if (this._sentinel) {
+            this._sentinel.remove();
+            this._sentinel = null;
+        }
     }
 
     async _loadNextPage() {
@@ -280,16 +291,6 @@ class InfiniteScrollTableManager {
             if (!this.hasMore) {
                 // Remove sentinel when all rows are loaded
                 this._disconnectObserver();
-                if (this._sentinel) {
-                    this._sentinel.remove();
-                    this._sentinel = null;
-                }
-            } else {
-                // Shrink sentinel to a minimal spinner so it doesn't take vertical space
-                const cell = this._sentinel.querySelector('td');
-                if (cell) {
-                    cell.innerHTML = `<span class="loading loading-spinner loading-xs"></span>`;
-                }
             }
         } catch (error) {
             console.error('Failed to load data:', error);
@@ -728,7 +729,7 @@ class PaginatedTableManager {
 function attachSearchTooltip(containerId) {
     const tooltipHTML = `
 <div class="tooltip tooltip-bottom before:max-w-xs before:text-left before:whitespace-pre-wrap"
-     data-tip="Search matches identifiers that start with the entered text.&#10;Example: &quot;B&quot; returns all subjects whose ID begins with B.">
+     data-tip="Search matches the start of record identifiers (e.g. &quot;R001&quot; matches &quot;R001LM08y06m01&quot;).">
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
          stroke-width="1.5" stroke="currentColor" class="size-5 text-base-content/50 cursor-help">
         <path stroke-linecap="round" stroke-linejoin="round"

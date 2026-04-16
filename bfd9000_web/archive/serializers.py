@@ -32,6 +32,7 @@ from .models import (
     Location,
     ImagingStudy,
     Series,
+    PhysicalLocation,
     PhysicalRecord,
     DigitalRecord,
     Device,
@@ -165,6 +166,7 @@ class SubjectSerializer(serializers.ModelSerializer):
 
     encounter_count = serializers.IntegerField(read_only=True)
     record_count = serializers.IntegerField(read_only=True)
+    physical_record_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         """Serializer metadata."""
@@ -321,6 +323,51 @@ class ArchiveLocationSerializer(serializers.ModelSerializer):
         model = ArchiveLocation
         fields = '__all__'
 
+
+class PhysicalLocationSerializer(serializers.ModelSerializer):
+    """Serializer for PhysicalLocation model."""
+    address = AddressSerializer(read_only=True)
+
+    class Meta:
+        model = PhysicalLocation
+        fields = '__all__'
+
+
+class PhysicalRecordSerializer(serializers.ModelSerializer):
+    """Serializer for PhysicalRecord model."""
+    record_type = CodingSerializer(read_only=True)
+    identifiers = IdentifierSerializer(many=True, read_only=True)
+    locations = PhysicalLocationSerializer(many=True, read_only=True)
+    encounter_id = serializers.IntegerField(source='encounter.id', read_only=True)
+    subject_id = serializers.IntegerField(source='encounter.subject.id', read_only=True)
+    subject_identifier = serializers.SerializerMethodField()
+    identifier_str = serializers.SerializerMethodField()
+    age_at_encounter = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PhysicalRecord
+        fields = '__all__'
+
+    def get_subject_identifier(self, obj: PhysicalRecord) -> Optional[str]:
+        subject = getattr(obj.encounter, 'subject', None)
+        if not subject:
+            return None
+        return _get_preferred_identifier(subject.identifiers.all())
+
+    def get_identifier_str(self, obj: PhysicalRecord) -> str:
+        """Return the Bolton-style record identifier. Delegates to the model property."""
+        return obj.bolton_record_id
+
+    def get_age_at_encounter(self, obj: PhysicalRecord) -> Optional[float]:
+        encounter = getattr(obj, 'encounter', None)
+        if not encounter:
+            return None
+        subject = getattr(encounter, 'subject', None)
+        if not subject:
+            return None
+        return _compute_age_years(encounter, subject)
+
+
 class DigitalRecordSerializer(serializers.ModelSerializer):
     """Serializer for DigitalRecord model."""
     identifiers = IdentifierSerializer(many=True, read_only=True)
@@ -363,35 +410,8 @@ class DigitalRecordSerializer(serializers.ModelSerializer):
         return _compute_age_years(encounter, subject)
 
     def get_identifier_str(self, obj: DigitalRecord) -> str:
-        """
-        Return the Bolton-style record display identifier:
-            <subject_identifier><record_type_code><sex_code><age_years_months>
-        Example: B001LM08y06m
-        Returns empty string if key data is missing.
-        """
-        encounter = getattr(obj.series.imaging_study, 'encounter', None)
-        if not encounter:
-            return ''
-        subject = getattr(encounter, 'subject', None)
-        if not subject:
-            return ''
-
-        identifier: str = _get_preferred_identifier(subject.identifiers.all()) or ''
-        rt_code: str = obj.record_type.code if obj.record_type else ''
-
-        sex_map: Dict[str, str] = {'male': 'M', 'female': 'F', 'other': 'O', 'unknown': 'U'}
-        sex: str = sex_map.get(subject.gender, 'U')
-
-        age_years: Optional[float] = _compute_age_years(encounter, subject)
-        if age_years is not None:
-            total_months: int = int(round(age_years * 12))
-            years: int = total_months // 12
-            months: int = total_months % 12
-            age_str: str = f"{years:02d}y{months:02d}m"
-        else:
-            age_str = ''
-
-        return f"{identifier}{rt_code}{sex}{age_str}"
+        """Return the Bolton-style record identifier. Delegates to the model property."""
+        return obj.bolton_record_id
 
     def get_subject_identifier(self, obj) -> Optional[str]:
         encounter = getattr(obj.series.imaging_study, 'encounter', None)
@@ -474,6 +494,13 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
         write_only=True
     )
 
+    physical_record = serializers.PrimaryKeyRelatedField(
+        queryset=PhysicalRecord.objects.all(),
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
+
     # Device info from the acquisition scanner (optional)
     device_serial = serializers.CharField(required=False, allow_blank=True, write_only=True)
     device_manufacturer = serializers.CharField(required=False, allow_blank=True, write_only=True)
@@ -489,6 +516,7 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
             'modality',
             'acquisition_date',
             'encounter',
+            'physical_record',
             'patient_orientation',
             'image_transform_ops',
             'device_serial',
@@ -600,11 +628,16 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
         device_model: str = validated_data.pop('device_model', '').strip()
 
         encounter = validated_data.pop('encounter', None)
-        if not encounter:
-            encounter = self.context.get('encounter')
+        physical_record_input: Optional[PhysicalRecord] = validated_data.pop('physical_record', None)
 
-        if not encounter:
-            raise serializers.ValidationError({"encounter": "This field is required (either in URL or body)."})
+        # If a physical_record was provided, derive encounter from it
+        if physical_record_input is not None:
+            encounter = physical_record_input.encounter
+        else:
+            if not encounter:
+                encounter = self.context.get('encounter')
+            if not encounter:
+                raise serializers.ValidationError({"encounter": "This field is required (either in URL, body, or via physical_record)."})
 
         request = self.context.get('request')
         operator = None
@@ -652,13 +685,27 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
                 modality=mod_coding,
             )
 
-            # PHYSICAL RECORD: Get or create by (record_type, encounter)
-            physical_record = PhysicalRecord.objects.filter(
-                record_type=rt_coding,
-                encounter=encounter
-            ).first()
-            if not physical_record:
-                physical_record = PhysicalRecord.objects.create(
+            # PHYSICAL RECORD: Use explicitly provided one, or get/create by (record_type, encounter)
+            if physical_record_input is not None:
+                physical_record = physical_record_input
+                # If the user corrected the record_type in the UI, propagate the correction
+                # to the PhysicalRecord so the physical archive stays accurate.
+                if physical_record.record_type != rt_coding:
+                    physical_record.record_type = rt_coding
+                    physical_record.save(update_fields=['record_type'])
+            else:
+                pr_matches = list(PhysicalRecord.objects.filter(
+                    record_type=rt_coding,
+                    encounter=encounter,
+                ))
+                if len(pr_matches) > 1:
+                    raise serializers.ValidationError({
+                        "physical_record": (
+                            "Multiple physical records exist for this encounter and record type. "
+                            "Provide 'physical_record' explicitly to identify which one to link."
+                        )
+                    })
+                physical_record = pr_matches[0] if pr_matches else PhysicalRecord.objects.create(
                     record_type=rt_coding,
                     encounter=encounter,
                     operator="Unknown",

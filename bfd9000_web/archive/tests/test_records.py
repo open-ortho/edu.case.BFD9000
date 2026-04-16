@@ -291,23 +291,23 @@ class RecordIdentifierStrTests(CleanupAPITestCase):
         self.assertIn('identifier_str', data)
 
     def test_identifier_str_format(self) -> None:
-        """identifier_str must follow <subject_id><record_type><sex><age> schema."""
+        """identifier_str must follow <subject_id><record_type><sex><age><seq> schema."""
         import re
         url = reverse('archive:digitalrecord-list') + f'{self.digital_record.pk}/'
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         identifier_str: str = data['identifier_str']
-        # Must match schema: <subject_identifier><record_type><sex><age>
-        # B001 (Bolton ID) + L (record type) + M (male) + NNyNNm (age)
-        pattern = r'^B001LM\d{2}y\d{2}m$'
+        # Must match schema: <subject_identifier><record_type><sex><age><seq:02d>
+        # B001 (Bolton ID) + L (record type) + M (male) + NNyNNm (age) + NN (2-digit seq)
+        pattern = r'^B001LM\d{2}y\d{2}m\d{2}$'
         self.assertRegex(
             identifier_str,
             pattern,
             msg=f"identifier_str {identifier_str!r} does not match expected pattern {pattern!r}",
         )
         # Also verify the age encodes approximately 8y 6m (total months 102)
-        age_match = re.search(r'(\d{2})y(\d{2})m$', identifier_str)
+        age_match = re.search(r'(\d{2})y(\d{2})m\d{2}$', identifier_str)
         self.assertIsNotNone(age_match, "Age portion missing from identifier_str")
         assert age_match is not None  # for type narrowing
         years, months = int(age_match.group(1)), int(age_match.group(2))
@@ -328,7 +328,7 @@ class RecordIdentifierStrTests(CleanupAPITestCase):
         self.assertNotEqual(our[0]['identifier_str'], '')
 
     def test_identifier_str_missing_age(self) -> None:
-        """identifier_str with no age data should omit the age portion."""
+        """identifier_str with no age data should omit the age portion but keep the seq suffix."""
         self.encounter.procedure_occurrence_age = None
         self.encounter.actual_period_start = None
         self.encounter.save()
@@ -336,8 +336,8 @@ class RecordIdentifierStrTests(CleanupAPITestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
-        # No age — should still have subject+type+sex but no age component
-        self.assertEqual(data['identifier_str'], 'B001LM')
+        # No age — should still have subject+type+sex+seq but no age component
+        self.assertEqual(data['identifier_str'], 'B001LM01')
 
     def test_identifier_str_female(self) -> None:
         """Sex code F for female subjects."""
@@ -350,6 +350,21 @@ class RecordIdentifierStrTests(CleanupAPITestCase):
         self.assertIn('identifier_str', data)
         self.assertTrue(data['identifier_str'].startswith('B001L'))
         self.assertIn('F', data['identifier_str'])
+
+    def test_identifier_str_second_record_has_seq_02(self) -> None:
+        """A second DigitalRecord with the same encounter and record_type gets sequence 02."""
+        second_record = DigitalRecord.objects.create(
+            series=self.series,
+            record_type=self.rt_lateral,
+        )
+        url = reverse('archive:digitalrecord-list') + f'{second_record.pk}/'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(
+            data['identifier_str'].endswith('02'),
+            f"Expected identifier_str to end with '02', got: {data['identifier_str']!r}",
+        )
 
 
 class ImagingStudyOperatorPrefetchTests(CleanupAPITestCase):

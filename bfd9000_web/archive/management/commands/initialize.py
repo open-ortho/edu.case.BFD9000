@@ -45,7 +45,7 @@ class Command(BaseCommand):
 
         parser.add_argument(
             "--import-source",
-            choices=["all", "bolton", "lancaster"],
+            choices=["all", "bolton", "lancaster", "richardson"],
             default="all",
             help="Which dataset importer(s) to run",
         )
@@ -58,6 +58,11 @@ class Command(BaseCommand):
             "--lancaster-file",
             default=str(settings.BASE_DIR / "docs" / "collections_data" / "LancasterDemographic.csv"),
             help="Path to LancasterDemographic.csv",
+        )
+        parser.add_argument(
+            "--richardson-file",
+            default=str(settings.BASE_DIR / "docs" / "collections_data" / "Richardson Collectionv3.xlsx"),
+            help="Path to 'Richardson Collectionv3.xlsx'",
         )
         parser.add_argument(
             "--include-names",
@@ -163,6 +168,17 @@ class Command(BaseCommand):
                 "import_subjects",
                 "lancaster",
                 file=str(lancaster_file),
+                include_names=include_names,
+                verbosity=verbosity,
+            )
+
+        if source in ("all", "richardson"):
+            richardson_file = Path(options["richardson_file"]).expanduser().resolve()
+            self.stdout.write(self.style.NOTICE(f"Importing Richardson collection from {richardson_file}..."))
+            call_command(
+                "import_subjects",
+                "richardson",
+                file=str(richardson_file),
                 include_names=include_names,
                 verbosity=verbosity,
             )
