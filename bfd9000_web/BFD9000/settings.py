@@ -24,18 +24,37 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv()
 
 
+def _read_secret(name: str, default: str | None = None) -> str | None:
+    """Return the value of secret *name*, or *default* if not found.
+
+    Resolution order:
+    1. Environment variable ``name``
+    2. Docker Compose secret file ``/run/secrets/<name>``
+    3. *default*
+    """
+    value = os.environ.get(name)
+    if value is not None:
+        return value
+    secret_path = Path(f"/run/secrets/{name}")
+    if secret_path.is_file():
+        return secret_path.read_text(encoding="utf-8").strip() or None
+    return default
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
+SECRET_KEY = _read_secret(
     'SECRET_KEY', 'django-insecure-+6m#s88j*)qb+a%2s%cw31e2k04um&*a-fk!jgcpl3849(w4sm')
 
 # Box.com Configuration
-BOX_DEVELOPER_TOKEN = os.environ.get('BOX_DEVELOPER_TOKEN')
-BOX_JWT_CONFIG_FILE = os.environ.get('BOX_JWT_CONFIG_FILE')
-BOX_FOLDER_ID = os.environ.get('BOX_FOLDER_ID')
+BOX_DEVELOPER_TOKEN = _read_secret('BOX_DEVELOPER_TOKEN')
+BOX_JWT_CONFIG_FILE = _read_secret('BOX_JWT_CONFIG_FILE')
+BOX_FOLDER_ID = _read_secret('BOX_FOLDER_ID')
+BOX_OAUTH_CLIENT_ID = _read_secret('BOX_OAUTH_CLIENT_ID')
+BOX_OAUTH_CLIENT_SECRET = _read_secret('BOX_OAUTH_CLIENT_SECRET')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'

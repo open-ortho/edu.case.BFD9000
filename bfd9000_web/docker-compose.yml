@@ -58,6 +58,23 @@ services:
       
       - SCANNER_API_BASE=http://127.0.0.1:9010
 
+      # Box.com integration — use exactly one auth method (precedence: token > JWT > OAuth).
+      # Credentials are read from Docker secrets (/run/secrets/<name>); env vars take precedence.
+      # Create the secrets directory and populate the files you need:
+      #   mkdir -p secrets
+      #   echo "your_developer_token"  > secrets/BOX_DEVELOPER_TOKEN   # Option A (dev only)
+      #   echo "100123456789"          > secrets/BOX_FOLDER_ID
+      #   echo "your_client_id"        > secrets/BOX_OAUTH_CLIENT_ID   # Option C
+      #   echo "your_client_secret"    > secrets/BOX_OAUTH_CLIENT_SECRET
+      # - BOX_DEVELOPER_TOKEN=your_developer_token_here  # env-var alternative (dev only)
+      # - BOX_OAUTH_CLIENT_ID=your_client_id_here        # env-var alternative
+    secrets:
+      - BOX_DEVELOPER_TOKEN
+      - BOX_FOLDER_ID
+      - BOX_OAUTH_CLIENT_ID
+      - BOX_OAUTH_CLIENT_SECRET
+      # - BOX_JWT_CONFIG_FILE  # path inside container; volume-mount the JSON file separately
+
   bfd9020:
     image: ghcr.io/open-ortho/edu.case.bfd9020:local
     container_name: bfd9020
@@ -80,3 +97,13 @@ services:
 volumes:
   media_volume:
   postgres_data:
+
+secrets:
+  BOX_DEVELOPER_TOKEN:
+    file: ./secrets/BOX_DEVELOPER_TOKEN    # Option A: echo "your_token"        > secrets/BOX_DEVELOPER_TOKEN
+  BOX_FOLDER_ID:
+    file: ./secrets/BOX_FOLDER_ID          #           echo "100123456789"       > secrets/BOX_FOLDER_ID
+  BOX_OAUTH_CLIENT_ID:
+    file: ./secrets/BOX_OAUTH_CLIENT_ID    # Option C: echo "your_client_id"    > secrets/BOX_OAUTH_CLIENT_ID
+  BOX_OAUTH_CLIENT_SECRET:
+    file: ./secrets/BOX_OAUTH_CLIENT_SECRET #          echo "your_client_secret" > secrets/BOX_OAUTH_CLIENT_SECRET

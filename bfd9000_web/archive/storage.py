@@ -43,19 +43,32 @@ _box_item_cache: dict[tuple[str, str], _ItemData | None] = {}
 
 def _get_box_client():
     """Return an authenticated Box client."""
-    from box_sdk_gen import BoxClient, BoxJWTAuth, JWTConfig
+    from box_sdk_gen import BoxClient, BoxJWTAuth, BoxOAuth, JWTConfig
     from box_sdk_gen.box.developer_token_auth import BoxDeveloperTokenAuth
-    from BFD9000.settings import BOX_DEVELOPER_TOKEN, BOX_JWT_CONFIG_FILE
+    from box_sdk_gen.box.oauth import OAuthConfig
+    from BFD9000.settings import (
+        BOX_DEVELOPER_TOKEN,
+        BOX_JWT_CONFIG_FILE,
+        BOX_OAUTH_CLIENT_ID,
+        BOX_OAUTH_CLIENT_SECRET,
+    )
 
     if BOX_DEVELOPER_TOKEN:
         auth = BoxDeveloperTokenAuth(token=BOX_DEVELOPER_TOKEN)
     elif BOX_JWT_CONFIG_FILE:
         jwt_config = JWTConfig.from_config_file(config_file_path=BOX_JWT_CONFIG_FILE)
         auth = BoxJWTAuth(config=jwt_config)  # pyright: ignore[reportArgumentType]
+    elif BOX_OAUTH_CLIENT_ID and BOX_OAUTH_CLIENT_SECRET:
+        auth = BoxOAuth(  # pyright: ignore[reportArgumentType]
+            config=OAuthConfig(
+                client_id=BOX_OAUTH_CLIENT_ID,
+                client_secret=BOX_OAUTH_CLIENT_SECRET,
+            )
+        )
     else:
         raise RuntimeError(
-            "Box authentication is not configured. Set BOX_DEVELOPER_TOKEN or "
-            "BOX_JWT_CONFIG_FILE to enable Box client authentication."
+            "Box authentication is not configured. Set BOX_DEVELOPER_TOKEN, "
+            "BOX_JWT_CONFIG_FILE, or BOX_OAUTH_CLIENT_ID + BOX_OAUTH_CLIENT_SECRET."
         )
     return BoxClient(auth=auth)
 
