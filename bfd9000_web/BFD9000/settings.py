@@ -10,19 +10,55 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import logging
 import os
 from pathlib import Path
+import sys
+
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from .env file
+load_dotenv()
+
+
+def _read_secret(name: str, default: str | None = None) -> str | None:
+    """Return the value of secret *name*, or *default* if not found.
+
+    Resolution order:
+    1. Environment variable ``name``
+    2. Docker Compose secret file ``/run/secrets/<name>``
+    3. *default*
+    """
+    value = os.environ.get(name)
+    if value is not None:
+        return value
+    secret_path = Path(f"/run/secrets/{name}")
+    if secret_path.is_file():
+        return secret_path.read_text(encoding="utf-8").strip() or None
+    return default
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
+
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
+SECRET_KEY = _read_secret(
     'SECRET_KEY', 'django-insecure-+6m#s88j*)qb+a%2s%cw31e2k04um&*a-fk!jgcpl3849(w4sm')
+
+# Box.com Configuration
+BOX_DEVELOPER_TOKEN = _read_secret('BOX_DEVELOPER_TOKEN')
+BOX_JWT_CONFIG_FILE = _read_secret('BOX_JWT_CONFIG_FILE')
+BOX_FOLDER_ID = _read_secret('BOX_FOLDER_ID')
+BOX_OAUTH_CLIENT_ID = _read_secret('BOX_OAUTH_CLIENT_ID')
+BOX_OAUTH_CLIENT_SECRET = _read_secret('BOX_OAUTH_CLIENT_SECRET')
+# Optional: explicit redirect URI for Box OAuth callback (defaults to auto-detected from request)
+BOX_OAUTH_REDIRECT_URI = _read_secret('BOX_OAUTH_REDIRECT_URI')
+# Path prefix for the shelve file used to persist Box OAuth tokens
+BOX_TOKEN_STORAGE_PATH = _read_secret('BOX_TOKEN_STORAGE_PATH') or str(BASE_DIR / '.box_token')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
@@ -242,8 +278,63 @@ CSRF_TRUSTED_ORIGINS: list[str] = [o.strip() for o in _csrf_trusted.split(',') i
 
 SCANNER_API_BASE = os.environ.get('SCANNER_API_BASE', 'http://localhost:5000')
 SCANNER_DEVICE_ID = os.environ.get('SCANNER_DEVICE_ID', 'scanner-001')
-BFD9020_BASE_URL = os.environ.get(
-    'BFD9020_BASE_URL', 'https://wingate.case.edu/bfd9020')
+BFD9020_BASE_URL = os.environ.get('BFD9020_BASE_URL', 'https://wingate.case.edu/bfd9020')
+
+# Logging Configuration
+class PrettyFormatter(logging.Formatter):
+    """A custom formatter to add color to stdout log records."""
+
+    GRAY = "\x1b[90m"
+    YELLOW = "\x1b[33;21m"
+    RED = "\x1b[31;21m"
+    BOLD_RED = "\x1b[31;1m"
+    RESET = "\x1b[0m"
+
+    # Define a different format for each level
+    FORMATS = {
+        logging.DEBUG: f"{GRAY}%(asctime)s {GRAY}DEBUG {GRAY}%(name)s: {RESET}%(message)s",
+        logging.INFO: f"{GRAY}%(asctime)s {RESET}INFO  {GRAY}%(name)s: {RESET}%(message)s",
+        logging.WARNING: f"{GRAY}%(asctime)s {YELLOW}WARN  {GRAY}%(name)s: {RESET}%(message)s",
+        logging.ERROR: f"{GRAY}%(asctime)s {RED}ERROR {GRAY}%(name)s: {RESET}%(message)s",
+        logging.CRITICAL: f"{GRAY}%(asctime)s {BOLD_RED}CRIT  {GRAY}%(name)s: {RESET}%(message)s"
+    }
+
+    def format(self, record):
+        use_color = hasattr(sys.stderr, 'isatty') and sys.stderr.isatty()
+        log_fmt = self.FORMATS.get(record.levelno) if use_color else '%(asctime)s %(levelname)-5s %(name)s: %(message)s'
+        return logging.Formatter(log_fmt).format(record)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'pretty': {
+            '()': PrettyFormatter,
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'pretty',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'archive': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+}
 
 # Thumbnail generation policy (staging and UI previews)
 THUMBNAIL_MAX_WIDTH = int(os.environ.get('THUMBNAIL_MAX_WIDTH', '300'))

@@ -20,6 +20,33 @@
         let
           pkgs = import nixpkgs { inherit system; };
           python = pkgs.python311;
+
+          # Custom build for boxsdk
+          box_sdk_gen = python.pkgs.buildPythonPackage rec {
+            pname = "box_sdk_gen";
+            version = "1.17.0";
+            format = "setuptools";
+
+            src = pkgs.fetchPypi {
+              inherit pname version;
+              sha256 = "sha256-UgDqRRA/Ag0iRzxQKasQLay7A0xF7XmJWi45tMVfXi4=";
+            };
+
+            propagatedBuildInputs = with python.pkgs; [
+              requests
+              requests_toolbelt
+              pyjwt
+              cryptography
+            ];
+
+            doCheck = false;
+
+            meta = with pkgs.lib; {
+              description = "Official Box Python SDK";
+              homepage = "https://github.com/box/box-python-sdk";
+              license = licenses.asl20;
+            };
+          };
         in
         {
           default = pkgs.mkShell {
@@ -28,6 +55,8 @@
             buildInputs = [
               python
               python.pkgs.pip
+              python.pkgs.python-dotenv
+              box_sdk_gen
               pkgs.watchman
             ];
 
