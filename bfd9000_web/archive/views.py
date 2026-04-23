@@ -5,9 +5,13 @@ This module defines the ViewSets for the API, handling CRUD operations
 for subjects, encounters, records, and related medical entities.
 It also includes custom actions for file serving and valueset retrieval.
 """
+import logging
 import mimetypes
 import os
+import secrets
 from typing import Any, Dict, List, Optional, Type
+
+logger = logging.getLogger(__name__)
 
 from PIL import Image
 from rest_framework import viewsets, serializers, filters
@@ -22,10 +26,11 @@ from rest_framework.response import Response
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from django.conf import settings
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.db.models import Case, CharField, Count, OuterRef, QuerySet, Subquery, When, Prefetch
-from django.http import FileResponse, HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.http import FileResponse, HttpRequest, HttpResponse, JsonResponse
+from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 from .models import (
     Coding, Identifier, Address, Collection, Subject,
@@ -540,3 +545,109 @@ def scan_tiff_preview(request):
         return HttpResponse(png_bytes, content_type="image/png")
     except Exception as exc:  # pylint: disable=broad-exception-caught
         return JsonResponse({"error": f"Failed to convert TIFF: {exc}"}, status=400)
+
+
+# ── Box OAuth 2.0 views ───────────────────────────────────────────────────────
+
+_BOX_OAUTH_STATE_SESSION_KEY = "_box_oauth_state"
+
+
+@staff_member_required
+def box_oauth_start(request: HttpRequest) -> HttpResponse:
+    """Redirect a staff user to Box's OAuth 2.0 authorization page.
+
+    Stores a CSRF ``state`` token in the session so the callback can verify
+    the response came from Box and not a hijacked request.
+    """
+    from box_sdk_gen import BoxOAuth, OAuthConfig
+    from box_sdk_gen.box.oauth import GetAuthorizeUrlOptions
+    from box_sdk_gen.box.token_storage import FileTokenStorage
+    from django.urls import reverse
+    from BFD9000.settings import (
+        BOX_OAUTH_CLIENT_ID,
+        BOX_OAUTH_CLIENT_SECRET,
+        BOX_OAUTH_REDIRECT_URI,
+        BOX_TOKEN_STORAGE_PATH,
+    )
+
+    if not BOX_OAUTH_CLIENT_ID or not BOX_OAUTH_CLIENT_SECRET:
+        return HttpResponse(
+            "Box OAuth is not configured. Set BOX_OAUTH_CLIENT_ID and BOX_OAUTH_CLIENT_SECRET.",
+            status=503,
+        )
+
+    state: str = secrets.token_urlsafe(32)
+    request.session[_BOX_OAUTH_STATE_SESSION_KEY] = state
+
+    redirect_uri: str = BOX_OAUTH_REDIRECT_URI or request.build_absolute_uri(
+        reverse("archive:box_oauth_callback")
+    )
+
+    token_storage = FileTokenStorage(filename=BOX_TOKEN_STORAGE_PATH)
+    auth = BoxOAuth(
+        OAuthConfig(
+            client_id=BOX_OAUTH_CLIENT_ID,
+            client_secret=BOX_OAUTH_CLIENT_SECRET,
+            token_storage=token_storage,
+        )
+    )
+    auth_url: str = auth.get_authorize_url(
+        options=GetAuthorizeUrlOptions(redirect_uri=redirect_uri, state=state)
+    )
+    logger.info("Initiating Box OAuth flow for user %s", request.user)
+    return redirect(auth_url)
+
+
+@staff_member_required
+def box_oauth_callback(request: HttpRequest) -> HttpResponse:
+    """Handle the Box OAuth 2.0 redirect callback.
+
+    Verifies the ``state`` parameter, exchanges the authorization code for
+    tokens, and persists them via ``FileTokenStorage``.
+    """
+    from box_sdk_gen import BoxOAuth, OAuthConfig
+    from box_sdk_gen.box.token_storage import FileTokenStorage
+    from BFD9000.settings import (
+        BOX_OAUTH_CLIENT_ID,
+        BOX_OAUTH_CLIENT_SECRET,
+        BOX_TOKEN_STORAGE_PATH,
+    )
+
+    expected_state: str | None = request.session.pop(_BOX_OAUTH_STATE_SESSION_KEY, None)
+    received_state: str | None = request.GET.get("state")
+    if not expected_state or expected_state != received_state:
+        logger.warning("Box OAuth state mismatch (possible CSRF attempt)")
+        return HttpResponse("OAuth state mismatch. Please try again.", status=400)
+
+    if not BOX_OAUTH_CLIENT_ID or not BOX_OAUTH_CLIENT_SECRET:
+        return HttpResponse(
+            "Box OAuth is not configured. Set BOX_OAUTH_CLIENT_ID and BOX_OAUTH_CLIENT_SECRET.",
+            status=503,
+        )
+
+    error: str | None = request.GET.get("error")
+    if error:
+        description: str = request.GET.get("error_description", "")
+        logger.warning("Box OAuth denied: %s %s", error, description)
+        return HttpResponse(f"Box authorization denied: {error} — {description}", status=400)
+
+    code: str | None = request.GET.get("code")
+    if not code:
+        return HttpResponse("No authorization code received from Box.", status=400)
+
+    token_storage = FileTokenStorage(filename=BOX_TOKEN_STORAGE_PATH)
+    auth = BoxOAuth(
+        OAuthConfig(
+            client_id=BOX_OAUTH_CLIENT_ID,
+            client_secret=BOX_OAUTH_CLIENT_SECRET,
+            token_storage=token_storage,
+        )
+    )
+    try:
+        auth.get_tokens_authorization_code_grant(code)
+    except Exception as exc:
+        logger.error("Box OAuth token exchange failed: %s", exc, exc_info=True)
+        return HttpResponse(f"Token exchange failed: {exc}", status=500)
+
+    logger.info("Box OAuth tokens stored successfully for user %s", request.user)
+    return redirect("archive:index")

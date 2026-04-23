@@ -55,6 +55,10 @@ BOX_JWT_CONFIG_FILE = _read_secret('BOX_JWT_CONFIG_FILE')
 BOX_FOLDER_ID = _read_secret('BOX_FOLDER_ID')
 BOX_OAUTH_CLIENT_ID = _read_secret('BOX_OAUTH_CLIENT_ID')
 BOX_OAUTH_CLIENT_SECRET = _read_secret('BOX_OAUTH_CLIENT_SECRET')
+# Optional: explicit redirect URI for Box OAuth callback (defaults to auto-detected from request)
+BOX_OAUTH_REDIRECT_URI = _read_secret('BOX_OAUTH_REDIRECT_URI')
+# Path prefix for the shelve file used to persist Box OAuth tokens
+BOX_TOKEN_STORAGE_PATH = _read_secret('BOX_TOKEN_STORAGE_PATH') or str(BASE_DIR / '.box_token')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'

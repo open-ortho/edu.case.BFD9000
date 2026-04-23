@@ -45,14 +45,21 @@ def _get_box_client():
     """Return an authenticated Box client.
 
     Authentication precedence: developer token > JWT > OAuth.
+
+    For OAuth, the token must have been obtained previously via the
+    ``/box/oauth/start/`` → ``/box/oauth/callback/`` flow and will be
+    loaded from the file-backed token storage configured by
+    ``BOX_TOKEN_STORAGE_PATH``.
     """
-    from box_sdk_gen import BoxClient, BoxJWTAuth, JWTConfig
+    from box_sdk_gen import BoxClient, BoxJWTAuth, BoxOAuth, JWTConfig, OAuthConfig
     from box_sdk_gen.box.developer_token_auth import BoxDeveloperTokenAuth
+    from box_sdk_gen.box.token_storage import FileTokenStorage
     from BFD9000.settings import (
         BOX_DEVELOPER_TOKEN,
         BOX_JWT_CONFIG_FILE,
         BOX_OAUTH_CLIENT_ID,
         BOX_OAUTH_CLIENT_SECRET,
+        BOX_TOKEN_STORAGE_PATH,
     )
 
     if BOX_DEVELOPER_TOKEN:
@@ -60,6 +67,15 @@ def _get_box_client():
     elif BOX_JWT_CONFIG_FILE:
         jwt_config = JWTConfig.from_config_file(config_file_path=BOX_JWT_CONFIG_FILE)
         auth = BoxJWTAuth(config=jwt_config)  # pyright: ignore[reportArgumentType]
+    elif BOX_OAUTH_CLIENT_ID and BOX_OAUTH_CLIENT_SECRET:
+        token_storage = FileTokenStorage(filename=BOX_TOKEN_STORAGE_PATH)
+        auth = BoxOAuth(
+            OAuthConfig(
+                client_id=BOX_OAUTH_CLIENT_ID,
+                client_secret=BOX_OAUTH_CLIENT_SECRET,
+                token_storage=token_storage,
+            )
+        )
     else:
         raise RuntimeError(
             "Box authentication is not configured. Set BOX_DEVELOPER_TOKEN, "
