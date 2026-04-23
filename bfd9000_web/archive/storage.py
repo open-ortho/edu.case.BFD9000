@@ -19,8 +19,10 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from os import PathLike
 from pathlib import Path
-from typing import IO
+import shutil
+from typing import IO, Iterator, Optional
 
 from box_sdk_gen import FileBaseTypeField
 from box_sdk_gen.schemas.folder_mini import FolderBaseTypeField
@@ -51,9 +53,6 @@ def _get_box_client():
     loaded from the file-backed token storage configured by
     ``BOX_TOKEN_STORAGE_PATH``.
     """
-    from box_sdk_gen import BoxClient, BoxJWTAuth, BoxOAuth, JWTConfig, OAuthConfig
-    from box_sdk_gen.box.developer_token_auth import BoxDeveloperTokenAuth
-    from box_sdk_gen.box.token_storage import FileTokenStorage
     from BFD9000.settings import (
         BOX_DEVELOPER_TOKEN,
         BOX_JWT_CONFIG_FILE,
@@ -61,6 +60,9 @@ def _get_box_client():
         BOX_OAUTH_CLIENT_SECRET,
         BOX_TOKEN_STORAGE_PATH,
     )
+    from box_sdk_gen import BoxClient, BoxJWTAuth, BoxOAuth, JWTConfig, OAuthConfig
+    from box_sdk_gen.box.developer_token_auth import BoxDeveloperTokenAuth
+    from box_sdk_gen.box.token_storage import FileTokenStorage
 
     if BOX_DEVELOPER_TOKEN:
         auth = BoxDeveloperTokenAuth(token=BOX_DEVELOPER_TOKEN)
@@ -150,16 +152,20 @@ class StorageBackend(ABC):
     """Abstract interface for a file storage backend."""
 
     @abstractmethod
-    def upload(self, file: IO[bytes], path: str) -> str:
+    def upload(self, file: IO[bytes], path: PathLike[str]) -> str:
         """Upload *file* to the given relative *path* and return a storage uri."""
 
     @abstractmethod
-    def list(self, path: str) -> list[str]:
-        """Return storage uris for every file found under *path*."""
+    def list(self, path: PathLike[str]) -> Iterator[str]:
+        """Yield storage uris for every file found under *path*."""
 
     @abstractmethod
     def download(self, uri: str) -> tuple[IO[bytes], str]:
         """Download the resource identified by *uri*; return ``(stream, filename)``."""
+
+    @abstractmethod
+    def error(self) -> Optional[str]:
+        """Returns ``None`` if the storage backend is alive and reachable, and a string error message otherwise."""
 
 
 # ── Concrete backends ─────────────────────────────────────────────────────────
@@ -169,7 +175,7 @@ class BoxStorageBackend(StorageBackend):
 
     SCHEME = "box://"
 
-    def upload(self, file: IO[bytes], path: str) -> str:
+    def upload(self, file: IO[bytes], path: PathLike[str]) -> str:
         """Upload *file* to Box, mirroring the directory structure of *path*.
 
         Handles preflight checks and 409 conflicts (file already exists → delete
@@ -178,13 +184,13 @@ class BoxStorageBackend(StorageBackend):
 
         Returns a ``box://<file_id>`` uri.
         """
+        from BFD9000.settings import BOX_FOLDER_ID
         from box_sdk_gen import BoxAPIError
         from box_sdk_gen.managers.uploads import (
             PreflightFileUploadCheckParent,
             UploadFileAttributes,
             UploadFileAttributesParentField,
         )
-        from BFD9000.settings import BOX_FOLDER_ID
 
         client = _get_box_client()
         parts = Path(path)
@@ -243,8 +249,8 @@ class BoxStorageBackend(StorageBackend):
         logger.debug("Uploaded %s to Box (ID: %s)", path, uploaded_file.id)
         return f"{self.SCHEME}{uploaded_file.id}"
 
-    def list(self, path: str) -> list[str]:
-        """Return ``box://<file_id>`` uris for every file under *path* in Box."""
+    def list(self, path: PathLike[str]) -> Iterator[str]:
+        """Yield ``box://<file_id>`` uris for every file under *path* in Box."""
         from BFD9000.settings import BOX_FOLDER_ID
 
         client = _get_box_client()
@@ -253,19 +259,17 @@ class BoxStorageBackend(StorageBackend):
         for folder_name in Path(path).parts:
             item = _get_item_by_name(client, current_folder_id, folder_name)
             if item is None or item.type != FolderBaseTypeField.FOLDER:
-                return []
+                return
             current_folder_id = item.id
 
-        uris: list[str] = []
         items = client.folders.get_folder_items(current_folder_id)
         while True:
             for item in items.entries or []:
                 if item.type == FileBaseTypeField.FILE:
-                    uris.append(f"{self.SCHEME}{item.id}")
+                    yield f"{self.SCHEME}{item.id}"
             if items.next_marker is None:
                 break
             items = client.folders.get_folder_items(current_folder_id, marker=items.next_marker)
-        return uris
 
     def download(self, uri: str) -> tuple[IO[bytes], str]:
         """Download the Box file identified by *uri*; return ``(stream, filename)``."""
@@ -277,33 +281,68 @@ class BoxStorageBackend(StorageBackend):
             raise RuntimeError(f"Box returned no content for file id {file_id}")
         return stream, file_info.name  # type: ignore[return-value]
 
+    def error(self) -> Optional[str]:
+        """Return a string error message if the storage backend is alive and reachable, or ``None`` otherwise."""
+        from BFD9000.settings import (
+            BOX_DEVELOPER_TOKEN,
+            BOX_JWT_CONFIG_FILE,
+            BOX_OAUTH_CLIENT_ID,
+            BOX_OAUTH_CLIENT_SECRET,
+            BOX_FOLDER_ID
+        )
+        
+        if not BOX_FOLDER_ID:
+            return "BOX_FOLDER_ID is not configured"
+        if (
+            not BOX_DEVELOPER_TOKEN
+            and not BOX_JWT_CONFIG_FILE
+            and not (BOX_OAUTH_CLIENT_ID and BOX_OAUTH_CLIENT_SECRET)
+        ):
+            return "No Box authentication configured"
+        client = _get_box_client()
+        if BOX_OAUTH_CLIENT_ID and BOX_OAUTH_CLIENT_SECRET:
+            if client.auth.retrieve_token():
+                return None
+            return "OAuth 2.0: no active token"
+        return None
+
 
 class LocalStorageBackend(StorageBackend):
     """Local filesystem storage backend.  uris are paths relative to ``MEDIA_ROOT``."""
 
-    def upload(self, file: IO[bytes], path: str) -> str:
+    def upload(self, file: IO[bytes], path: PathLike[str]) -> str:
         """Write *file* to *path* (relative to ``MEDIA_ROOT``) and return the path as a uri."""
         dest = Path(settings.MEDIA_ROOT) / path
         dest.parent.mkdir(parents=True, exist_ok=True)
         with open(dest, "wb") as f:
             f.write(file.read())
-        return path
+        return str(path)
 
-    def list(self, path: str) -> list[str]:
-        """Return relative paths for every file under *path* within ``MEDIA_ROOT``."""
+    def list(self, path: PathLike[str]) -> Iterator[str]:
+        """Yield relative paths for every file under *path* within ``MEDIA_ROOT``."""
         root = Path(settings.MEDIA_ROOT) / path
         if not root.exists():
-            return []
-        return [
+            return
+        yield from (
             str(p.relative_to(settings.MEDIA_ROOT))
             for p in root.rglob("*")
             if p.is_file()
-        ]
+        )
 
     def download(self, uri: str) -> tuple[IO[bytes], str]:
         """Open the local file at *uri* (relative to ``MEDIA_ROOT``); return ``(stream, filename)``."""
         full_path = Path(settings.MEDIA_ROOT) / uri
         return open(full_path, "rb"), full_path.name
+        
+    def error(self) -> Optional[str]:
+        """Return an error if running low on disk space (< 5GiB), or ``None`` otherwise. This error is technically nonfatal."""
+        try:
+            total, used, free = shutil.disk_usage(settings.MEDIA_ROOT)
+            if free < 5 * 1024 * 1024 * 1024:  # less than 5 GB
+                return f"Disk space running low (free: {free / 1024 / 1024:2f} MiB)"
+        except Exception as exc:
+            return f"Error checking disk space: {exc}"
+        return None
 
 
 class Storage(StorageBackend):
@@ -313,29 +352,40 @@ class Storage(StorageBackend):
     so uris produced by either backend continue to resolve correctly.
     """
 
-    def upload(self, file: IO[bytes], path: str) -> str:
+    def upload(self, file: IO[bytes], path: PathLike[str], fallback: bool = False) -> str:
         """Try Box; on any error reset the stream and write locally instead."""
         try:
             return BoxStorageBackend().upload(file, path)
         except Exception as exc:
-            logger.warning("Box upload failed (%s); falling back to local storage", exc)
-            if hasattr(file, "seek"):
+            if fallback:
+                logger.warning("Box upload failed, falling back to local storage (%s)", exc)
                 file.seek(0)
-            return LocalStorageBackend().upload(file, path)
+                return LocalStorageBackend().upload(file, path)
+            else:
+                logger.error("Box upload failed, fallback=False (%s)", exc)
+                raise exc
 
-    def list(self, path: str) -> list[str]:
-        """Return uris from both backends merged."""
-        box_uris: list[str] = []
+    def list(self, path: PathLike[str]) -> Iterator[str]:
+        """Yield uris from both backends merged."""
         try:
-            box_uris = BoxStorageBackend().list(path)
+            yield from BoxStorageBackend().list(path)
         except Exception:
             pass
-        return box_uris + LocalStorageBackend().list(path)
+        yield from LocalStorageBackend().list(path)
 
     def download(self, uri: str) -> tuple[IO[bytes], str]:
         """Delegate to whichever backend owns this uri."""
         if uri.startswith(BoxStorageBackend.SCHEME):
             return BoxStorageBackend().download(uri)
         return LocalStorageBackend().download(uri)
-
-
+        
+    def error(self) -> Optional[str]:
+        """Return the errors for each backend."""
+        e = ""
+        box = BoxStorageBackend().error()
+        if box:
+            e += f"Box: {box}\n"
+        local = LocalStorageBackend().error()
+        if local:
+            e += f"Local: {local}\n"
+        return e or None

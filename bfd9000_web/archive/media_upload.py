@@ -3,7 +3,6 @@
 import logging
 import time
 from pathlib import Path
-from typing import List
 
 from django.conf import settings
 
@@ -14,25 +13,19 @@ logger = logging.getLogger(__name__)
 
 
 def media_upload_worker():
-    from BFD9000.settings import (
-        BOX_DEVELOPER_TOKEN,
-        BOX_FOLDER_ID,
-        BOX_JWT_CONFIG_FILE,
-        BOX_OAUTH_CLIENT_ID,
-        BOX_OAUTH_CLIENT_SECRET,
-    )
-
-    if not BOX_DEVELOPER_TOKEN and not BOX_JWT_CONFIG_FILE and not (BOX_OAUTH_CLIENT_ID and BOX_OAUTH_CLIENT_SECRET):
-        logger.error(
-            "worker cannot start: no Box authentication configured "
-            "(set BOX_DEVELOPER_TOKEN, BOX_JWT_CONFIG_FILE, or BOX_OAUTH_CLIENT_ID + BOX_OAUTH_CLIENT_SECRET)"
-        )
-        return
-    if not BOX_FOLDER_ID:
-        logger.error("worker cannot start: BOX_FOLDER_ID is not set")
-        return
-
-    time.sleep(5)
+    # wait for box to become available
+    for i in range(3):
+        e = BoxStorageBackend().error()
+        if e:
+            if i == 2:
+                logger.error(f"Failed to connect to Box, exiting: {e}")
+                return
+            logger.info(f"Could not connect to Box, retrying in 60 seconds: {e}")
+            time.sleep(60)
+        else:
+            break
+    
+    logger.info("Connected to Box. Starting media upload worker...")
 
     while True:
         try:
@@ -46,29 +39,31 @@ def media_upload_worker():
 
 def process_media_files() -> int:
     """Upload all pending files from the local media/uploads directory to Box."""
-    media_root = Path(settings.MEDIA_ROOT).joinpath("uploads")
+    media_root = settings.MEDIA_ROOT
 
     if not media_root.exists():
         return 0
 
     image_extensions = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"}
-    files_processed: List[Path] = []
 
-    for file_path in media_root.rglob("*"):
+    uploads_dir = media_root / "uploads"
+    if not uploads_dir.exists():
+        return 0
+
+    count = 0
+    for file_path in uploads_dir.rglob("*"):
         if (
             file_path.exists()
             and file_path.is_file()
             and file_path.suffix.lower() in image_extensions
+            and handle_media_file(file_path)
         ):
-            if handle_media_file(file_path):
-                files_processed.append(file_path)
+            file_path.unlink()
+            logger.debug("Deleted local file: %s", file_path)
+            prune_empty_directory(file_path.parent)
+            count += 1
 
-    for path in files_processed:
-        path.unlink()
-        logger.debug("Deleted local file: %s", path)
-        prune_empty_directory(path.parent)
-
-    return len(files_processed)
+    return count
 
 
 def handle_media_file(file_path: Path) -> bool:
@@ -78,7 +73,7 @@ def handle_media_file(file_path: Path) -> bool:
     """
     try:
         logger.debug("Handling media file: %s", file_path)
-        relative_path = file_path.relative_to(Path(settings.MEDIA_ROOT).joinpath("uploads"))
+        relative_path = file_path.relative_to(settings.MEDIA_ROOT)
 
         qs = DigitalRecord.objects.filter(source_file=str(relative_path))
         count = qs.count()
@@ -89,7 +84,7 @@ def handle_media_file(file_path: Path) -> bool:
             return False
 
         with open(file_path, "rb") as f:
-            link = BoxStorageBackend().upload(f, str(relative_path))
+            link = BoxStorageBackend().upload(f, relative_path)
 
         qs.update(source_file=link)
         return True

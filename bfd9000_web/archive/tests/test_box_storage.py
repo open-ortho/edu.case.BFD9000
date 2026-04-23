@@ -263,7 +263,7 @@ class BoxStorageBackendTests(TestCase):
 
     def test_list_empty_folder_returns_empty(self):
         self.fs.seed_folder(ROOT_FOLDER, "empty")
-        self.assertEqual(self.backend.list("empty"), [])
+        self.assertCountEqual(self.backend.list("empty"), [])
 
     def test_list_returns_box_links_for_files(self):
         folder_id = self.fs.seed_folder(ROOT_FOLDER, "scans")
@@ -281,10 +281,10 @@ class BoxStorageBackendTests(TestCase):
 
         links = self.backend.list("patient/scan")
 
-        self.assertEqual(links, [f"box://{fid}"])
+        self.assertCountEqual(links, [f"box://{fid}"])
 
     def test_list_missing_path_returns_empty(self):
-        self.assertEqual(self.backend.list("does/not/exist"), [])
+        self.assertCountEqual(self.backend.list("does/not/exist"), [])
 
     def test_list_excludes_subfolders(self):
         """Only file entries are included; sub-folders are omitted."""
@@ -294,7 +294,7 @@ class BoxStorageBackendTests(TestCase):
 
         links = self.backend.list("parent")
 
-        self.assertEqual(links, [f"box://{fid}"])
+        self.assertCountEqual(links, [f"box://{fid}"])
 
     def test_download_returns_correct_stream_and_filename(self):
         fid = self.fs.seed_file(ROOT_FOLDER, "photo.jpg", b"pixels")

@@ -10,6 +10,7 @@ import logging
 import os
 import importlib
 import json
+from pathlib import Path
 import uuid
 from typing import Any, Dict, Optional, cast
 from django.core.files.base import ContentFile
@@ -749,9 +750,12 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
                     )
             except Exception:
                 logger.warning("Thumbnail generation failed for %s", filename, exc_info=True)
-
+            
+            assert isinstance(DigitalRecord.source_file.field.upload_to, str | Path), "We expect that upload_to is a pathlike (str | Path)"
+            upload_path = Path(DigitalRecord.source_file.field.upload_to).joinpath(filename)
+            
             file_obj.seek(0)
-            source_uri = Storage().upload(file_obj, filename)
+            source_uri = Storage().upload(file_obj, upload_path, fallback=True)
             digital_record.source_file = source_uri
 
             if thumb_bytes:
