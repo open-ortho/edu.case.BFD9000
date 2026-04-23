@@ -14,6 +14,8 @@ from rest_framework import viewsets, serializers, filters
 from rest_framework.decorators import action
 from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
+
+from archive.storage import Storage
 from .permissions import CuratorOrSuperuserEditPermission, RecordPermission
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -37,7 +39,6 @@ from .serializers import (
     DigitalRecordUploadSerializer, DeviceSerializer, SeriesSerializer,
     PhysicalLocationSerializer, PhysicalRecordSerializer,
 )
-from .storage import get_backend
 from .constants import (
     SYSTEM_IDENTIFIER_BOLTON_SUBJECT,
     SYSTEM_IDENTIFIER_LANCASTER_SUBJECT,
@@ -404,10 +405,9 @@ class DigitalRecordViewSet(viewsets.ModelViewSet):
         digital_record = self.get_object()
         if not getattr(digital_record, 'source_file', None):
             return Response({"error": "No image file available"}, status=404)
-        source_file_name = digital_record.source_file.name
-        backend = get_backend(source_file_name)
+        uri = digital_record.source_file.name
         
-        stream, filename = backend.download(source_file_name)
+        stream, filename = Storage().download(uri)
         content_type, _ = mimetypes.guess_type(filename)
         return FileResponse(stream, content_type=content_type or "application/octet-stream", filename=filename)
 

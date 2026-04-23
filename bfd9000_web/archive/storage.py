@@ -1,17 +1,17 @@
 """Storage backend abstraction for media files.
 
-Backends use URI-style links to identify stored files:
+Backends use URIs to identify stored files:
   - Box:   ``box://<file_id>``
   - Local: relative path from ``MEDIA_ROOT``
 
 Usage::
 
-    # Download an existing file by its stored link
-    stream, filename = get_backend(link).download(link)
+    # Download an existing file by its stored uri
+    stream, filename = Storage(uri).download(uri)
 
-    # Upload a new file (tries Box, falls back to local)
-    link = get_upload_backend().upload(file_obj, "patient/scan/image.tif")
-    links = get_upload_backend().list("patient/scan/")
+    # Upload a new file (
+    uri = Storage().upload(file_obj, "patient/scan/image.tif")
+    uris = Storage().list("patient/scan/")
 """
 
 from __future__ import annotations
@@ -42,10 +42,12 @@ _box_item_cache: dict[tuple[str, str], _ItemData | None] = {}
 
 
 def _get_box_client():
-    """Return an authenticated Box client."""
-    from box_sdk_gen import BoxClient, BoxJWTAuth, BoxOAuth, JWTConfig
+    """Return an authenticated Box client.
+
+    Authentication precedence: developer token > JWT > OAuth.
+    """
+    from box_sdk_gen import BoxClient, BoxJWTAuth, JWTConfig
     from box_sdk_gen.box.developer_token_auth import BoxDeveloperTokenAuth
-    from box_sdk_gen.box.oauth import OAuthConfig
     from BFD9000.settings import (
         BOX_DEVELOPER_TOKEN,
         BOX_JWT_CONFIG_FILE,
@@ -58,13 +60,6 @@ def _get_box_client():
     elif BOX_JWT_CONFIG_FILE:
         jwt_config = JWTConfig.from_config_file(config_file_path=BOX_JWT_CONFIG_FILE)
         auth = BoxJWTAuth(config=jwt_config)  # pyright: ignore[reportArgumentType]
-    elif BOX_OAUTH_CLIENT_ID and BOX_OAUTH_CLIENT_SECRET:
-        auth = BoxOAuth(  # pyright: ignore[reportArgumentType]
-            config=OAuthConfig(
-                client_id=BOX_OAUTH_CLIENT_ID,
-                client_secret=BOX_OAUTH_CLIENT_SECRET,
-            )
-        )
     else:
         raise RuntimeError(
             "Box authentication is not configured. Set BOX_DEVELOPER_TOKEN, "
@@ -140,21 +135,21 @@ class StorageBackend(ABC):
 
     @abstractmethod
     def upload(self, file: IO[bytes], path: str) -> str:
-        """Upload *file* to the given relative *path* and return a storage link."""
+        """Upload *file* to the given relative *path* and return a storage uri."""
 
     @abstractmethod
     def list(self, path: str) -> list[str]:
-        """Return storage links for every file found under *path*."""
+        """Return storage uris for every file found under *path*."""
 
     @abstractmethod
-    def download(self, link: str) -> tuple[IO[bytes], str]:
-        """Download the resource identified by *link*; return ``(stream, filename)``."""
+    def download(self, uri: str) -> tuple[IO[bytes], str]:
+        """Download the resource identified by *uri*; return ``(stream, filename)``."""
 
 
 # ── Concrete backends ─────────────────────────────────────────────────────────
 
 class BoxStorageBackend(StorageBackend):
-    """Box.com storage backend.  Links use the ``box://<file_id>`` scheme."""
+    """Box.com storage backend.  uris use the ``box://<file_id>`` scheme."""
 
     SCHEME = "box://"
 
@@ -165,7 +160,7 @@ class BoxStorageBackend(StorageBackend):
         and retry).  Raises ``NotImplementedError`` for files larger than 50 MB
         until chunked upload is implemented.
 
-        Returns a ``box://<file_id>`` link.
+        Returns a ``box://<file_id>`` uri.
         """
         from box_sdk_gen import BoxAPIError
         from box_sdk_gen.managers.uploads import (
@@ -233,7 +228,7 @@ class BoxStorageBackend(StorageBackend):
         return f"{self.SCHEME}{uploaded_file.id}"
 
     def list(self, path: str) -> list[str]:
-        """Return ``box://<file_id>`` links for every file under *path* in Box."""
+        """Return ``box://<file_id>`` uris for every file under *path* in Box."""
         from BFD9000.settings import BOX_FOLDER_ID
 
         client = _get_box_client()
@@ -245,21 +240,21 @@ class BoxStorageBackend(StorageBackend):
                 return []
             current_folder_id = item.id
 
-        links: list[str] = []
+        uris: list[str] = []
         items = client.folders.get_folder_items(current_folder_id)
         while True:
             for item in items.entries or []:
                 if item.type == FileBaseTypeField.FILE:
-                    links.append(f"{self.SCHEME}{item.id}")
+                    uris.append(f"{self.SCHEME}{item.id}")
             if items.next_marker is None:
                 break
             items = client.folders.get_folder_items(current_folder_id, marker=items.next_marker)
-        return links
+        return uris
 
-    def download(self, link: str) -> tuple[IO[bytes], str]:
-        """Download the Box file identified by *link*; return ``(stream, filename)``."""
+    def download(self, uri: str) -> tuple[IO[bytes], str]:
+        """Download the Box file identified by *uri*; return ``(stream, filename)``."""
         client = _get_box_client()
-        file_id = link[len(self.SCHEME):]
+        file_id = uri[len(self.SCHEME):]
         file_info = client.files.get_file_by_id(file_id)
         stream = client.downloads.download_file(file_id)
         if stream is None:
@@ -268,10 +263,10 @@ class BoxStorageBackend(StorageBackend):
 
 
 class LocalStorageBackend(StorageBackend):
-    """Local filesystem storage backend.  Links are paths relative to ``MEDIA_ROOT``."""
+    """Local filesystem storage backend.  uris are paths relative to ``MEDIA_ROOT``."""
 
     def upload(self, file: IO[bytes], path: str) -> str:
-        """Write *file* to *path* (relative to ``MEDIA_ROOT``) and return the path as a link."""
+        """Write *file* to *path* (relative to ``MEDIA_ROOT``) and return the path as a uri."""
         dest = Path(settings.MEDIA_ROOT) / path
         dest.parent.mkdir(parents=True, exist_ok=True)
         with open(dest, "wb") as f:
@@ -289,17 +284,17 @@ class LocalStorageBackend(StorageBackend):
             if p.is_file()
         ]
 
-    def download(self, link: str) -> tuple[IO[bytes], str]:
-        """Open the local file at *link* (relative to ``MEDIA_ROOT``); return ``(stream, filename)``."""
-        full_path = Path(settings.MEDIA_ROOT) / link
+    def download(self, uri: str) -> tuple[IO[bytes], str]:
+        """Open the local file at *uri* (relative to ``MEDIA_ROOT``); return ``(stream, filename)``."""
+        full_path = Path(settings.MEDIA_ROOT) / uri
         return open(full_path, "rb"), full_path.name
 
 
-class FallbackStorageBackend(StorageBackend):
+class Storage(StorageBackend):
     """Upload backend that tries Box first and falls back to local storage on failure.
 
-    ``download`` and ``list`` delegate to the backend matching the link scheme,
-    so links produced by either backend continue to resolve correctly.
+    ``download`` and ``list`` delegate to the backend matching the uri scheme,
+    so uris produced by either backend continue to resolve correctly.
     """
 
     def upload(self, file: IO[bytes], path: str) -> str:
@@ -313,28 +308,18 @@ class FallbackStorageBackend(StorageBackend):
             return LocalStorageBackend().upload(file, path)
 
     def list(self, path: str) -> list[str]:
-        """Return links from both backends merged."""
-        box_links: list[str] = []
+        """Return uris from both backends merged."""
+        box_uris: list[str] = []
         try:
-            box_links = BoxStorageBackend().list(path)
+            box_uris = BoxStorageBackend().list(path)
         except Exception:
             pass
-        return box_links + LocalStorageBackend().list(path)
+        return box_uris + LocalStorageBackend().list(path)
 
-    def download(self, link: str) -> tuple[IO[bytes], str]:
-        """Delegate to whichever backend owns this link."""
-        return get_backend(link).download(link)
-
-
-# ── Factory functions ─────────────────────────────────────────────────────────
-
-def get_backend(link: str) -> StorageBackend:
-    """Return the backend that owns *link* (for download by known link)."""
-    if link.startswith(BoxStorageBackend.SCHEME):
-        return BoxStorageBackend()
-    return LocalStorageBackend()
+    def download(self, uri: str) -> tuple[IO[bytes], str]:
+        """Delegate to whichever backend owns this uri."""
+        if uri.startswith(BoxStorageBackend.SCHEME):
+            return BoxStorageBackend().download(uri)
+        return LocalStorageBackend().download(uri)
 
 
-def get_upload_backend() -> StorageBackend:
-    """Return the default backend for new uploads (Box with local fallback)."""
-    return FallbackStorageBackend()
