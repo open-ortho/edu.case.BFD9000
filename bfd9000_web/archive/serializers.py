@@ -10,6 +10,7 @@ import logging
 import os
 import importlib
 import json
+import uuid
 from typing import Any, Dict, Optional, cast
 from django.core.files.base import ContentFile
 try:
@@ -46,6 +47,7 @@ from .constants import (
     RECORD_TYPE_MODALITY_MAP,
 )
 from .media_utils import generate_thumbnail_jpeg_bytes
+from .storage import Storage
 
 
 LATERAL_RECORD_TYPE_CODE = 'L'
@@ -726,11 +728,12 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
             digital_record.save()
 
             ext = os.path.splitext(file_obj.name)[1].lower()
-            filename = f"{getattr(digital_record, 'pk', digital_record.id)}{ext}"
-            digital_record.source_file.save(filename, file_obj, save=False)
+            file_uuid = str(uuid.uuid4())
+            filename = f"{file_uuid}{ext}"
 
+            # Generate thumbnail before the file stream is consumed by upload.
+            thumb_bytes: bytes | None = None
             try:
-                thumb_bytes = None
                 if thumbnail_preview is not None:
                     thumb_bytes = generate_thumbnail_jpeg_bytes(
                         thumbnail_preview,
@@ -738,22 +741,22 @@ class DigitalRecordUploadSerializer(serializers.ModelSerializer):
                         transform_ops=None,
                     )
                 else:
-                    file_stream = digital_record.source_file.open('rb')
-                    try:
-                        thumb_bytes = generate_thumbnail_jpeg_bytes(
-                            file_stream,
-                            digital_record.source_file.name,
-                            transform_ops=transform_ops,
-                        )
-                    finally:
-                        file_stream.close()
-
-                if thumb_bytes:
-                    thumb_content = ContentFile(thumb_bytes)
-                    thumb_name = f"{getattr(digital_record, 'pk', digital_record.id)}.jpg"
-                    digital_record.thumbnail.save(thumb_name, thumb_content, save=False)
+                    file_obj.seek(0)
+                    thumb_bytes = generate_thumbnail_jpeg_bytes(
+                        file_obj,
+                        filename,
+                        transform_ops=transform_ops,
+                    )
             except Exception:
-                logger.warning("Thumbnail generation failed for digital_record %s", digital_record.pk, exc_info=True)
+                logger.warning("Thumbnail generation failed for %s", filename, exc_info=True)
+
+            file_obj.seek(0)
+            source_uri = Storage().upload(file_obj, filename)
+            digital_record.source_file = source_uri
+
+            if thumb_bytes:
+                thumb_content = ContentFile(thumb_bytes)
+                digital_record.thumbnail.save(f"{file_uuid}.jpg", thumb_content, save=False)
 
             digital_record.save()
 

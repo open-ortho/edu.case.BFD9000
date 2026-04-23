@@ -14,11 +14,18 @@ logger = logging.getLogger(__name__)
 
 
 def media_upload_worker():
-    from BFD9000.settings import BOX_DEVELOPER_TOKEN, BOX_FOLDER_ID, BOX_JWT_CONFIG_FILE
+    from BFD9000.settings import (
+        BOX_DEVELOPER_TOKEN,
+        BOX_FOLDER_ID,
+        BOX_JWT_CONFIG_FILE,
+        BOX_OAUTH_CLIENT_ID,
+        BOX_OAUTH_CLIENT_SECRET,
+    )
 
-    if not BOX_DEVELOPER_TOKEN and not BOX_JWT_CONFIG_FILE:
+    if not BOX_DEVELOPER_TOKEN and not BOX_JWT_CONFIG_FILE and not (BOX_OAUTH_CLIENT_ID and BOX_OAUTH_CLIENT_SECRET):
         logger.error(
-            "worker cannot start: neither BOX_DEVELOPER_TOKEN nor BOX_JWT_CONFIG_FILE is set"
+            "worker cannot start: no Box authentication configured "
+            "(set BOX_DEVELOPER_TOKEN, BOX_JWT_CONFIG_FILE, or BOX_OAUTH_CLIENT_ID + BOX_OAUTH_CLIENT_SECRET)"
         )
         return
     if not BOX_FOLDER_ID:
@@ -71,7 +78,7 @@ def handle_media_file(file_path: Path) -> bool:
     """
     try:
         logger.debug("Handling media file: %s", file_path)
-        relative_path = file_path.relative_to(settings.MEDIA_ROOT)
+        relative_path = file_path.relative_to(Path(settings.MEDIA_ROOT).joinpath("uploads"))
 
         qs = DigitalRecord.objects.filter(source_file=str(relative_path))
         count = qs.count()
